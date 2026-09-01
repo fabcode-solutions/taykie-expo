@@ -1,0 +1,343 @@
+{
+  "app": {
+    "name": "Taykie",
+    "tagline": "Guarda. Lee. Crece."
+  },
+  "navigation": {
+    "tabs": {
+      "discover": "Descubrir",
+      "saves": "Guardados",
+      "settings": "Configuración"
+    }
+  },
+  "common": {
+    "ok": "OK",
+    "cancel": "Cancelar",
+    "yes": "Sí",
+    "no": "No",
+    "save": "Guardar",
+    "delete": "Eliminar",
+    "edit": "Editar",
+    "loading": "Cargando...",
+    "error": "Error",
+    "success": "Éxito",
+    "logout": "Cerrar sesión"
+  },
+
+  "auth": {
+    "login": {
+      "title": "¡Bienvenido de vuelta!",
+      "subtitle": "¡Qué bueno verte otra vez!",
+      "email": "Ingresa tu correo",
+      "password": "Ingresa tu contraseña",
+      "forgotPassword": "¿Olvidaste tu contraseña?",
+      "button": "Iniciar sesión",
+      "loginWithGoogle": "Iniciar sesión con Google",
+      "signUpWithGoogle": "Registrarte con Google",
+      "loginWithApple": "Iniciar sesión con Apple",
+      "signUpWithApple": "Registrarte con Apple",
+      "noAccount": "¿No tienes una cuenta?",
+      "signUp": "Regístrate"
+    },
+    "signup": {
+      "title": "Crear cuenta",
+      "subtitle": "Crea tu cuenta para comenzar",
+      "name": "Nombre",
+      "email": "Correo electrónico",
+      "password": "Contraseña",
+      "confirmPassword": "Confirmar contraseña",
+      "button": "Registrarse",
+      "submitting": "Creando cuenta...",
+      "hasAccount": "¿Ya tienes una cuenta?",
+      "logIn": "Iniciar sesión",
+      "legal": {
+        "notification": "Podrías recibir notificaciones de nuestra parte.",
+        "learnWhy": "Descubre por qué solicitamos tu información de contacto",
+        "agreement": "Al registrarte, aceptas nuestros",
+        "termsOfService": "Términos de Servicio",
+        "and": "y",
+        "privacyPolicy": "Política de Privacidad"
+      }
+    },
+    "authStart": {
+      "title": "Bienvenido a Taykie",
+      "subtitle": "Lorem Ipsum es un texto de relleno de la industria de la impresión y tipografía.",
+      "getStarted": "Comenzar",
+      "googleSignIn": "Continuar con Google",
+      "appleSignIn": "Continuar con Apple",
+      "emailSignIn": "Continuar con correo",
+      "newHere": "¿Nuevo aquí?",
+      "button": "Crear una cuenta",
+      "loginError": "Error al iniciar sesión",
+      "createNewAccount": "Crear una cuenta nueva",
+      "alreadyMember": "¿Ya eres miembro?",
+      "or": "O",
+      "social": {
+        "email": "Correo electrónico",
+        "apple": "Apple",
+        "google": "Google"
+      },
+      "skipOffline": "Omitir para modo sin conexión"
+    },
+    "forgetpassword": {
+      "title": "Olvidé mi contraseña",
+      "subtitle": "Ingresa tu correo para restablecer tu contraseña",
+      "email": "Ingresa tu correo",
+      "button": "Restablecer contraseña",
+      "help": "Volver a",
+      "login": "Iniciar sesión"
+    },
+    "passwordreset": {
+      "title": "Revisa tu correo",
+      "subtitle": "Ingresa el código de 5 dígitos enviado a tu correo"
+    },
+    "newpassword": {
+      "title": "Restablecer contraseña",
+      "password": "Nueva contraseña",
+      "confirmPassword": "Confirmar contraseña",
+      "help": "Volver al inicio de sesión",
+      "button": "Actualizar contraseña",
+      "noAccount": "¿No tienes una cuenta?",
+      "signUp": "Regístrate"
+    },
+    "welcome": {
+      "kicker": "Bienvenido a",
+      "tagline": "Diseñado para mejores hábitos"
+    }
+  },
+  "search": {
+    "placeholder": "Buscar en tus guardados...",
+    "emptyState": "¿Qué estás buscando?",
+    "noResults": "No se encontraron resultados",
+    "tryDifferentQuery": "Intenta con un término diferente",
+    "loading": "Buscando..."
+  },
+  "reader": {
+    "noArticleId": "No se proporcionó ID del artículo",
+    "afterReading": "Después de leer",
+    "favorited": "Marcado como favorito",
+    "favorite": "Favorito",
+    "archive": "Archivar",
+    "unarchive": "Desarchivar",
+    "markAsRead": "Marcar como leído",
+    "markAsUnread": "Marcar como no leído",
+    "upNext": "A continuación",
+    "content": {
+      "extracting": "Se está extrayendo el contenido...",
+      "pageNotAvailable": "Página no disponible.",
+      "pageNoLongerAvailable": "La página ya no está disponible.",
+      "contentTypeNotSupported": "Tipo de contenido no admitido.",
+      "contentBestViewedOnWeb": "El contenido se ve mejor en la web.",
+      "paywallNotice": "Este contenido parece estar detrás de un muro de pago.",
+      "switchToWebView": "Cambiar a vista web",
+      "viewFullArticleOnWeb": "Ver artículo completo en la web",
+      "viewInWaybackMachine": "Ver en Wayback Machine",
+      "checkingArchive": "Verificando archivo...",
+      "noArchivedVersion": "No hay versión archivada disponible"
+    }
+  },
+  "errors": {
+    "network": "Error de red. Verifica tu conexión e intenta de nuevo.",
+    "invalidCredentials": "Correo o contraseña inválidos. Intenta de nuevo.",
+    "unknown": "Algo salió mal. Intenta de nuevo.",
+    "validation": {
+      "required": "Este campo es obligatorio",
+      "minLength": "Debe tener al menos {{count}} caracteres",
+      "maxLength": "Debe tener máximo {{count}} caracteres",
+      "email": {
+        "required": "El correo es obligatorio",
+        "invalid": "Ingresa un correo electrónico válido"
+      },
+      "password": {
+        "required": "La contraseña es obligatoria",
+        "minLength": "La contraseña debe tener al menos 8 caracteres",
+        "complexity": "La contraseña debe contener al menos una letra mayúscula, una minúscula, un número y un carácter especial"
+      },
+      "confirmPassword": {
+        "required": "Confirma tu contraseña",
+        "mismatch": "Las contraseñas no coinciden"
+      }
+    }
+  },
+  "notFound": {
+    "title": "¡Ups!",
+    "message": "Esta pantalla no existe.",
+    "goHome": "¡Ir a la pantalla principal!"
+  },
+
+  "home": {
+    "discover": "Descubrir",
+    "greeting": "Hola,",
+    "subGreeting": "Esta es tu agenda para hoy.",
+    "today": {
+      "title": "Hoy"
+    },
+    "schedule": {
+      "morning": "Mañana",
+      "afternoon": "Tarde",
+      "evening": "Noche"
+    },
+    "tasks": {
+      "status": {
+        "taken": "Completada",
+        "missed": "Perdida",
+        "upcoming": "Próxima"
+      }
+    },
+    "medicine": {
+      "statusTitle": {
+        "taken": "Este medicamento ya fue tomado.",
+        "upcoming": "¿Lo tomaste?",
+        "missed": "Parece que este se te pasó."
+      }
+    },
+    "extras": {
+      "awesome": "¡Genial!",
+      "at": "a las",
+      "scheduledFor": "Programado para",
+      "goBack": "Volver",
+      "benefitsOf": "Beneficios de"
+    }
+  },
+  "settings": {
+    "title": "Configuración",
+    "account": "Cuenta",
+    "notifications": "Notificaciones",
+    "appearance": "Apariencia",
+    "importFromPocket": "Importar desde Pocket",
+    "help": "Ayuda y soporte",
+    "about": "Acerca de",
+    "logout": "Cerrar sesión",
+    "logoutConfirmMessage": "¿Estás seguro de que quieres cerrar sesión?",
+    "deleteAccount": "Eliminar cuenta",
+    "deleteAccountConfirmMessage": "¿Estás seguro de que quieres eliminar tu cuenta? Esta acción no se puede deshacer y eliminará permanentemente todos tus datos.",
+    "deleteAccountError": "Ocurrió un error al eliminar tu cuenta. Por favor, inténtalo de nuevo.",
+    "deletingAccount": "Eliminando tu cuenta..."
+  },
+  "import": {
+    "pocket": {
+      "title": "Importar desde Pocket",
+      "description": "Conecta tu cuenta de Pocket para importar todos tus artículos guardados a Taykie. Este proceso:",
+      "benefits": {
+        "importArticles": "Importar todos tus guardados de Pocket",
+        "preserveProgress": "Preservar tus etiquetas y marcadores",
+        "keepAccount": "Mantendrá tu cuenta original de Pocket sin cambios"
+      },
+      "note": "Serás redirigido a Pocket para autorizar la importación. Esto es seguro — solo leemos tus artículos guardados.",
+      "startImport": "Iniciar importación",
+      "notNow": "Ahora no",
+      "success": {
+        "title": "¡Importación iniciada!",
+        "description": "Tus datos de Pocket se están importando en segundo plano. Esto puede tomar unos minutos dependiendo de cuántos artículos tienes guardados.",
+        "note": "Puedes continuar usando Taykie normalmente. Tus artículos importados aparecerán mientras se procesan."
+      },
+      "done": "Hecho"
+    }
+  },
+  "addArticle": {
+    "title": "Agregar a Taykie",
+    "sectionTitle": "Agregar una URL",
+    "urlPlaceholder": "Ingresa una URL para guardar",
+    "saveButton": "Guardar en Taykie",
+    "infoText": "Guarda artículos, videos y más para leer después. Todo se sincroniza entre tus dispositivos."
+  },
+  "emptyStates": {
+    "initialSync": {
+      "message": "Configurando tu Taykie",
+      "subMessage": "Estamos sincronizando tus artículos guardados. Esto puede tomar un momento."
+    },
+    "favorites": {
+      "message": "Aún no hay favoritos",
+      "subMessage": "Toca la estrella para guardar tus artículos favoritos aquí."
+    },
+    "tagged": {
+      "message": "Organiza con etiquetas",
+      "subMessage": "Agrega etiquetas como 'viajes' o 'recetas' para organizar tus guardados."
+    },
+    "archived": {
+      "message": "Nada archivado",
+      "subMessage": "Cuando termines de leer, archiva los artículos para mantener todo ordenado."
+    },
+    "short": {
+      "message": "Aún no hay lecturas cortas",
+      "subMessage": "Los artículos rápidos que guardes aparecerán aquí."
+    },
+    "long": {
+      "message": "Aún no hay lecturas largas",
+      "subMessage": "Los artículos extensos que guardes aparecerán aquí."
+    },
+    "default": {
+      "message": "¿Listo para empezar a guardar?",
+      "subMessage": "Guarda artículos que quieras leer después. Aparecerán aquí."
+    },
+    "all": {
+      "message": "¿Listo para empezar a guardar?",
+      "subMessage": "Guarda artículos que quieras leer después. Aparecerán aquí."
+    },
+    "allClear": {
+      "message": "Excelente trabajo",
+      "subMessage": "Tu lista está vacía por ahora."
+    },
+    "discover": {
+      "message": "Aún no hay nada que descubrir",
+      "subMessage": "Algo bueno viene en camino. Mantente atento."
+    },
+    "restoring": {
+      "message": "Restaurando tus guardados",
+      "subMessage": "Tus artículos guardados están en camino."
+    }
+  },
+  "tags": {
+    "editTags": "Editar etiquetas",
+    "done": "Hecho",
+    "enterTagName": "Ingresa un nombre de etiqueta",
+    "loadingTags": "Cargando etiquetas...",
+    "searchResults": "Resultados de búsqueda",
+    "noMatchingTags": "No se encontraron etiquetas coincidentes",
+    "recentTags": "Etiquetas recientes",
+    "noRecentTags": "No se encontraron etiquetas recientes",
+    "otherTags": "Otras etiquetas",
+    "noOtherTags": "No se encontraron otras etiquetas"
+  },
+  "sort": {
+    "title": "Ordenar por",
+    "newest": "Más recientes primero",
+    "oldest": "Más antiguos primero",
+    "titleAZ": "Título (A-Z)",
+    "titleZA": "Título (Z-A)",
+    "shortest": "Más cortos primero",
+    "longest": "Más largos primero"
+  },
+  "menu": {
+    "close": "Cerrar",
+    "cancel": "Cancelar",
+    "confirm": "Confirmar",
+    "delete": "Eliminar",
+    "edit": "Editar",
+    "share": "Compartir",
+    "favorite": "Favorito",
+    "unfavorite": "Quitar de favoritos",
+    "archive": "Archivar",
+    "unarchive": "Desarchivar",
+    "addTags": "Agregar etiquetas",
+    "removeTags": "Quitar etiquetas",
+    "markAsRead": "Marcar como leído",
+    "markAsUnread": "Marcar como no leído",
+    "editTags": "Editar etiquetas",
+    "openInBrowser": "Abrir en navegador",
+    "deleteConfirmation": {
+      "title": "Eliminar artículo",
+      "message": "¿Estás seguro de que quieres eliminar este artículo? Esta acción no se puede deshacer.",
+      "cancel": "Cancelar",
+      "confirm": "Eliminar"
+    }
+  },
+  "filters": {
+    "all": "Todos",
+    "favorites": "Favoritos",
+    "tagged": "Etiquetados",
+    "shortReads": "Lecturas cortas",
+    "longReads": "Lecturas largas",
+    "archived": "Archivados"
+  }
+}

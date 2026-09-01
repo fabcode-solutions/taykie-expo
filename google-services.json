@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "671448968673",
+    "project_id": "taykie-mobile-app",
+    "storage_bucket": "taykie-mobile-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:671448968673:android:c710c414810c93b04ff6a0",
+        "android_client_info": {
+          "package_name": "com.taykie.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBj5JaSuCuO51FEKY5sAXAOI6oe9e7LmtY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

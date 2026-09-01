@@ -1,0 +1,27 @@
+diff --git a/apple/RNCWebViewImpl.m b/apple/RNCWebViewImpl.m
+index 7f5c24d6e2cfb26eddbc513bf17a81c24a7273e2..e97b2ac858eb307894e25ecc38907ae0e29a3417 100644
+--- a/apple/RNCWebViewImpl.m
++++ b/apple/RNCWebViewImpl.m
+@@ -487,6 +487,22 @@ - (WKWebViewConfiguration *)setUpWkWebViewConfig
+   }
+ #endif
+ 
++#if (TARGET_OS_IOS && !TARGET_OS_VISION)
++  if (@available(iOS 18.0, *)) {
++    if ([wkWebViewConfig respondsToSelector:@selector(writingToolsBehavior)]) {
++      [wkWebViewConfig setValue:@(UIWritingToolsBehaviorNone) 
++                         forKey:@"writingToolsBehavior"];
++    }
++  }
++#elif TARGET_OS_OSX
++  if (@available(macOS 15.0, *)) {
++    if ([wkWebViewConfig respondsToSelector:@selector(writingToolsBehavior)]) {
++      [wkWebViewConfig setValue:@(UIWritingToolsBehaviorNone) 
++                         forKey:@"writingToolsBehavior"];
++    }
++  }
++#endif
++
+   // Shim the HTML5 history API:
+   [wkWebViewConfig.userContentController addScriptMessageHandler:[[RNCWeakScriptMessageDelegate alloc] initWithDelegate:self]
+                                                             name:HistoryShimName];

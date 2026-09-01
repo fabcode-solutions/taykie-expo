@@ -1,0 +1,874 @@
+{
+  "app": {
+    "name": "Taykie",
+    "tagline": "Connect. Meet. Grow."
+  },
+  "groups": {
+    "groupName": "Group Name",
+    "enterGroupName": "Enter group name",
+    "nameRequired": "Group name is required",
+    "nameTooShort": "Group name must be at least 3 characters",
+    "nameTooLong": "Group name cannot exceed 50 characters",
+    "groupDescription": "Group Description",
+    "addDescription": "Add a short description...",
+    "descriptionTooLong": "Description cannot exceed 250 characters",
+    "uploadPhoto": "Upload Group Photo",
+    "tapToUpload": "Tap to upload",
+    "imagePickerError": "Failed to pick image",
+    "groupType": "Group Type",
+    "public": "Public",
+    "private": "Private",
+    "publicDescription": "Anyone can find and join this group",
+    "privateDescription": "Only invited members can join",
+    "inviteMembers": "Invite Members",
+    "searchAndAddMembers": "Search and add members",
+    "membersSelected": "{{count}} members selected",
+    "settings": "Settings",
+    "notifyMembers": "Notify Members",
+    "notifyMembersDesc": "Notify members when added",
+    "allowMembersPost": "Allow Members to Post",
+    "allowMembersPostDesc": "Members can create posts in the group",
+    "addMembers": "Add Members",
+    "createGroup": "Create Group",
+    "createFirstGroup": "Create Your First Group",
+    "creating": "Creating...",
+    "createSuccess": "Group created successfully!",
+    "createError": "Failed to create group. Please try again.",
+    "searchPlaceholder": "Search groups...",
+    "joinedBy": "Joined by",
+    "lastActivity": "Last Activity",
+    "joinGroup": "Join Group",
+    "leaveGroup": "Leave Group",
+    "writeSomething": "Write something...",
+    "tags": "Tags",
+    "addTags": "Add a tag...",
+    "searchUsers": "Search users...",
+    "searchGroups": "Search Groups...",
+    "myGroups": " My Groups",
+    "noGroupPart": "You are not part of any group yet.",
+    "recommended": "Recommended for You",
+    "no_recommendation_found": "No recommendation found",
+    "member": "member",
+    "members": "members",
+    "join": "Join",
+    "joined": "Joined"
+  },
+  "navigation": {
+    "tabs": {
+      "dashboard": "Home",
+      "settings": "Settings",
+      "schedule": "Schedule",
+      "community": "Community",
+      "device": "Device",
+      "insights": "Insights"
+    }
+  },
+  "common": {
+    "ok": "OK",
+    "cancel": "Cancel",
+    "yes": "Yes",
+    "no": "No",
+    "save": "Save",
+    "delete": "Delete",
+    "edit": "Edit",
+    "loading": "Loading...",
+    "error": "Error",
+    "success": "Success",
+    "logout": "Logout",
+    "submit": "Submit",
+    "in": "in",
+    "take": "Take",
+    "connect": "Connect",
+    "connected": "Connected",
+    "disconnect": "Disconnect",
+    "other": "other",
+    "others": "others",
+    "since": "Since",
+    "remove": "Remove",
+    "view": "View",
+    "hide": "Hide",
+    "create": "Create",
+    "select": "Select",
+    "select_date": "Select Date",
+    "type": "Type",
+    "done": "Done",
+    "apply": "Apply",
+    "continue": "Continue",
+    "of": "of",
+    "skip": "Skip",
+    "step": "Step",
+    "next": "Next",
+    "supply": "supply",
+    "none": "None",
+    "Every": "Every"
+  },
+  "auth": {
+    "login": {
+      "title": "Welcome back!",
+      "subtitle": "Glad to see you, again!",
+      "email": "Enter your email",
+      "password": "Enter your password",
+      "forgotPassword": "Forgot Password",
+      "button": "Login",
+      "loginWithGoogle": "Login with Google",
+      "signUpWithGoogle": "Sign Up with Google",
+      "loginWithApple": "Login with Apple",
+      "signUpWithApple": "Sign Up with Apple",
+      "noAccount": "Don't have an account?",
+      "signUp": "Sign Up"
+    },
+    "signup": {
+      "title": "Create Account",
+      "subtitle": "Create your account to get started",
+      "name": "Name",
+      "email": "Email",
+      "password": "Password",
+      "confirmPassword": "Confirm Password",
+      "button": "Sign Up",
+      "submitting": "Creating account...",
+      "hasAccount": "Already have an account?",
+      "logIn": "Login",
+      "legal": {
+        "notification": "You may receive notifications from us.",
+        "learnWhy": "Learn why we ask for your contact information",
+        "agreement": "By signing up, you agree to our",
+        "termsOfService": "Terms of Service",
+        "and": "and",
+        "privacyPolicy": "Privacy Policy"
+      }
+    },
+    "showPassword": "Show Password",
+    "hidePassword": "Hide Password",
+    "authStart": {
+      "title": "Welcome to Taykie",
+      "subtitle": "Lorem Ipsum is simply dummy text of the printing and typesetting industry.",
+      "getStarted": "Get Started",
+      "letsStart": "Let's get started",
+      "googleSignIn": "Continue with Google",
+      "appleSignIn": "Continue with Apple",
+      "emailSignIn": "Continue with Email",
+      "newHere": "New here?",
+      "button": "Create an account",
+      "loginError": "Sign in failed",
+      "createNewAccount": "Create New Account",
+      "alreadyMember": "Already a member?",
+      "or": "Or",
+      "social": {
+        "email": "Email",
+        "apple": "Apple",
+        "google": "Google"
+      },
+      "skipOffline": "Skip for offline mode",
+      "loginFailedTitle": "Login Failed",
+      "requestFailed": "Request Failed"
+    },
+    "forgetpassword": {
+      "title": "Forget Password",
+      "subtitle": "Please enter your email address to reset the password",
+      "email": "Enter your email",
+      "button": "Reset Password",
+      "help": "Back to",
+      "login": "Login"
+    },
+    "passwordreset": {
+      "title": "Check Your Email",
+      "subtitle": "Enter 5 digit code that mentioned in the email",
+      "resend": "Resend",
+      "button": "Verify Code",
+      "invalidCode": "Invalid Code"
+    },
+    "newpassword": {
+      "title": "Reset Password",
+      "subtitle": "Create a new password",
+      "password": "New Password",
+      "confirmPassword": "Confirm Password",
+      "help": "Back to Login",
+      "button": "Update Password",
+      "noAccount": "Don't have an account?",
+      "signUp": "Sign Up"
+    },
+    "welcome": {
+      "kicker": "Welcome to",
+      "tagline": "Your daily routine, beautifully sorted."
+    }
+  },
+  "errors": {
+    "network": "Network error. Please check your connection and try again.",
+    "invalidCredentials": "Invalid email or password. Please try again.",
+    "unknown": "Something went wrong. Please try again.",
+    "validation": {
+      "required": "This field is required",
+      "minLength": "Must be at least {{count}} characters",
+      "maxLength": "Must be at most {{count}} characters",
+      "name": {
+        "required": "Name is Required",
+        "invalid": "Only letters and spaces are allowed"
+      },
+      "email": {
+        "required": "Email is required",
+        "invalid": "Please enter a valid email address"
+      },
+      "password": {
+        "required": "Password is required",
+        "minLength": "Password must be at least 8 characters",
+        "complexity": "Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character",
+        "weak": "Password is too weak"
+      },
+      "confirmPassword": {
+        "required": "Please confirm your password",
+        "mismatch": "Passwords do not match"
+      }
+    },
+    "image_not_selected": "You did not select any image.",
+    "limitReached": "Limit Reached",
+    "tag_add_error": "You can only add up to 5 tags.",
+    "no_notifications": "There are currently no notifications. New updates will appear here when available."
+  },
+  "notFound": {
+    "title": "Oops!",
+    "message": "This screen doesn't exist.",
+    "goHome": "Go to home screen!"
+  },
+  "settings": {
+    "title": "Settings",
+    "account": "Account",
+    "notifications": {
+      "title": "Notifications",
+      "mark_all_read": "Mark all as read",
+      "filter": {
+        "All": "All",
+        "Follow": "Follow",
+        "Like": "Like",
+        "Comment": "Comment",
+        "System": "System"
+      }
+    },
+    "notificationSettings": {
+      "title": "Notification Settings",
+      "description": "Enable or disable various app notifications.",
+      "notificationSound": {
+        "title": "Notification Sound",
+        "description": "Customise your notification sound",
+        "description2": "Audio alert via your device speaker",
+        "silent": "Silent",
+        "default": "Default app sound"
+      },
+      "openSettings": {
+        "title": "System Settings",
+        "description": "This feature is managed by iOS. You will be redirected to your device settings to configure it."
+      },
+      "appNotification": {
+        "title": "App Notification",
+        "description": "Receive mobile app notifications.",
+        "description2": "Push notification to your phone"
+      },
+      "vibration": {
+        "title": "Vibration",
+        "description": "Vibrate device when a reminder is due."
+      },
+      "showOnLockScreen": {
+        "title": "Show on Lock Screen",
+        "description": "Display Product reminder on lock screen."
+      }
+    },
+    "reminderSettings": {
+      "title": "Reminder Preferences",
+      "description": "Choose the alert sound for Product reminders.",
+      "earlyReminder": {
+        "title": "Early Reminder Alert",
+        "description": "An alert before your Product is due."
+      },
+      "missedNotification": {
+        "title": "Missed Dose Notifications",
+        "description": "If a dose isn’t marked within 30 mint."
+      },
+      "reminderSound": {
+        "title": "Reminder Sound",
+        "description": "Audio alert via your device speaker"
+      },
+      "reminderLight": {
+        "title": "Reminder Light",
+        "description": "Activates the LED on your Taykie device"
+      }
+    },
+
+    "integrations": {
+      "title": "Integrations",
+      "description": "Connect your health apps and devices to sync Product reminders, activity, and vitals.",
+      "description2": "Seamlessly Connect Your Devices and Apps",
+      "health_apps": "Health Apps",
+      "wearables": "Wearable Devices",
+      "manage_connections": "Manage Connections",
+      "appleHealth": {
+        "title": "Apple Health",
+        "description": "Sync Products, heart rate, and steps"
+      },
+      "googleFit": {
+        "title": "Google Fit",
+        "description": "Track your activity and sleep automatically"
+      },
+      "fitbit": {
+        "title": "Fitbit",
+        "description": "Sync sleeps & activity data"
+      },
+      "garmin": {
+        "title": "Garmin",
+        "description": "Track activity insights"
+      },
+      "galaxyWatch": {
+        "title": "Galaxy Watch",
+        "description": "Sync vitals & reminders"
+      },
+      "ouraRing": {
+        "title": "Oura Ring",
+        "description": "Connect for sleep & readiness data"
+      }
+    },
+    "dataPrivacy": {
+      "title": "Data & Privacy",
+      "privacySecurity": "Privacy & Security",
+      "security_description": "Manage app passwords and security.",
+      "change_password": {
+        "title": "Change Profile Password",
+        "description": "Change the user’s profile password."
+      },
+      "appLock": {
+        "title": "App Lock",
+        "description": "Use your device’s biometrics for access."
+      },
+      "delete_account": {
+        "title": "Delete My Account & Data",
+        "description": "Permanently delete all your Product account."
+      },
+      "request_data": {
+        "title": "Request My Data",
+        "description": ""
+      }
+    },
+
+    "helpSupport": {
+      "title": "Help & Support",
+      "description": "FAQ, Contact & Warranty",
+      "faq": {
+        "title": "Frequently Asked Questions",
+        "description": "Find answers to common questions."
+      },
+      "contact": {
+        "title": "Contact Us",
+        "description": "Get in touch with our support team."
+      },
+      "policy": {
+        "title": "Warranty & Policies",
+        "description": "View warranty information and terms."
+      }
+    },
+    "changePassword": {
+      "title": "Change Password",
+      "oldPassword": "Old password",
+      "newPassword": "New password",
+      "confirmNewPassword": "Confirm new password",
+      "placeholder": {
+        "oldPassword": "Enter your old password",
+        "newPassword": "Enter your new password",
+        "confirmNewPassword": "Re-enter your new password"
+      }
+    },
+    "language": "Language",
+    "logoutError": "Error during logout",
+    "appearance": "Appearance",
+    "importFromPocket": "Import from Pocket",
+    "help": "Help & Support",
+    "about": "About",
+    "logout": {
+      "title": "Logout",
+      "description": "You’ll be signed out of your account."
+    },
+    "logoutConfirmMessage": "Are you sure you want to sign out?",
+    "deleteAccount": "Delete Account",
+    "restoreAccount": "Restore Account",
+    "deleteAccountConfirmMessage": "Are you sure you want to delete your account? This action cannot be undone and will permanently delete all your data.",
+    "wantToDeleteAccount": "Are you sure you want to delete your account?",
+    "deleteAccountError": "An error occurred while deleting your account. Please try again.",
+    "deletingAccount": "Deleting your account...",
+    "profile": {
+      "title": "Profile",
+      "account_center": {
+        "title": "Account Center",
+        "description": "Manage your Account Details"
+      }
+    }
+  },
+  "profile": {
+    "name": "Name",
+    "email": "Email",
+    "bio": "Bio",
+    "phone": "Phone",
+    "username": "Username",
+    "fullName": "Full Name",
+    "birthYear": "Birth Year",
+    "choose_birthYear": "Choose BirthYear",
+    "country": "Country",
+    "editProfile": "Edit Profile",
+    "no_change_detected": "No change detected",
+    "save_changes": "Save Changes",
+    "choose_photo": "Choose Photo",
+    "gender": {
+      "title": "Gender",
+      "choose_gender": "Choose Gender",
+      "male": "Male",
+      "female": "Female",
+      "other": "Non-Binary/Other",
+      "rather": "Rather Not Say"
+    },
+    "filter": {
+      "posts": "Posts",
+      "groups": "Groups",
+      "saved": "Saved"
+    },
+    "no_data_found": "No data found",
+    "view_all": "View all",
+    "action_menu": {
+      "add_new": "Add New",
+      "request_data": "Request my data",
+      "my_schedule_logs": "My Schedule Logs"
+    },
+    "placeHolders": {
+      "name": "Add Name",
+      "fullName": "Add Full Name",
+      "email": "Add Email",
+      "birthYear": "Select BirthYear",
+      "country": "Add Country",
+      "gender": "Select Gender",
+      "bio": "Add Bio",
+      "phone": "Add Phone Number",
+      "username": "Add Username"
+    }
+  },
+
+  "device": {
+    "name": "Device Name",
+    "tap_to_connect": "Tap to connect",
+    "pairing_with": "Pairing with Taykie...",
+    "please_wait": "Syncing schedules and device data. Please wait.",
+    "taykie_connected": " Taykie Connected! 🎉",
+    "not_found": "Device not found",
+    "make_sure_is_charged": "Make sure your Taykie is charged and press the button on top to activate pairing mode.",
+    "pairing_failed": " Pairing failed",
+    "something_went_wrong": " Something went wrong during the connection. Please try again.",
+    "tap_to_search": "Make sure your Taykie is charged and nearby, then tap below to begin searching.",
+    "ready": "Ready to pair",
+    "start_searching": "Start searching",
+    "try_again": "Try again",
+    "pair_taykie": "Pair Your Taykie",
+    "connect_taykie": "Now let's connect your Taykie. Make sure your device is charged and within range.",
+    "pair_later": "I'll pair later in ",
+    "device_settings": "Settings › Devices",
+    "scan": {
+      "title": "Find Device",
+      "scanning": "Scanning for devices...",
+      "noDevices": "No devices found",
+      "rescan": "Scan Again",
+      "connecting": "Connecting...",
+      "stillScanning": "Still scanning...",
+      "unknownDevice": "Unknown Device"
+    },
+    "connection": {
+      "title": "Connection",
+      "status": "Status",
+      "battery": "Battery",
+      "lastSync": "Last Sync",
+      "online": "Online",
+      "offline": "Offline",
+      "connecting": "Connecting...",
+      "find": "Find Device",
+      "neverSynced": "Never"
+    },
+    "compartments": {
+      "title": "Compartments",
+      "filled": "Filled",
+      "active": "Active",
+      "empty": "Empty",
+      "lastOpened": "Last opened {time}",
+      "noActivity": "No recent activity"
+    },
+    "actions": {
+      "title": "Device Actions",
+      "find": "Find My Taykie",
+      "update": "Update Firmware",
+      "rename": "Rename Device",
+      "dismiss": "Dismiss Active Alert",
+      "history": "Sync History",
+      "quick_action": "Quick Actions"
+    },
+    "permissions": {
+      "title": "Bluetooth Permissions",
+      "message": "This app needs Bluetooth permissions to connect to your Taykie device.",
+      "required": "Permissions Required",
+      "bluetoothRequired": "Bluetooth permissions are required to scan for devices."
+    },
+    "bluetooth": {
+      "disabled": "Bluetooth Disabled",
+      "enableMessage": "Please enable Bluetooth to connect to your device.",
+      "enableToScan": "Please enable Bluetooth to scan for devices.",
+      "alert": "Bluetooth is Off",
+      "alertMessage": "Taykie needs Bluetooth to connect to your device. Please turn it on in your system settings.",
+      "turn_on": "Please turn on your Bluetooth to continue.",
+      "make_sure": "Make sure Bluetooth is on and your Taykie is nearby."
+    },
+    "firmware": {
+      "updateTitle": "Update Firmware",
+      "updateMessage": "This will update your device firmware. This may take several minutes.",
+      "update": "Update"
+    },
+    "rename": {
+      "title": "Rename Device",
+      "message": "Enter a new name for your device"
+    },
+    "disconnect": {
+      "title": "Disconnect Device",
+      "message": "Are you sure you want to disconnect from your device?",
+      "button": "Disconnect Device"
+    },
+    "notConnected": "Device Not Connected",
+    "connectFirst": "Please connect to your device first.",
+    "connected": "Device connected successfully!",
+    "avlDevices": "Available Devices",
+    "RSSI": "RSSI",
+    "changeDevice": "Change Device",
+    "pairDevice": " Pair Your Device",
+    "connectViaBluetooth": "   Connect your smart pill dispenser via Bluetooth to get started.",
+    "cantFindDevice": "Can’t find your device?",
+    "enterManually": "Enter device ID manually.",
+    "audio_settings": "Audio Settings",
+    "volume_level": "Volume Level",
+    "alert_tone": "Alert Tone",
+    "active_schedules": "Active Schedules",
+    "no_schedules_loaded": "No schedules loaded."
+  },
+  "insights": {
+    "title": "Insights",
+    "takenOnTime": "Taken on time",
+    "streak": "Current streak",
+    "streakDays_one": "{{count}} day 🔥",
+    "streakDays_other": "{{count}} days 🔥",
+    "missed": "Missed doses",
+    "timeOfDayMissed": "Time of day missed",
+    "adherenceOverTime": "Adherence over time",
+    "suggestedAdjustments": "Suggested adjustments",
+    "export": {
+      "title": "Export & Sharing",
+      "export": "Insights Export",
+      "json": "User data exported as JSON successfully!",
+      "csv": "User data exported as CSV  successfully!",
+      "pdf": "User data exported as PDF  successfully!",
+      "share": "Share with"
+    },
+    "segments": {
+      "day": "Day",
+      "week": "Week",
+      "month": "Month"
+    },
+    "no_data": "No data to export"
+  },
+  "schedule": {
+    "create": "Create a Schedule",
+    "youAreOnStreak": "You’re on a {{streak}}-day streak! Keep it going",
+    "addProduct": {
+      "dosage": "Dosage",
+      "strength": "Strength",
+      "submit": "Add Product",
+      "new": "Add New Product"
+    },
+    "scheduleSuccess": "Schedule Successfully Created!",
+    "routine": {
+      "submit": "Save Routine",
+      "reminders": {
+        "title": "Reminders",
+        "push": "Push",
+        "led": "Led",
+        "sound": "Sound"
+      }
+    },
+    "everyMonth": "1st day of every month",
+    "placeHolders": {
+      "search": "Search",
+      "add": "Add",
+      "empty": "Looks like your schedule is empty. New items will appear here when added."
+    }
+  },
+  "community": {
+    "filters": {
+      "new": "New",
+      "popular": "Popular",
+      "following": "Following"
+    },
+    "post": {
+      "title": "Post",
+      "myPosts": "My Posts",
+      "createPost": "Create Post",
+      "createAPost": "Create a Post",
+      "createPoll": "Create Poll",
+      "textPost": "Text Post",
+      "imagePost": "Image Post",
+      "pollPost": "Poll / Question",
+      "comments": "Comments",
+      "whatYouThink": "What do you think?",
+      "reply": "Reply",
+      "replies": "Replies",
+      "add_option": "Add another option...",
+      "option": "Option",
+      "new_like": "New Like",
+      "unliked_post": "Unliked Post",
+      "user_liked_post": "{{user}} liked your post",
+      "user_unliked_post": "{{user}} unliked your post",
+      "no_comment_yet": "No comments yet. Be the first to comment!",
+      "loading_comments": " Loading comments...",
+      "load_comments_failed": "Failed to load comments. Pull to refresh.",
+      "new_comment": "New Comment",
+      "user_commented": "{{user}} commented on your post"
+    },
+    "placeHolder": {
+      "write": "Wite something...",
+      "askQuestion": "Ask a poll question...",
+      "addCaption": "Add a caption...",
+      "selectImage": "Select an image",
+      "noComments": " No comments yet. Be the first to comment!",
+      "beFirstToShare": "Be the first to share something!",
+      "no_posts_found": "No posts found"
+    }
+  },
+  "home": {
+    "greeting": "Hi,",
+    "subGreeting": "Here’s your schedule for today.",
+    "today": {
+      "title": "Today"
+    },
+    "schedule": {
+      "morning": "Morning",
+      "evening": "Evening",
+      "afternoon": "Afternoon",
+      "daily": "Daily",
+      "weekly": "Weekly",
+      "monthly": "Monthly"
+    },
+    "tasks": {
+      "status": {
+        "taken": "Taken",
+        "missed": "Missed",
+        "upcoming": "Upcoming"
+      }
+    },
+    "reminder": {
+      "markTaken": "Mark as taken",
+      "snooze": "Snooze",
+      "log": "Log"
+    },
+    "medicine": {
+      "statusTitle": {
+        "taken": "This medicine has been taken.",
+        "upcoming": "Did you take it?",
+        "missed": "Looks like this one was missed."
+      }
+    },
+    "extras": {
+      "awesome": "Awesome!",
+      "at": "At",
+      "scheduledFor": "Scheduled for",
+      "goBack": "Go Back",
+      "benefitsOf": "Benefits of",
+      "updateProduct": "Update Product",
+      "tablet": "Tablet",
+      "tablets": "Tablets",
+      "mg": "mg"
+    }
+  },
+  "bookmarks": {
+    "title": "Bookmarks",
+    "empty": {
+      "title": "Your Bookmarks is Empty",
+      "description": "Add post to bookmark."
+    }
+  },
+  "follow": {
+    "title": "Follow",
+    "combine_title": "Followers & Following",
+    "new_follower": "New Follower",
+    "unfollowed_you": "Unfollowed You",
+    "started_following": "{{user}} has started following you",
+    "unfollowed_user": "{{user}} has unfollowed you",
+    "followers": "Followers",
+    "following": "Following",
+    "unfollow": "Unfollow",
+    "forYou": "Suggested for You",
+    "message": "Message",
+    "follow_back": "Folllow Back",
+    "empty": {
+      "no_following": "No Following Yet",
+      "no_following_desc": "You are not following anyone yet.",
+      "no_followers": "No Followers Yet",
+      "no_followers_desc": "People who follow you will appear here."
+    }
+  },
+  "logs": {
+    "myLogs": "My Logs",
+    "no_logs_found": "No logs found",
+    "nothing_here": "Nothing Here Yet",
+    "add_log_for": "Add Logs For {{product}}",
+    "add_log": "Add Log",
+    "description": "Description",
+    "save": "Save Log"
+  },
+  "product": {
+    "myProducts": "My Products",
+    "no_product_found": "No product found",
+    "required": "Product name is required",
+    "add_name": "Add Product Name",
+    "no_data": {
+      "title": "No results to show",
+      "description": "We couldn’t find what you’re looking for. Give it another try!",
+      "buttonTitle": "Create your own"
+    }
+  },
+  "report": {
+    "title": "Report",
+    "options": {
+      "spam": "Spam or misleading content",
+      "harassment": "Harassment or bullying",
+      "hate_speech": "Hate speech or discrimination",
+      "false_information": "Sharing false Product information",
+      "fake_account": "Impersonation or fake account",
+      "safety_concern": "Mental health or safety concern"
+    },
+    "note": "Reports are kept private and help us maintain a safe community.",
+    "send": "Send Report"
+  },
+  "onboarding": {
+    "taykie_is_ready": "Taykie is ready to go. Your first reminder is scheduled for",
+    "all_set": {
+      "title": "You're all set! 🎉",
+      "frequency": {
+        "1": "Once daily",
+        "2": "Twice daily",
+        "3": "Three times daily"
+      },
+      "your_setup": "YOUR SETUP",
+      "take_me_to_dashboard": "Take me to my dashboard",
+      "summary": {
+        "dose": "Dose Frequency",
+        "reminder": "First Reminder",
+        "type": "Reminder Type"
+      },
+      "reminders": {
+        "sound": "Sound",
+        "light": "Light",
+        "notification": "Notification"
+      },
+      "tomorrow": "tomorrow"
+    },
+    "select_language": "Select Language",
+    "select_country": "Select Country",
+    "set_up_taykie_location": "Before we get started, let's make sure Taykie is set up for your location.",
+    "your_location": "Your Location",
+    "searching": "Searching for Taykie…",
+    "dosage": {
+      "placeholder": {
+        "dosage": "Dosage (optional)"
+      },
+      "frequency": {
+        "title": "Dosage Frequency",
+        "description": " How many times a day would you like Taykie to remind you?",
+        "frequency1": "Once a day",
+        "frequencyDesc1": "One compartment — morning, evening, or whenever suits you.",
+        "frequency2": "Twice a day",
+        "frequencyDesc2": "Two compartments — e.g. morning and evening.",
+        "frequency3": "Three times a day",
+        "frequencyDesc3": "Three compartments — morning, midday and evening."
+      },
+      "compartments_per_week": "compartments per week"
+    },
+    "supplements": {
+      "name": "Supplement name",
+      "your_supplements": "Your Taykie Supplements",
+      "description": "Fill in what goes into each slot of your Taykie. You can always update this later.",
+      "select_time": "Select Time",
+      "errors": {
+        "time": "Please select valid time for added slots",
+        "alteast_one": "Please add at least one supplement to continue."
+      },
+      "remove": "Remove Supplement",
+      "add_item": " Add item",
+      "other": {
+        "anything_else": "Anything else?",
+        "description": "Do you take anything else—such as powders—that won’t be stored in your Taykie? We can remind you to take those too.",
+        "yes_add": "Yes, add them",
+        "no_thanks": "No thanks",
+        "serving_size": "Serving size / dosage (optional)",
+        "remind_me": "Remind me at:",
+        "remind_in_running_low": "Remind me when I'm running low",
+        "keep_at_least": "Keep at least",
+        "add_another": "Add another"
+      },
+      "refill_taykie": {
+        "title": "Refill Taykie",
+        "description": "Taykie will remind you when it's time to refill. When works best for you?",
+        "time": "Time",
+        "day_of_week": {
+          "title": "Day of week",
+          "mon": "Mon",
+          "tue": "Tue",
+          "wed": "Wed",
+          "thu": "Thu",
+          "fri": "Fri",
+          "sat": "Sat",
+          "sun": "Sun"
+        },
+        "select_one": "Please select at least one day.",
+        "wiil_remind_you": "We'll remind you every {{day}} at {{time}}"
+      }
+    },
+    "reminder_style": {
+      "title": "Reminder Style",
+      "description": "How would you like Taykie to remind you?",
+      "glow_light": {
+        "title": "Glowing Light",
+        "description": "Activates the LED on your Taykie device"
+      },
+      "enable_atleast_one": "Please enable at least one reminder type to continue."
+    },
+    "lock_screen": {
+      "title": "Lock Screen Display",
+      "description": "Would you like your upcoming dose reminders to appear on your phone lock screen?",
+      "skip_for_now": " Skip for now",
+      "osNote": {
+        "ios": "Time-sensitive notifications on iO",
+        "android": "Lock screen visibility on Android"
+      }
+    },
+    "check_in": {
+      "title": "Baseline Check-In",
+      "description": "Before Taykie, how would you rate your supplement routine? Be honest — there are no wrong answers here.",
+      "scale_labels": {
+        "often": " Often missed",
+        "never": " Never missed"
+      },
+      "see_personalised_message": "Tap a number above to see your personalised message",
+      "hit_and_miss": "Hit and miss",
+      "score_response": {
+        "less_than_three": "That's why you're here — Taykie will help you build a better routine.",
+        "less_than_six": "Good start. Taykie will help you take it to the next level.",
+        "default": "Impressive! Taykie will help you stay consistent."
+      }
+    },
+    "coaching_optin": {
+      "title": "Coaching & Tips",
+      "description": "Would you like Taykie to share occasional tips on building a consistent supplement routine?",
+      "options": {
+        "title1": "Yes, send me tips",
+        "description1": "Receive occasional evidence-based suggestions in your feed.",
+        "title2": "No thanks",
+        "description2": "You can turn this on at any time in Settings."
+      },
+      "tip": "Gentle tips, a few times a week. Always useful, never noise."
+    }
+  }
+}

@@ -1,0 +1,68 @@
+app/(auth)/password-reset.tsx(193,15): error TS2322: Type 'ViewStyle | null' is not assignable to type 'TextStyle | Falsy | RegisteredStyle<TextStyle> | RecursiveArray<TextStyle | Falsy | RegisteredStyle<TextStyle>> | readonly (TextStyle | ... 1 more ... | RegisteredStyle<...>)[]'.
+  Type 'ViewStyle' is not assignable to type 'TextStyle | Falsy | RegisteredStyle<TextStyle> | RecursiveArray<TextStyle | Falsy | RegisteredStyle<TextStyle>> | readonly (TextStyle | ... 1 more ... | RegisteredStyle<...>)[]'.
+    Type 'ViewStyle' is not assignable to type 'TextStyle'.
+      Types of property 'userSelect' are incompatible.
+        Type 'string | undefined' is not assignable to type '"auto" | "none" | "text" | "contain" | "all" | undefined'.
+          Type 'string' is not assignable to type '"auto" | "none" | "text" | "contain" | "all" | undefined'.
+app/(auth)/signup.tsx(172,15): error TS2339: Property 'showAlert' does not exist on type 'AlertContextValue'.
+app/(auth)/signup.tsx(190,15): error TS2339: Property 'showAlert' does not exist on type 'AlertContextValue'.
+app/(auth)/signup.tsx(205,15): error TS2339: Property 'showAlert' does not exist on type 'AlertContextValue'.
+app/(auth)/signup.tsx(212,15): error TS2339: Property 'showAlert' does not exist on type 'AlertContextValue'.
+app/(auth)/signup.tsx(230,19): error TS2345: Argument of type '"/(auth)/upload-photo"' is not assignable to parameter of type '"/" | RelativePathString | ExternalPathString | "/account-settings" | `/account-settings?${string}` | `/account-settings#${string}` | "/delete-account" | `/delete-account?${string}` | `/delete-account#${string}` | ... 92 more ... | { ...; }'.
+app/(auth)/signup.tsx(233,13): error TS2339: Property 'showAlert' does not exist on type 'AlertContextValue'.
+app/(auth)/signup.tsx(367,15): error TS2322: Type '(value: string) => true | "Straight rows of keys are easy to guess" | "Short keyboard patterns are easy to guess" | "Use a longer keyboard pattern with more turns" | ... 12 more ... | "Password is too weak"' is not assignable to type 'Validate<string | undefined, SignUpFormData> | Record<string, Validate<string | undefined, SignUpFormData>> | undefined'.
+  Type '(value: string) => true | "Straight rows of keys are easy to guess" | "Short keyboard patterns are easy to guess" | "Use a longer keyboard pattern with more turns" | ... 12 more ... | "Password is too weak"' is not assignable to type 'Validate<string | undefined, SignUpFormData>'.
+    Types of parameters 'value' and 'value' are incompatible.
+      Type 'string | undefined' is not assignable to type 'string'.
+        Type 'undefined' is not assignable to type 'string'.
+app/(auth)/signup.tsx(392,15): error TS2322: Type '(value: string) => string | true' is not assignable to type 'Validate<string | undefined, SignUpFormData> | Record<string, Validate<string | undefined, SignUpFormData>> | undefined'.
+  Type '(value: string) => string | true' is not assignable to type 'Validate<string | undefined, SignUpFormData>'.
+    Types of parameters 'value' and 'value' are incompatible.
+      Type 'string | undefined' is not assignable to type 'string'.
+        Type 'undefined' is not assignable to type 'string'.
+app/(auth)/signup.tsx(438,17): error TS2322: Type '(value: string) => string | true' is not assignable to type 'Validate<string | undefined, SignUpFormData> | Record<string, Validate<string | undefined, SignUpFormData>> | undefined'.
+  Type '(value: string) => string | true' is not assignable to type 'Validate<string | undefined, SignUpFormData>'.
+    Types of parameters 'value' and 'value' are incompatible.
+      Type 'string | undefined' is not assignable to type 'string'.
+        Type 'undefined' is not assignable to type 'string'.
+app/(auth)/signup.tsx(472,17): error TS2322: Type '(value: string) => string | true' is not assignable to type 'Validate<string | undefined, SignUpFormData> | Record<string, Validate<string | undefined, SignUpFormData>> | undefined'.
+  Type '(value: string) => string | true' is not assignable to type 'Validate<string | undefined, SignUpFormData>'.
+    Types of parameters 'value' and 'value' are incompatible.
+      Type 'string | undefined' is not assignable to type 'string'.
+        Type 'undefined' is not assignable to type 'string'.
+app/(tabs)/message.tsx(5,11): error TS2741: Property 'children' is missing in type '{ edges: "top"[]; withBackground: true; }' but required in type 'SafeAreaScreenProps'.
+app/(tabs)/post.tsx(8,9): error TS6133: 'theme' is declared but its value is never read.
+app/(tabs)/post.tsx(10,11): error TS2741: Property 'children' is missing in type '{ edges: "top"[]; withBackground: true; }' but required in type 'SafeAreaScreenProps'.
+app/(tabs)/post.tsx(15,7): error TS6133: 'styles' is declared but its value is never read.
+app/(tabs)/profile.tsx(12,6): error TS2741: Property 'children' is missing in type '{ withBackground: false; edges: ("left" | "right")[]; style: ({ flex: number; } | { backgroundColor: string; })[]; }' but required in type 'SafeAreaScreenProps'.
+app/(tabs)/search.tsx(6,11): error TS2741: Property 'children' is missing in type '{ edges: "top"[]; style: { flex: number; }; }' but required in type 'SafeAreaScreenProps'.
+components/primitives/ThemeText.tsx(142,10): error TS18049: 'variantStyle' is possibly 'null' or 'undefined'.
+components/primitives/ThemeText.tsx(142,23): error TS2339: Property 'fontFamily' does not exist on type 'false | "" | ExtendedTextStyle | RegisteredStyle<TextStyle> | RecursiveArray<TextStyle | Falsy | RegisteredStyle<TextStyle>>'.
+  Property 'fontFamily' does not exist on type 'false'.
+components/shared/filter/date-range-filter.tsx(40,3): error TS2339: Property 'style' does not exist on type 'DateRangeFilterProps'.
+components/shared/filter/date-range-filter.tsx(65,26): error TS2339: Property 'inverse' does not exist on type '{ primary: string; secondary: string; secondary2: string; disabled: string; hint: string; dark: string; subtle: string; }'.
+components/shared/filter/date-range-filter.tsx(73,24): error TS2339: Property 'day_button' does not exist on type 'Partial<{ days: TextStyle | ViewStyle | ImageStyle; day_cell: TextStyle | ViewStyle | ImageStyle; day: TextStyle | ViewStyle | ImageStyle; ... 46 more ...; disabled_label: TextStyle | ... 1 more ... | ImageStyle; }>'.
+components/shared/filter/date-range-filter.tsx(109,35): error TS2339: Property 'calendarc_icon' does not exist on type '{ logo: any; dark_logo: any; splash_img: any; splash_gradient: any; google_icon: any; facebook_icon: any; authStart: any; }'.
+components/shared/filter/date-range-filter.tsx(136,19): error TS2322: Type '{ mode: "range"; startDate: Dayjs; endDate: Dayjs; minDate: Dayjs | undefined; maxDate: Dayjs | undefined; onChange: ({ startDate, endDate }: { startDate: DateType; endDate: DateType; }) => void; ... 4 more ...; calendarTextStyle: { ...; }; }' is not assignable to type 'IntrinsicAttributes & (DatePickerSingleProps | DatePickerRangeProps | DatePickerMultipleProps)'.
+  Property 'headerTextStyle' does not exist on type 'IntrinsicAttributes & DatePickerRangeProps'.
+components/shared/filter/Filter.tsx(86,47): error TS6133: 'label' is declared but its value is never read.
+components/shared/menu/ArticleActionMenu.tsx(34,7): error TS2322: Type '"/edit-tags"' is not assignable to type '"/" | RelativePathString | ExternalPathString | "/account-settings" | "/delete-account" | "/settings" | "/_sitemap" | "/(auth)/auth-start" | ... 20 more ... | "/+not-found"'.
+components/shared/menu/index.ts(2,45): error TS2307: Cannot find module './ReaderActionMenu' or its corresponding type declarations.
+components/shared/menu/index.ts(4,37): error TS2307: Cannot find module './SortMenu' or its corresponding type declarations.
+components/shared/navigation/BackButton.tsx(3,1): error TS6133: 'Ionicons' is declared but its value is never read.
+components/SvgIcon.tsx(46,43): error TS2339: Property 'stroke' does not exist on type '{ viewBox: string; paths: string[]; stroke: boolean; strokeWidth: number; } | { viewBox: string; paths: string[]; stroke: boolean; strokeWidth: number; } | { viewBox: string; paths: string[]; stroke: boolean; strokeWidth: number; } | ... 39 more ... | { ...; }'.
+  Property 'stroke' does not exist on type '{ viewBox: string; paths: string[]; fill: string; }'.
+components/SvgIcon.tsx(47,37): error TS2339: Property 'strokeWidth' does not exist on type '{ viewBox: string; paths: string[]; stroke: boolean; strokeWidth: number; } | { viewBox: string; paths: string[]; stroke: boolean; strokeWidth: number; } | { viewBox: string; paths: string[]; stroke: boolean; strokeWidth: number; } | ... 39 more ... | { ...; }'.
+  Property 'strokeWidth' does not exist on type '{ viewBox: string; paths: string[]; fill: string; }'.
+components/SvgIcon.tsx(58,41): error TS2339: Property 'stroke' does not exist on type '{ viewBox: string; path: string; } | { viewBox: string; path: string; } | { viewBox: string; path: string; } | { viewBox: string; path: string; stroke: boolean; strokeWidth: number; }'.
+  Property 'stroke' does not exist on type '{ viewBox: string; path: string; }'.
+components/SvgIcon.tsx(59,35): error TS2339: Property 'strokeWidth' does not exist on type '{ viewBox: string; path: string; } | { viewBox: string; path: string; } | { viewBox: string; path: string; } | { viewBox: string; path: string; stroke: boolean; strokeWidth: number; }'.
+  Property 'strokeWidth' does not exist on type '{ viewBox: string; path: string; }'.
+components/ui/Select/select-using-native-parper.tsx(99,26): error TS6133: 'props' is declared but its value is never read.
+components/ui/Select/select.tsx(67,28): error TS2749: 'TouchableOpacity' refers to a value, but is being used as a type here. Did you mean 'typeof TouchableOpacity'?
+stores/authStore.ts(14,3): error TS6133: 'signInWithNextAuthCredentials' is declared but its value is never read.
+stores/authStore.ts(15,3): error TS6133: 'getNextAuthSession' is declared but its value is never read.
+stores/authStore.ts(17,3): error TS6133: 'fetchUserProfile' is declared but its value is never read.
+stores/authStore.ts(19,3): error TS6133: 'startNextAuthOAuth' is declared but its value is never read.
+stores/authStore.ts(77,11): error TS6133: 'get' is declared but its value is never read.
+stores/authStore.ts(81,21): error TS6133: 'credentials' is declared but its value is never read.
