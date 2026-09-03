@@ -63,6 +63,7 @@ const DeviceScanModal: React.FC<DeviceScanModalProps> = memo(
       }
     }, [visible, hasScanned, startScan, stopScan]);
 
+    
     // Handle device connection
     const handleDevicePress = useCallback(
       (device: TaykieDevice) => {

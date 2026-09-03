@@ -7,6 +7,7 @@ import {
   View,
   KeyboardAvoidingView,
   ScrollView,
+  Keyboard,
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useForm } from "react-hook-form";
@@ -102,7 +103,11 @@ function SignUpScreen() {
       if (firstName) payload.firstName = firstName;
       if (lastName) payload.lastName = lastName;
       const message = await register(payload);
-      router.push("/(onboarding)/country-language");
+      // See login.tsx onSubmit for why the keyboard is dismissed and the
+      // navigation deferred — avoids racing the keyboard-close animation
+      // against the stack navigation transition.
+      Keyboard.dismiss();
+      setTimeout(() => router.push("/(onboarding)/country-language"), 300);
       alert.show(AlertPresets.success(message));
     } catch (err) {
       alert.show(AlertPresets.error(err.message));

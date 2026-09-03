@@ -31,10 +31,12 @@ const ArticleActionMenu: React.FC<ArticleActionMenuProps> = ({
   // Open tag editor
   const handleEditTags = useCallback(() => {
     onClose();
-    router.push({
-      pathname: "/edit-tags",
-      params: { itemId: item.id },
-    });
+    setTimeout(() => {
+      router.push({
+        pathname: "/edit-tags",
+        params: { itemId: item.id },
+      });
+    }, 300);
   }, [onClose, router, item]);
 
   // Share article

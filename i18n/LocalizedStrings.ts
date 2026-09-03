@@ -247,6 +247,12 @@ export const LocalizedStrings = {
       },
     },
 
+    dosagePreferences: {
+      title: "settings.dosagePreferences.title",
+      description: "settings.dosagePreferences.description",
+      save: "settings.dosagePreferences.save",
+    },
+
     notificationSettings: {
       title: "settings.notificationSettings.title",
       description: "settings.notificationSettings.description",

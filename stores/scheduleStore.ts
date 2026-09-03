@@ -37,7 +37,7 @@ type State = {
 type Actions = {
   createSchedule: (requestBody: CreateScheduleRequest) => Promise<void>;
   fetchUserSchedules: (reset?: boolean) => Promise<void>;
-  fetchTodaySchedules: () => Promise<void>;
+  fetchTodaySchedules: (period?:string) => Promise<void>;
   deleteSchedule: (scheduleId: string) => Promise<string>;
   updateUserSchedule: (
     scheduleId: string,
@@ -135,10 +135,10 @@ export const useScheduleStore = create<State & Actions>()(
         }
       },
 
-      fetchTodaySchedules: async () => {
+      fetchTodaySchedules: async (period) => {
         set({ isLoading: true, error: null });
         try {
-          const result = await getTodaySchedules();
+          const result = await getTodaySchedules(period);
           set({ isLoading: false, todaySchedules: result.data });
         } catch (error) {
           const message = getErrorMessage(error);

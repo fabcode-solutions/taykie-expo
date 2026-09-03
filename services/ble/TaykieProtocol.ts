@@ -1,115 +1,227 @@
 import { Buffer } from "buffer";
 
+// Per 通信协议_药盒(1).pdf: service 0xFFF0, notify (device -> app) 0xFFF1,
+// write (app -> device) 0xFFF2.
 export const TAYKIE_UUIDS = {
-  SERVICE: "0000ffe0-0000-1000-8000-00805f9b34fb",
-  NOTIFY: "0000ffe1-0000-1000-8000-00805f9b34fb",
-  WRITE: "0000ffe2-0000-1000-8000-00805f9b34fb",
+  SERVICE: "0000fff0-0000-1000-8000-00805f9b34fb",
+  NOTIFY: "0000fff1-0000-1000-8000-00805f9b34fb",
+  WRITE: "0000fff2-0000-1000-8000-00805f9b34fb",
 };
 
-export enum FuncCode {
-  QueryStatus = 0x00,
-  DismissAlert = 0x01,
-  SetTone = 0x02,
-  SetVolume = 0x03, // Working assumption per Spec 7.4 [cite: 12, 62, 63]
-  SetSchedule = 0x05,
-  ReadHistory = 0x06,
-  SetTime = 0x07,
-  HistoryAck = 0xff,
+const FRAME_HEADER = 0x5a;
+
+// Command byte (the frame's 2nd byte). 0x00 is not a real command — the
+// device sends it back as an unsolicited reply when a frame it received
+// failed its checksum.
+export enum CmdType {
+  ChecksumError = 0x00,
+  PasswordVerify = 0xe0,
+  ChangePassword = 0xe1,
+  TimeCalibration = 0xf1,
+  SetSchedule = 0xf2,
+  QueryStatus = 0xf3,
+  SoundControl = 0xf4,
+  LightControl = 0xf5,
+  QueryHistory = 0xf6,
+  QueryTime = 0xf7,
+  EraseFlash = 0xff, // Destructive: wipes stored history on the device.
+}
+
+export const SCHEDULE_SLOT_COUNT = 10;
+const SCHEDULE_SLOT_SIZE = 10;
+
+export interface ScheduleSlot {
+  enabled: boolean;
+  weekdayBitmask: number; // bit0 = Sunday .. bit6 = Saturday
+  hour: number;
+  minute: number;
+  soundEnabled: boolean;
+  lightEnabled: boolean;
+  volume: number; // 0xE0-0xEF
+  soundType: number; // 0x00-0x05
+  lightType: number; // 0x00-0x05
+}
+
+export const EMPTY_SCHEDULE_SLOT: ScheduleSlot = {
+  enabled: false,
+  weekdayBitmask: 0,
+  hour: 0,
+  minute: 0,
+  soundEnabled: false,
+  lightEnabled: false,
+  volume: 0xe0,
+  soundType: 0,
+  lightType: 0,
+};
+
+export interface DeviceStatus {
+  batteryLevel: number; // 0x00-0x64, or 0xFF while charging
+  soundOn: boolean;
+  lightOn: boolean;
+  schedules: ScheduleSlot[];
+}
+
+export interface HistoryRecord {
+  timestamp: string;
+  // The spec labels this byte "reserved" with no defined meaning. Kept here
+  // so it can be inspected for a possible undocumented open/closed flag.
+  reserved: number;
+  crc16: number;
+}
+
+export interface DeviceTime {
+  year: number;
+  month: number;
+  day: number;
+  hour: number;
+  minute: number;
+  second: number;
 }
 
 export class TaykieProtocol {
-  static buildFrame(funcCode: number, data: number[] = [], isQuery: boolean = false): string {
-    const startCode = 0x55; // Fixed start code [cite: 18]
-    const cmdCode = 0x10; // App -> Device [cite: 18]
-    const dataType = isQuery ? 0x00 : 0x05;
-    const dataLen = data.length;
-
-    const frameHeader = [startCode, cmdCode, funcCode, dataType, dataLen];
-    const fullBody = [...frameHeader.slice(1), ...data];
-
-    // Low byte of byte-sum from Cmd Code through last Data Area byte [cite: 20, 21]
-    const checksum = fullBody.reduce((acc, byte) => acc + byte, 0) & 0xff;
-
-    return Buffer.from([...frameHeader, ...data, checksum]).toString("base64");
+  // Every frame is [0x5A][cmdType][...data][checksum], where checksum is the
+  // low 8 bits of the sum of every preceding byte (header included).
+  static buildFrame(cmdType: number, data: number[] = []): string {
+    const body = [FRAME_HEADER, cmdType, ...data];
+    const checksum = body.reduce((sum, byte) => sum + byte, 0) & 0xff;
+    return Buffer.from([...body, checksum]).toString("base64");
   }
 
   static parseFrame(base64: string) {
-    const buffer = Buffer.from(base64, "base64");
-    const bytes = Array.from(buffer);
+    const bytes = Array.from(Buffer.from(base64, "base64"));
 
-    if (bytes[0] !== 0x55 || bytes[1] !== 0x11) {
-      throw new Error("Invalid Start or Cmd Code");
+    if (bytes.length < 3 || bytes[0] !== FRAME_HEADER) {
+      const headerHex = (bytes[0] ?? 0).toString(16).padStart(2, "0");
+      throw new Error(`Invalid frame header: 0x${headerHex}`);
     }
 
-    const funcCode = bytes[2];
-    const dataType = bytes[3];
-    const dataLen = bytes[4];
-    const dataArea = bytes.slice(5, 5 + dataLen);
+    const cmdType = bytes[1];
     const checksum = bytes[bytes.length - 1];
+    const body = bytes.slice(0, bytes.length - 1);
+    const calculatedChecksum = body.reduce((sum, byte) => sum + byte, 0) & 0xff;
+    const data = bytes.slice(2, bytes.length - 1);
 
-    const sumBytes = bytes.slice(1, bytes.length - 1);
-    const calculatedSum = sumBytes.reduce((a, b) => a + b, 0) & 0xff;
-
-    return { funcCode, dataType, dataLen, dataArea, isValid: checksum === calculatedSum };
+    return { cmdType, data, isValid: checksum === calculatedChecksum };
   }
 
+  // The 6-digit password is sent as six bytes, one per digit. The spec's
+  // examples only ever show the default "000000", so this assumes each
+  // digit is sent as its raw numeric value rather than ASCII.
+  static encodePassword(password: string): number[] {
+    return password
+      .padStart(6, "0")
+      .slice(-6)
+      .split("")
+      .map((digit) => Number(digit) & 0x0f);
+  }
+
+  // F1 payload: year offset from 2000, month, day, hour, minute, second.
   static encodeCurrentTime(): number[] {
     const now = new Date();
-    // Assuming base year 2000 per factory spec notes [cite: 12, 28, 111]
-    const yearOffset = Math.max(0, now.getFullYear() - 2000);
+    const yearOffset = Math.min(0x63, Math.max(0, now.getFullYear() - 2000));
 
-    // Note: No day-of-month byte as per pending clarification
     return [
       yearOffset,
-      now.getMonth() + 1, // 0x01-0x0C [cite: 28, 111]
-      now.getHours(), // 0x00-0x17 [cite: 28, 111]
-      now.getMinutes(), // 0x00-0x3B [cite: 28, 111]
-      now.getSeconds(), // 0x00-0x3B [cite: 28, 111]
+      now.getMonth() + 1, // 0x01-0x0C
+      now.getDate(), // 0x01-0x1F
+      now.getHours(), // 0x00-0x17
+      now.getMinutes(), // 0x00-0x3B
+      now.getSeconds(), // 0x00-0x3B
     ];
   }
 
-  static parseStatus(data: number[]) {
-    if (data.length < 24) return null; // Must be 24 bytes [cite: 37]
-
-    const schedules = [];
-    for (let i = 0; i < 5; i++) {
-      const offset = i * 4;
-      schedules.push({
-        enabled: data[offset] === 0x01,
-        daysBitmask: data[offset + 1],
-        hour: data[offset + 2],
-        minute: data[offset + 3],
-      });
-    }
-
+  static parseTime(data: number[]): DeviceTime | null {
+    if (data.length < 6) return null;
     return {
-      schedules,
-      batteryLevel: data[20], // 0x00-0x64 or 0xFF [cite: 38]
-      lidState: data[21] === 0x01 ? "open" : "closed", // 0x00 closed, 0x01 open [cite: 38]
-      toneIndex: data[22],
-      volumeLevel: data[23],
+      year: 2000 + data[0],
+      month: data[1],
+      day: data[2],
+      hour: data[3],
+      minute: data[4],
+      second: data[5],
     };
   }
 
-  // Parses the 8-byte history records
-  static parseHistoryBatch(dataArea: number[]) {
-    const records = [];
-    for (let i = 0; i < dataArea.length; i += 8) {
-      if (i + 8 > dataArea.length) break;
+  static parseScheduleSlot(bytes: number[]): ScheduleSlot {
+    return {
+      enabled: bytes[0] === 0x01,
+      weekdayBitmask: bytes[1],
+      hour: bytes[2],
+      minute: bytes[3],
+      soundEnabled: bytes[4] === 0x01,
+      lightEnabled: bytes[5] === 0x01,
+      volume: bytes[6],
+      soundType: bytes[7],
+      // bytes[8] is reserved
+      lightType: bytes[9],
+    };
+  }
 
-      const seqNo = (dataArea[i] << 8) | dataArea[i + 1]; // 2 bytes big-endian [cite: 91]
-      const year = 2000 + dataArea[i + 2]; // Base 2000 + offset [cite: 91]
+  static buildScheduleSlot(slot: ScheduleSlot): number[] {
+    return [
+      slot.enabled ? 0x01 : 0x00,
+      slot.weekdayBitmask,
+      slot.hour,
+      slot.minute,
+      slot.soundEnabled ? 0x01 : 0x00,
+      slot.lightEnabled ? 0x01 : 0x00,
+      slot.volume,
+      slot.soundType,
+      0x00, // reserved
+      slot.lightType,
+    ];
+  }
+
+  // Builds the F2 "set schedule" payload from up to 10 slots, padding any
+  // remaining slots as disabled/empty.
+  static buildSchedulePayload(slots: ScheduleSlot[]): number[] {
+    const padded = [...slots, ...Array(SCHEDULE_SLOT_COUNT).fill(EMPTY_SCHEDULE_SLOT)].slice(
+      0,
+      SCHEDULE_SLOT_COUNT,
+    );
+    return padded.flatMap((slot) => this.buildScheduleSlot(slot));
+  }
+
+  // Parses the F3 "query status" reply: battery + current sound/light flags
+  // + all 10 schedule slots (106-byte frame total).
+  static parseStatus(data: number[]): DeviceStatus | null {
+    const requiredLength = 3 + SCHEDULE_SLOT_COUNT * SCHEDULE_SLOT_SIZE;
+    if (data.length < requiredLength) return null;
+
+    const batteryLevel = data[0];
+    const soundOn = data[1] === 0x01;
+    const lightOn = data[2] === 0x01;
+
+    const schedules: ScheduleSlot[] = [];
+    for (let i = 0; i < SCHEDULE_SLOT_COUNT; i++) {
+      const offset = 3 + i * SCHEDULE_SLOT_SIZE;
+      schedules.push(this.parseScheduleSlot(data.slice(offset, offset + SCHEDULE_SLOT_SIZE)));
+    }
+
+    return { batteryLevel, soundOn, lightOn, schedules };
+  }
+
+  // Parses the F6 history reply: repeating 8-byte records, each
+  // [year, month, day, hour, minute, reserved, crc16High, crc16Low].
+  // Note: this spec has no per-record sequence number and no batch-ack
+  // command — see BLEService for why ack/pagination is currently disabled.
+  static parseHistoryRecords(data: number[]): HistoryRecord[] {
+    const records: HistoryRecord[] = [];
+    for (let i = 0; i + 8 <= data.length; i += 8) {
+      const year = 2000 + data[i];
+      const month = data[i + 1];
+      const day = data[i + 2];
+      const hour = data[i + 3];
+      const minute = data[i + 4];
+      // Undocumented as anything but "reserved" — surfaced on the record so
+      // it can be inspected empirically for a possible open/closed flag.
+      const reserved = data[i + 5];
+      const crc16 = (data[i + 6] << 8) | data[i + 7];
 
       records.push({
-        sequenceNumber: seqNo,
-        timestamp: new Date(
-          year,
-          dataArea[i + 3] - 1, // JS Months are 0-indexed, device is 1-12 [cite: 91]
-          dataArea[i + 4], // Day 1-31 [cite: 91]
-          dataArea[i + 5], // Hour 0-23 [cite: 91]
-          dataArea[i + 6], // Min 0-59 [cite: 91]
-          dataArea[i + 7], // Sec 0-59 [cite: 91]
-        ).toISOString(),
+        timestamp: new Date(year, month - 1, day, hour, minute).toISOString(),
+        reserved,
+        crc16,
       });
     }
     return records;

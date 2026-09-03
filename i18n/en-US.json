@@ -291,7 +291,6 @@
         "description": "Activates the LED on your Taykie device"
       }
     },
-
     "integrations": {
       "title": "Integrations",
       "description": "Connect your health apps and devices to sync Product reminders, activity, and vitals.",
@@ -345,7 +344,6 @@
         "description": ""
       }
     },
-
     "helpSupport": {
       "title": "Help & Support",
       "description": "FAQ, Contact & Warranty",
@@ -396,6 +394,11 @@
         "title": "Account Center",
         "description": "Manage your Account Details"
       }
+    },
+    "dosagePreferences": {
+      "title": "Dosage & Compartments",
+      "description": "Change how many times a day Taykie reminds you.",
+      "save": "Save Changes"
     }
   },
   "profile": {
@@ -444,7 +447,6 @@
       "username": "Add Username"
     }
   },
-
   "device": {
     "name": "Device Name",
     "tap_to_connect": "Tap to connect",

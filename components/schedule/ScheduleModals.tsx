@@ -20,10 +20,10 @@ import { AlertPresets } from "@/utils/alert";
 import { useAlert } from "@/provider/AlertProvider";
 
 export const timeMap: Record<string, string> = {
-  morning: "08:00",
-  afternoon: "13:00",
-  evening: "18:00",
-  night: "21:00",
+  morning: "06:00",
+  afternoon: "12:00",
+  evening: "18:10",
+  night: "20:00",
 };
 
 const ScheduleModals = ({
@@ -56,8 +56,13 @@ const ScheduleModals = ({
     }
     setSelectedItem(item);
     setSearchVisible(false);
-    setAddProductVisible(true);
     onClose?.();
+    // Each BlurModal wraps RN's own <Modal>, which manages a separate
+    // native surface. Closing one and opening another in the same React
+    // commit transitions two native surfaces simultaneously, which has
+    // been the trigger for a Yoga/Fabric shadow-tree crash elsewhere in
+    // this app — deferring to the next tick lets the close finish first.
+    setTimeout(() => setAddProductVisible(true), 300);
   };
   const handleAddProduct = useCallback(
     (product: ProductDetails) => {
@@ -83,7 +88,9 @@ const ScheduleModals = ({
         };
       });
       setAddProductVisible(false);
-      setRoutineVisible(true);
+      // Same reasoning as handleSelect above — don't close one modal and
+      // open the next in the same commit.
+      setTimeout(() => setRoutineVisible(true), 300);
     },
     [setMedication],
   );
@@ -143,12 +150,15 @@ const ScheduleModals = ({
           payload = { ...payload, productId: id };
         }
         await createSchedule(payload);
-        setShowSuccess(true);
-        setTimeout(() => {
-          setShowSuccess(false);
-        }, 3000);
         setAddProductVisible(false);
         setRoutineVisible(false);
+        // Same reasoning as handleSelect/handleAddProduct above — don't
+        // close the routine modal and open the success alert in the same
+        // commit.
+        setTimeout(() => {
+          setShowSuccess(true);
+          setTimeout(() => setShowSuccess(false), 3000);
+        }, 300);
       } catch (error) {
         alert.show(AlertPresets.error(t(LocalizedStrings.common.error), error.message));
       }

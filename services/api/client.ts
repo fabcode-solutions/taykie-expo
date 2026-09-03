@@ -20,7 +20,6 @@ let refreshPromise: Promise<string | null> | null = null;
 export class ApiClient {
   private buildHeaders(extra?: HeadersInit): HeadersInit {
     const token = useAuthStore.getState().token;
-    console.log("Token=======", token);
     return {
       "Content-Type": "application/json",
       "Accept": "application/json",
@@ -35,7 +34,6 @@ export class ApiClient {
 
     try {
       const res = await fetch(url, { ...init, signal: controller.signal });
-
       return res;
     } finally {
       clearTimeout(timeout);
@@ -51,7 +49,13 @@ export class ApiClient {
     const retries = options.retries ?? (method === "GET" ? DEFAULT_RETRY_COUNT : 0);
     let attempt = 0;
     let lastError: any;
-    console.log("URL====", url, method);
+
+    // 🔍 LOG REQUEST DETAILS
+    console.log(`🌐 [API Request] ${method} -> ${url}`, {
+      headers: options.headers,
+      body: options.body ? JSON.parse(typeof options.body === "string" ? options.body : "{}") : undefined,
+    });
+
     while (attempt <= retries) {
       try {
         const res = await this.doFetch(url, {
@@ -59,11 +63,24 @@ export class ApiClient {
           headers: this.buildHeaders(options.headers),
         });
 
-        if (res.status === 204) return null as unknown as T;
+        if (res.status === 204) {
+          console.log(`📥 [API Response 204 No Content] <- ${url}`);
+          return null as unknown as T;
+        }
 
         const contentType = res.headers.get("content-type") || "";
         const isJson = contentType.includes("application/json");
-        const data = isJson ? await res.json().catch(() => ({})) : await res.text();
+        
+        // Clone response text to log it without consuming it
+        const resText = await res.text();
+        const data = isJson && resText ? JSON.parse(resText) : resText;
+
+        // 📥 LOG RESPONSE DETAILS
+        if (res.ok) {
+          console.log(`✅ [API Response Success ${res.status}] <- ${url}`, data);
+        } else {
+          console.log(`❌ [API Response Error ${res.status}] <- ${url}`, data);
+        }
 
         if (!res.ok) {
           const err: ApiError = {
@@ -103,10 +120,12 @@ export class ApiClient {
         const isAbort = err?.name === "AbortError";
         const isNetwork = isAbort || err?.status === undefined; // fetch/network issues
         if (attempt < retries && isNetwork) {
+          console.warn(`⚠️ [API Retry ${attempt + 1}/${retries}] Failed for ${url}. Retrying...`);
           await sleep(300 * Math.pow(2, attempt));
           attempt += 1;
           continue;
         }
+        console.error(`💥 [API Exception] ${url}`, err);
         throw err;
       }
     }
@@ -143,10 +162,15 @@ export class ApiClient {
 
   // Form helpers
   postFormUrlEncoded<T = unknown>(path: string, params: Record<string, string>): Promise<T> {
+    const url = path.startsWith("http") ? path : `${API_BASE_URL}${path}`;
+    
     // ✅ Manual URLSearchParams encoding for Hermes compatibility
     const body = Object.entries(params)
       .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
       .join("&");
+
+    // 🔍 LOG URL-Encoded Request
+    console.log(`🌐 [API Form Request] POST -> ${url}`, params);
 
     return this.request<T>(path, {
       method: "POST",
@@ -162,8 +186,10 @@ export class ApiClient {
     options?: RequestInit,
   ): Promise<T> {
     const url = path.startsWith("http") ? path : `${API_BASE_URL}${path}`;
-
     const token = useAuthStore.getState().token;
+
+    // 🔍 LOG FormData Request
+    console.log(`🌐 [API FormData Request] POST -> ${url}`);
 
     const res = await this.doFetch(url, {
       ...(options ?? {}),
@@ -177,14 +203,20 @@ export class ApiClient {
     });
 
     const text = await res.text();
-    console.log("UPLOAD RAW RESPONSE:", text);
-
     let data;
     try {
       data = JSON.parse(text);
     } catch {
       data = { message: text };
     }
+
+    // 📥 LOG FormData Response
+    if (res.ok) {
+      console.log(`✅ [API FormData Response Success ${res.status}] <- ${url}`, data);
+    } else {
+      console.log(`❌ [API FormData Response Error ${res.status}] <- ${url}`, data);
+    }
+
     if (!res.ok) {
       if (res.status === 401) {
         const newToken = await this.handleTokenRefresh();

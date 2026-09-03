@@ -60,7 +60,6 @@ export default function TabLayout() {
         name="schedule"
         options={{
           title: t(LocalizedStrings.navigation.tabs.schedule),
-          animation: "shift",
           tabBarIcon: ({ color }) => <IconCalander stroke={color} />,
         }}
       />
@@ -68,7 +67,6 @@ export default function TabLayout() {
         name="community"
         options={{
           title: t(LocalizedStrings.navigation.tabs.community),
-          animation: "shift",
           tabBarIcon: ({ color }) => <IconCommunity stroke={color} />,
         }}
       />
@@ -76,7 +74,6 @@ export default function TabLayout() {
         name="device"
         options={{
           title: t(LocalizedStrings.navigation.tabs.device),
-          animation: "shift",
           tabBarIcon: ({ color }) => <IconDevice stroke={color} />,
         }}
       />
@@ -85,7 +82,6 @@ export default function TabLayout() {
         name="insights"
         options={{
           title: t(LocalizedStrings.navigation.tabs.insights),
-          animation: "shift",
           tabBarIcon: ({ color }) => <IconInsight stroke={color} />,
         }}
       />
@@ -93,7 +89,6 @@ export default function TabLayout() {
         name="settings"
         options={{
           title: t(LocalizedStrings.navigation.tabs.settings),
-          animation: "shift",
           tabBarIcon: ({ color }) => <IconSettings stroke={color} />,
         }}
       />

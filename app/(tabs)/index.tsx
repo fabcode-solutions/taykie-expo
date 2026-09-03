@@ -96,12 +96,15 @@ export default function HomeScreen() {
     [t],
   );
 
+  useEffect(() => {
+    fetchTodaySchedules(activeSegment);
+  }, [activeSegment]);
   const filterSchedules = useMemo(() => {
     if (!todaySchedules?.length) return [];
 
     return todaySchedules.filter((schedule) => {
-      const times = schedule.scheduleTime.split(",").map((t) => t.trim());
-      return times.some((time) => getTimeOfDay(time) === activeSegment);
+      const times = schedule?.scheduleTime?.split(",").map((t) => t.trim());
+      return times?.some((time) => getTimeOfDay(time) === activeSegment);
     });
   }, [todaySchedules, activeSegment]);
 
@@ -117,10 +120,16 @@ export default function HomeScreen() {
     await Promise.allSettled([
       fetchUpcomingReminder(),
       fetchPublicProducts(),
-      fetchTodaySchedules(),
+      fetchTodaySchedules(activeSegment),
       fetchUserStreak(),
     ]);
-  }, [fetchPublicProducts, fetchTodaySchedules, fetchUpcomingReminder, fetchUserStreak]);
+  }, [
+    fetchPublicProducts,
+    fetchTodaySchedules,
+    fetchUpcomingReminder,
+    fetchUserStreak,
+    activeSegment,
+  ]);
 
   const initialDataFetch = useCallback(async () => {
     try {
@@ -186,7 +195,7 @@ export default function HomeScreen() {
     [t],
   );
 
-  const keyExtractor = useCallback((item: Schedule) => item.id.toString(), []);
+  const keyExtractor = useCallback((item: Schedule) => item.id?.toString(), []);
 
   return (
     <SafeAreaScreen
@@ -225,14 +234,14 @@ export default function HomeScreen() {
             >
               {t(LocalizedStrings.home.today.title)}
             </ThemeText>
-            <ThemeText variant="manrope.caption" style={themedStyles.cardSubtitle}>
+            <ThemeText variant="manrope.subtitle" style={themedStyles.cardSubtitle}>
               {todayLabel}
             </ThemeText>
           </View>
           <Tabs onSelect={(e) => setActiveSegment(e as SegmentKey)} segments={segments} />
 
           <FlatList
-            data={filterSchedules}
+            data={todaySchedules}
             keyExtractor={keyExtractor}
             renderItem={renderTaskItem}
             ListEmptyComponent={renderEmptyComponent}
@@ -363,7 +372,7 @@ const createStyles = (theme: Theme) =>
     },
     cardSubtitle: {
       marginTop: theme.spacing.xs,
-      fontSize: moderateScale(16),
+      // fontSize: moderateScale(16),
       color: theme.colors.divider,
     },
     reminderTitle: {

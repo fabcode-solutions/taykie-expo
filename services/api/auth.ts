@@ -259,7 +259,7 @@ export async function startNextAuthOAuth(provider: "google" | "apple"): Promise<
   await tryBridgeFromRedirect(result.url).catch(() => false);
   // After browser returns, try to fetch profile/session to confirm auth
   try {
-    await fetchUserProfile();
+    // await fetchUserProfile();
   } catch {
     await getNextAuthSession();
   }

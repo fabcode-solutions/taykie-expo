@@ -118,7 +118,13 @@ const MedicineTaken = ({ task, onClose, onEditComplete }: MedicineTakenProp) => 
     }));
 
     setAddProductVisible(false);
-    setRoutineVisible(true);
+    // Each BlurModal wraps RN's own <Modal>, which manages a separate
+    // native surface. Closing one and opening another in the same React
+    // commit transitions two native surfaces simultaneously, which has
+    // been the trigger for a Yoga/Fabric shadow-tree crash elsewhere in
+    // this app (see ScheduleModals.tsx) — deferring lets the close finish
+    // first.
+    setTimeout(() => setRoutineVisible(true), 300);
   }, []);
 
   const handleAddRoutine = useCallback(
@@ -161,9 +167,13 @@ const MedicineTaken = ({ task, onClose, onEditComplete }: MedicineTakenProp) => 
         const updatedSchedule = result.data;
 
         onEditComplete?.(updatedSchedule);
-        alert.show(AlertPresets.success(t(LocalizedStrings.common.success), result.message));
         setAddProductVisible(false);
         setRoutineVisible(false);
+        // Same reasoning as handleAddProduct above — don't close the
+        // routine modal and show the success alert in the same commit.
+        setTimeout(() => {
+          alert.show(AlertPresets.success(t(LocalizedStrings.common.success), result.message));
+        }, 300);
       } catch (error) {
         alert.show(AlertPresets.error(t(LocalizedStrings.common.error), error.message));
       }

@@ -156,7 +156,13 @@ export default function SupplementEntry() {
       };
       await createProduct(request);
       setAddProductVisible(false);
-      setSearchVisible(true);
+      // Each BlurModal wraps RN's own <Modal>, which manages a separate
+      // native surface. Closing one and opening another in the same React
+      // commit transitions two native surfaces simultaneously, which has
+      // been the trigger for a Yoga/Fabric shadow-tree crash elsewhere in
+      // this app (see ScheduleModals.tsx) — deferring lets the close
+      // finish first.
+      setTimeout(() => setSearchVisible(true), 300);
     } catch (error) {
       alert.show(AlertPresets.error(t(LocalizedStrings.common.error), error.message));
     }
@@ -362,7 +368,7 @@ export default function SupplementEntry() {
           onSelect={(product) => {
             updateItem(activeIndex, 0, "name", product?.name);
             setSearchVisible(false);
-            if (!product) setAddProductVisible(true);
+            if (!product) setTimeout(() => setAddProductVisible(true), 300);
           }}
           placeholder={`${t(LocalizedStrings.schedule.placeHolders.search)}...`}
         />

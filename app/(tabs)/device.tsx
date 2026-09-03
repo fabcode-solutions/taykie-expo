@@ -17,15 +17,19 @@ import {
   useBLEConnection,
   useBLEScanning,
   useBLEPermissions,
+  useBLECompartments,
 } from "@/stores/bleStore";
+import { useOnboardingStore } from "@/stores/onboardingStore";
 import { Loader } from "@/components/shared/loader";
 import { moderateScale, scale, verticalScale } from "@/utils/scale";
 import { t } from "i18next";
 import { LocalizedStrings } from "@/i18n/LocalizedStrings";
-import { Audio } from "expo-av";
-import { AlertPresets } from "@/utils/alert";
+import { AlertPresets, AlertBuilder } from "@/utils/alert";
 import { useAlert } from "@/provider/AlertProvider";
 import { Button } from "@/components/ui/button";
+import Switch from "@/components/ui/Switch";
+import { TONE_OPTIONS, playTone, stopTone, toneLabelForIndex } from "@/utils/toneAudio";
+import type { Audio } from "expo-av";
 
 type DeviceActionKey = "find" | "history" | "rename" | "dismiss";
 interface DeviceAction {
@@ -42,15 +46,6 @@ const ACTIONS: DeviceAction[] = [
   { key: "rename", label: "Rename Device", icon: "pencil" },
 ];
 
-const TONE_OPTIONS = [
-  { label: "Mute", value: 0 },
-  { label: "Taykie", value: 1 },
-  { label: "Verve", value: 2 },
-  { label: "Echo", value: 3 },
-  { label: "Pulse", value: 4 },
-  { label: "Nudge", value: 5 },
-  { label: "Shift", value: 6 },
-];
 
 export default function DeviceScreen() {
   const theme = useTheme();
@@ -60,19 +55,26 @@ export default function DeviceScreen() {
   // Store selectors
   const { isScanning, scannedDevices } = useBLEScanning();
   const { connectionStatus } = useBLEConnection();
-  const { batteryLevel, lidState, toneIndex, volumeLevel, schedules } = useBLEDeviceData();
-
+  const { batteryLevel, isCharging, toneIndex, volumeLevel, schedules, lastSyncedAt } =
+    useBLEDeviceData();
+  const { historyRecords, refreshCompartmentActivity } = useBLECompartments();
   const {
     scanDevices,
     stopScan,
+    connectedDevice,
     connectToDevice,
+    disconnectDevice,
     initBLE,
     startHistorySync,
     dismissAlert,
     setDeviceVolume,
     setDeviceTone,
+    toggleScheduleSlot,
+    eraseHistory,
   } = useBLEStore();
   const { hasPermissions, isBluetoothEnabled } = useBLEPermissions();
+  const dose_frequency = useOnboardingStore((s) => s.dose_frequency);
+  const [isRefreshingCompartments, setIsRefreshingCompartments] = React.useState(false);
 
   const themedStyles = React.useMemo(() => createStyles(theme), [theme]);
   // 1. Initialize BLE on mount
@@ -119,14 +121,49 @@ export default function DeviceScreen() {
     checkStatus();
   }, [hasPermissions, isBluetoothEnabled, scanDevices]);
 
-  // Format Battery (0xFF / 255 means charging per spec)
-  const isCharging = batteryLevel === 255;
+  
+
+  // The device reports 0xFF instead of a percentage while charging, so that
+  // state shows "Charging" as the value itself rather than a number. With
+  // no reading at all yet, show a plain "--" (not "--%").
   const displayBattery = isCharging
     ? "Charging"
     : batteryLevel !== null
       ? `${batteryLevel}%`
-      : "--%";
-  const batteryWidth = isCharging ? "100%" : batteryLevel ? `${batteryLevel}%` : "0%";
+      : "--";
+  const batteryWidth = batteryLevel !== null ? `${batteryLevel}%` : "0%";
+  console.log("batteryLevel=======",batteryLevel, lastSyncedAt)
+
+  // Relative time, used for both "last opened" and "last synced".
+  const formatRelativeTime = (isoTimestamp: string) => {
+    const date = new Date(isoTimestamp);
+    if (Number.isNaN(date.getTime())) return "--";
+    const diffMs = Date.now() - date.getTime();
+    const diffMin = Math.floor(diffMs / 60000);
+    if (diffMin < 1) return "Just now";
+    if (diffMin < 60) return `${diffMin}m ago`;
+    const diffHr = Math.floor(diffMin / 60);
+    if (diffHr < 24) return `${diffHr}h ago`;
+    const diffDay = Math.floor(diffHr / 24);
+    return `${diffDay}d ago`;
+  };
+  // "Today, 10:42 AM" style — matches the design's Last Sync tile.
+  const formatSyncTime = (isoTimestamp: string) => {
+    const date = new Date(isoTimestamp);
+    if (Number.isNaN(date.getTime())) return "--";
+    const isToday = date.toDateString() === new Date().toDateString();
+    const time = date.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+    return isToday ? `Today, ${time}` : `${date.toLocaleDateString()}, ${time}`;
+  };
+  const displayLastSync = lastSyncedAt ? formatSyncTime(lastSyncedAt) : "--";
+  // "Lid" here doesn't mean live open/closed — the protocol has no confirmed
+  // field for that (F3 status doesn't report it; whether F6's "reserved"
+  // byte secretly encodes it is still unconfirmed, see the console logging
+  // in BLEService). This is the real data we do have: when the compartment
+  // was last accessed, shown as its own caption under the Compartments grid
+  // rather than a top-level stat.
+  const displayLastOpened =
+    historyRecords.length > 0 ? formatRelativeTime(historyRecords[0].timestamp) : null;
 
   const CONNECTION_STATS = [
     {
@@ -137,99 +174,173 @@ export default function DeviceScreen() {
     },
     {
       key: "battery",
-      label: "Battery",
+      label: isCharging ? "Battery (Charging)" : "Battery",
       value: displayBattery,
       icon: isCharging ? "battery-charging" : "battery-full",
     },
     {
-      key: "lid",
-      label: "Lid State",
-      value: lidState === "open" ? "Open" : lidState === "closed" ? "Closed" : "--",
-      icon: "scan",
+      key: "lastSync",
+      label: "Last Sync",
+      value: displayLastSync,
+      icon: "sync-outline",
     },
   ] as const;
 
-  // Helper to parse day bitmask
+  // The physical device is a 7 (day) x N (dose-time) compartment grid,
+  // where N is the number of doses/day the user chose during onboarding
+  // (dosage-frequency screen: 1, 2, or 3 — editable later from Settings >
+  // Dosage & Compartments). The protocol has no per-compartment id, so this
+  // is derived purely from the active schedule: each of up to 10 schedule
+  // slots is a "row" (a single dose time), and its weekday bitmask marks
+  // which day-columns it covers.
+  const COMPARTMENT_DAY_LABELS = ["S", "M", "T", "W", "T", "F", "S"]; // bit0=Sun .. bit6=Sat
+  const COMPARTMENT_ROW_COUNT = dose_frequency;
+  const enabledScheduleSlots = React.useMemo(
+    () =>
+      (schedules ?? [])
+        .filter((slot) => slot.enabled)
+        .sort((a, b) => a.hour * 60 + a.minute - (b.hour * 60 + b.minute)),
+    [schedules],
+  );
+  const compartmentGridRows = enabledScheduleSlots.slice(0, COMPARTMENT_ROW_COUNT);
+  const overflowScheduleCount = Math.max(
+    0,
+    enabledScheduleSlots.length - COMPARTMENT_ROW_COUNT,
+  );
+  // Highlight today's compartment: Date.getDay() already uses the same
+  // 0=Sunday..6=Saturday convention as the protocol's weekday bitmask, so
+  // this maps directly onto the grid's day columns.
+  const todayDayIndex = new Date().getDay();
+  const todayRowIndex = compartmentGridRows.findIndex(
+    (slot) => (slot.weekdayBitmask & (1 << todayDayIndex)) !== 0,
+  );
+
+  // Helper to parse day bitmask. Per protocol: bit0 = Sunday .. bit6 = Saturday.
   const formatDays = (bitmask: number) => {
     if (bitmask === 0x7f) return "Every day";
-    if (bitmask === 0x1f) return "Weekdays";
-    if (bitmask === 0x60) return "Weekends";
+    if (bitmask === 0x3e) return "Weekdays"; // Mon-Fri: bits 1-5
+    if (bitmask === 0x41) return "Weekends"; // Sat+Sun: bits 6,0
     if (bitmask === 0x00) return "No days";
 
-    const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+    const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
     const active = days.filter((_, i) => bitmask & (1 << i));
     return active.join(", ");
   };
 
-  const handleConnectToDevice = useCallback(async (deviceId: string) => {
+  // Formats a compartment-activity timestamp as e.g. "Sep 3, 2:32 PM"
+  const formatEventTime = (isoTimestamp: string) => {
+    const date = new Date(isoTimestamp);
+    if (Number.isNaN(date.getTime())) return isoTimestamp;
+    return date.toLocaleString(undefined, {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  };
+
+  const handleConnectToDevice = useCallback(
+    async (deviceId: string) => {
+      // Guard against a second tap firing a concurrent connect attempt
+      // while one is already in flight (the earlier attempt would get torn
+      // down mid-handshake by BLEService.connectToDevice's own
+      // disconnect-then-reconnect logic, surfacing as a spurious "device
+      // disconnected" error).
+      if (connectionStatus !== "disconnected") return;
+      try {
+        await connectToDevice(deviceId);
+      } catch (error) {
+        alert.show(AlertPresets.error(t(LocalizedStrings.common.error), error.message));
+      }
+    },
+    [connectionStatus],
+  );
+
+  const handleDisconnect = useCallback(() => {
+    // A confirm-style alert (one with an .action()) has no close button of
+    // its own — Alert.tsx only renders one when there's no action — and
+    // .duration(0) means it won't auto-dismiss either. Without explicitly
+    // hiding it here, tapping "Disconnect" fired the action but left the
+    // banner stuck on screen indefinitely.
+    const alertId = alert.show(
+      new AlertBuilder()
+        .type("warning")
+        .title(t(LocalizedStrings.device.disconnect.title))
+        .message(t(LocalizedStrings.device.disconnect.message))
+        .action(t(LocalizedStrings.device.disconnect.button), async () => {
+          alert.hide(alertId);
+          try {
+            await disconnectDevice();
+          } catch (error: any) {
+            alert.show(AlertPresets.error(t(LocalizedStrings.common.error), error.message));
+          }
+        })
+        .duration(0)
+        .build(),
+    );
+  }, []);
+
+  const handleRefreshCompartments = useCallback(async () => {
+    setIsRefreshingCompartments(true);
     try {
-      await connectToDevice(deviceId);
-    } catch (error) {
+      await refreshCompartmentActivity();
+    } catch (error: any) {
       alert.show(AlertPresets.error(t(LocalizedStrings.common.error), error.message));
+    } finally {
+      setIsRefreshingCompartments(false);
     }
   }, []);
 
-  async function playSoundPreview(toneLabel: string) {
-    if (currentSoundRef.current) {
-      await currentSoundRef.current.stopAsync();
-      await currentSoundRef.current.unloadAsync();
-    }
-    let soundFile;
-
-    switch (toneLabel) {
-      case "Taykie":
-        soundFile = require("../../assets/audio/Taykie.wav");
-        break;
-      case "Verve":
-        soundFile = require("../../assets/audio/Verve.wav");
-        break;
-      case "Echo":
-        soundFile = require("../../assets/audio/Echo.wav");
-        break;
-      case "Pulse":
-        soundFile = require("../../assets/audio/Pulse.wav");
-        break;
-      case "Nudge":
-        soundFile = require("../../assets/audio/Nudge.wav");
-        break;
-      case "Shift":
-        soundFile = require("../../assets/audio/Shift.wav");
-        break;
-      default:
-        return; // Mute
-    }
-
-    if (soundFile) {
-      try {
-        // 1. Ensure audio plays even if the phone is on silent/vibrate
-        await Audio.setAudioModeAsync({
-          playsInSilentModeIOS: true,
-          shouldDuckAndroid: true,
-          playThroughEarpieceAndroid: false,
-        });
-
-        // 2. CRITICAL: Use the { sound } curly braces here to destructure
-        const { sound } = await Audio.Sound.createAsync(soundFile);
-
-        console.log("Playing sound for:", sound);
-        await sound.playAsync();
-
-        // 3. Clean up memory after it finishes
-        sound.setOnPlaybackStatusUpdate((status) => {
-          if (status.isLoaded && status.didJustFinish) {
-            sound.unloadAsync();
+  // Test-only control: wipes the device's history so the next F6 reply is
+  // short enough to decode the real byte layout unambiguously (see the
+  // eraseHistory action for why). Destructive, so it's gated behind an
+  // explicit confirmation rather than firing on a single tap.
+  const handleEraseHistory = useCallback(() => {
+    const alertId = alert.show(
+      new AlertBuilder()
+        .type("warning")
+        .title("Erase Device History?")
+        .message(
+          "This permanently wipes all compartment history stored on the device. Only do this for testing.",
+        )
+        .action("Erase", async () => {
+          alert.hide(alertId);
+          try {
+            await eraseHistory();
+          } catch (error: any) {
+            alert.show(AlertPresets.error(t(LocalizedStrings.common.error), error.message));
           }
-        });
-      } catch (error) {
-        console.error("Failed to play sound:", error);
-      }
+        })
+        .duration(0)
+        .build(),
+    );
+  }, []);
+
+  // volumeLevel is the same 0-5 UI scale as the volume picker.
+  async function playSoundPreview(toneLabel: string, volumeLevel: number = 5) {
+    await stopTone(currentSoundRef.current);
+    currentSoundRef.current = null;
+
+    try {
+      const sound = await playTone(toneLabel, { volumeLevel });
+      if (!sound) return; // "Mute" or unknown label
+      currentSoundRef.current = sound;
+
+      sound.setOnPlaybackStatusUpdate((status) => {
+        if (status.isLoaded && status.didJustFinish) {
+          sound.unloadAsync();
+          if (currentSoundRef.current === sound) currentSoundRef.current = null;
+        }
+      });
+    } catch (error) {
+      console.error("Failed to play sound:", error);
     }
   }
 
   return (
     <>
       {connectionStatus === "connecting" && <Loader />}
-      <SafeAreaScreen withBackground={false} style={themedStyles.screen} edges={["top"]}>
+      <SafeAreaScreen withBackground={false} style={themedStyles.screen}>
         <ThemeStatusBar style={theme.mode === "dark" ? "light" : "dark"} />
         <ScrollView
           showsVerticalScrollIndicator={false}
@@ -240,12 +351,26 @@ export default function DeviceScreen() {
           {/* CONNECTION & HARDWARE STATUS CARD */}
           <ThemeView style={themedStyles.card} backgroundColor={theme.colors.white} rounded="lg">
             <View style={themedStyles.connectionHeader}>
-              <View style={themedStyles.connectionIcon}>
-                <Ionicons name="bluetooth" size={moderateScale(16)} color={"#0095FF"} />
+              <View style={themedStyles.connectionHeaderTitle}>
+                <View style={themedStyles.connectionIcon}>
+                  <Ionicons name="bluetooth" size={moderateScale(16)} color={"#0095FF"} />
+                </View>
+                <ThemeText variant="manrope.h4" style={themedStyles.cardTitle}>
+                  {t(LocalizedStrings.device.connection.title)}
+                </ThemeText>
               </View>
-              <ThemeText variant="manrope.h4" style={themedStyles.cardTitle}>
-                {t(LocalizedStrings.device.connection.title)}
-              </ThemeText>
+              {connectionStatus === "connected" && (
+                <TouchableOpacity
+                  onPress={handleDisconnect}
+                  style={themedStyles.disconnectButton}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="close-circle-outline" size={moderateScale(16)} color="#FF3B30" />
+                  <ThemeText variant="manrope.caption" style={themedStyles.disconnectButtonText}>
+                    {t(LocalizedStrings.common.disconnect)}
+                  </ThemeText>
+                </TouchableOpacity>
+              )}
             </View>
             <View style={themedStyles.connectionStatsRow}>
               {CONNECTION_STATS.map((stat) => (
@@ -276,7 +401,6 @@ export default function DeviceScreen() {
                       style={[
                         themedStyles.statValue,
                         stat.value === "Online" && themedStyles.onlineText,
-                        stat.value === "Open" && themedStyles.warningText,
                       ]}
                     >
                       {stat.value}
@@ -306,7 +430,10 @@ export default function DeviceScreen() {
                       themedStyles.volumeNode,
                       volumeLevel === level && themedStyles.volumeNodeActive,
                     ]}
-                    onPress={() => setDeviceVolume(level)}
+                    onPress={() => {
+                      setDeviceVolume(level);
+                      playSoundPreview(toneLabelForIndex(toneIndex), level);
+                    }}
                   >
                     <ThemeText
                       style={volumeLevel === level ? themedStyles.textWhite : themedStyles.textDark}
@@ -333,7 +460,13 @@ export default function DeviceScreen() {
                       themedStyles.toneNode,
                       toneIndex === tone.value && themedStyles.toneNodeActive,
                     ]}
-                    onPress={() => setDeviceTone(tone.value)}
+                    onPress={() => {
+                      setDeviceTone(tone.value);
+                      // Play locally on the phone too — audible immediately
+                      // and doesn't depend on the BLE device being connected
+                      // or its speaker actually being reachable.
+                      playSoundPreview(tone.label);
+                    }}
                   >
                     <ThemeText
                       style={
@@ -372,17 +505,14 @@ export default function DeviceScreen() {
                         {schedule?.minute?.toString().padStart(2, "0") ?? "00"}
                       </ThemeText>
                       <ThemeText variant="manrope.caption">
-                        {formatDays(schedule.daysBitmask)}
+                        {formatDays(schedule.weekdayBitmask)}
                       </ThemeText>
                     </View>
-                    <View style={themedStyles.scheduleBadge}>
-                      <ThemeText
-                        variant="manrope.caption"
-                        style={schedule.enabled ? themedStyles.onlineText : themedStyles.textDark}
-                      >
-                        {schedule.enabled ? "ON" : "OFF"}
-                      </ThemeText>
-                    </View>
+                    <Switch
+                      value={schedule.enabled}
+                      onPress={() => toggleScheduleSlot(index)}
+                      style={themedStyles.scheduleSwitch}
+                    />
                   </View>
                 ))}
                 {(!schedules || schedules.length === 0) && (
@@ -391,6 +521,141 @@ export default function DeviceScreen() {
                   </ThemeText>
                 )}
               </View>
+            </ThemeView>
+          )}
+
+          {/* COMPARTMENTS CARD (7 days x N dose-times, from the active schedule) */}
+          {connectionStatus === "connected" && (
+            <ThemeView style={themedStyles.card} backgroundColor={theme.colors.white} rounded="lg">
+              <ThemeText variant="manrope.h4" style={themedStyles.cardTitle}>
+                Compartments
+              </ThemeText>
+
+              <View style={themedStyles.compartmentGrid}>
+                {Array.from({ length: COMPARTMENT_ROW_COUNT }).map((_, rowIndex) => {
+                  const slot = compartmentGridRows[rowIndex];
+                  return (
+                    <View key={rowIndex} style={themedStyles.compartmentGridRow}>
+                      {COMPARTMENT_DAY_LABELS.map((_, dayIndex) => {
+                        const filled = slot ? (slot.weekdayBitmask & (1 << dayIndex)) !== 0 : false;
+                        const isToday = rowIndex === todayRowIndex && dayIndex === todayDayIndex;
+                        return (
+                          <View
+                            key={dayIndex}
+                            style={[
+                              themedStyles.compartmentGridCell,
+                              filled && themedStyles.compartmentGridCellFilled,
+                              isToday && themedStyles.compartmentGridCellToday,
+                            ]}
+                          />
+                        );
+                      })}
+                    </View>
+                  );
+                })}
+              </View>
+
+              {displayLastOpened && (
+                <ThemeText variant="manrope.caption" style={themedStyles.compartmentEmptyText}>
+                  Last opened {displayLastOpened}
+                </ThemeText>
+              )}
+              {compartmentGridRows.length === 0 && (
+                <ThemeText variant="manrope.caption" style={themedStyles.compartmentEmptyText}>
+                  No active schedule yet — set up to {COMPARTMENT_ROW_COUNT} dose time
+                  {COMPARTMENT_ROW_COUNT > 1 ? "s" : ""} to fill the compartment layout.
+                </ThemeText>
+              )}
+              {overflowScheduleCount > 0 && (
+                <ThemeText variant="manrope.caption" style={themedStyles.compartmentEmptyText}>
+                  +{overflowScheduleCount} more scheduled time(s) beyond your {COMPARTMENT_ROW_COUNT}
+                  -dose-per-day plan (change this under Settings › Dosage & Compartments).
+                </ThemeText>
+              )}
+            </ThemeView>
+          )}
+
+          {/* COMPARTMENT ACTIVITY CARD */}
+          {connectionStatus === "connected" && (
+            <ThemeView style={themedStyles.card} backgroundColor={theme.colors.white} rounded="lg">
+              <View style={themedStyles.compartmentHeader}>
+                <ThemeText variant="manrope.h4" style={themedStyles.cardTitle}>
+                  Compartment Activity
+                </ThemeText>
+                <View style={themedStyles.compartmentHeaderActions}>
+                  <TouchableOpacity
+                    onPress={handleEraseHistory}
+                    style={themedStyles.compartmentEraseButton}
+                    activeOpacity={0.7}
+                  >
+                    <ThemeText
+                      variant="manrope.caption"
+                      style={themedStyles.compartmentEraseButtonText}
+                    >
+                      Erase (Test)
+                    </ThemeText>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={handleRefreshCompartments}
+                    disabled={isRefreshingCompartments}
+                    style={themedStyles.compartmentRefreshButton}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons
+                      name="refresh"
+                      size={moderateScale(16)}
+                      color={"green"}
+                      style={isRefreshingCompartments ? { opacity: 0.4 } : undefined}
+                    />
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {historyRecords.length === 0 ? (
+                <View style={themedStyles.compartmentEmpty}>
+                  <Ionicons
+                    name="cube-outline"
+                    size={moderateScale(32)}
+                    color={theme.colors.text.secondary}
+                  />
+                  <ThemeText variant="manrope.caption" style={themedStyles.compartmentEmptyText}>
+                    No compartment activity recorded yet. Tap refresh to check the device.
+                  </ThemeText>
+                </View>
+              ) : (
+                <>
+                  <View style={themedStyles.compartmentLastRow}>
+                    <Ionicons
+                      name="time-outline"
+                      size={moderateScale(18)}
+                      color={theme.colors.primary.main}
+                    />
+                    <ThemeText variant="manrope.body1Bold" style={themedStyles.compartmentLastText}>
+                      Last accessed {formatEventTime(historyRecords[0].timestamp)}
+                    </ThemeText>
+                  </View>
+                  <View style={themedStyles.compartmentList}>
+                    {historyRecords.slice(0, 5).map((record, index) => (
+                      <View
+                        key={`${record.timestamp}-${index}`}
+                        style={themedStyles.compartmentListItem}
+                      >
+                        <Ionicons
+                          name="ellipse"
+                          size={moderateScale(6)}
+                          color={theme.colors.text.secondary}
+                        />
+                        <ThemeText
+                          variant="manrope.caption"
+                          style={themedStyles.compartmentListItemText}
+                        >
+                          {formatEventTime(record.timestamp)}
+                        </ThemeText>
+                      </View>
+                    ))}
+                  </View>
+                </>
+              )}
             </ThemeView>
           )}
 
@@ -405,6 +670,7 @@ export default function DeviceScreen() {
                   onPress={() => {
                     if (action.key === "history") startHistorySync();
                     else if (action.key === "dismiss") dismissAlert();
+                    else if (action.key === "rename") router.push("/device/rename-device");
                     else router.push("/device/pair-device");
                   }}
                   key={action.key}
@@ -547,6 +813,7 @@ export default function DeviceScreen() {
                       <TouchableOpacity
                         style={themedStyles.actionRow}
                         onPress={() => handleConnectToDevice(item.id)}
+                        disabled={connectionStatus !== "disconnected"}
                       >
                         <View style={themedStyles.actionLabelRow}>
                           <Ionicons name="bluetooth" size={moderateScale(18)} color="#0095FF" />
@@ -598,8 +865,27 @@ const createStyles = (theme: Theme) =>
     connectionHeader: {
       flexDirection: "row",
       alignItems: "center",
+      justifyContent: "space-between",
       marginBottom: theme.spacing.md,
       gap: theme.spacing.sm,
+    },
+    connectionHeaderTitle: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: theme.spacing.sm,
+      flexShrink: 1,
+    },
+    disconnectButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      paddingVertical: verticalScale(4),
+      paddingHorizontal: theme.spacing.sm,
+      borderRadius: moderateScale(6),
+      backgroundColor: "rgba(255,59,48,0.1)",
+      gap: moderateScale(4),
+    },
+    disconnectButtonText: {
+      color: "#FF3B30",
     },
     connectionIcon: {
       aspectRatio: 1,
@@ -716,11 +1002,88 @@ const createStyles = (theme: Theme) =>
       backgroundColor: "rgba(0,0,0,0.03)",
       opacity: 0.6,
     },
-    scheduleBadge: {
-      paddingHorizontal: scale(10),
+    scheduleSwitch: {
+      width: scale(46),
+      height: verticalScale(26),
+    },
+
+    compartmentHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginBottom: theme.spacing.sm,
+    },
+    compartmentRefreshButton: {
+      padding: theme.spacing.xs,
+    },
+    compartmentHeaderActions: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: theme.spacing.xs,
+    },
+    compartmentEraseButton: {
       paddingVertical: verticalScale(4),
-      backgroundColor: "rgba(0,0,0,0.05)",
-      borderRadius: moderateScale(12),
+      paddingHorizontal: theme.spacing.sm,
+      borderRadius: moderateScale(6),
+      backgroundColor: "rgba(255,59,48,0.1)",
+    },
+    compartmentEraseButtonText: {
+      color: "#FF3B30",
+      fontSize: moderateScale(11),
+    },
+    compartmentEmpty: {
+      alignItems: "center",
+      paddingVertical: theme.spacing.lg,
+      gap: theme.spacing.sm,
+    },
+    compartmentEmptyText: {
+      color: theme.colors.text.secondary,
+      textAlign: "center",
+    },
+    compartmentLastRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      padding: theme.spacing.sm,
+      backgroundColor: "rgba(0, 149, 255, 0.05)",
+      borderRadius: theme.spacing.sm,
+      marginBottom: theme.spacing.sm,
+    },
+    compartmentLastText: {
+      marginLeft: scale(8),
+    },
+    compartmentList: {
+      gap: theme.spacing.xs,
+    },
+    compartmentListItem: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: scale(8),
+      paddingVertical: verticalScale(4),
+    },
+    compartmentListItemText: {
+      color: theme.colors.text.secondary,
+    },
+
+    compartmentGrid: {
+      gap: verticalScale(8),
+      marginBottom: verticalScale(8),
+    },
+    compartmentGridRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: scale(6),
+    },
+    compartmentGridCell: {
+      flex: 1,
+      aspectRatio: 1,
+      borderRadius: moderateScale(8),
+      backgroundColor: "rgba(0,0,0,0.04)",
+    },
+    compartmentGridCellFilled: {
+      backgroundColor: "rgba(0, 149, 255, 0.18)",
+    },
+    compartmentGridCellToday: {
+      backgroundColor: "#FCE96A",
     },
 
     actionsList: {

@@ -5,7 +5,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { useFonts } from "expo-font";
 import { router, Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
-import React, { useEffect } from "react";
+import React, { useEffect, useRef } from "react";
 import "react-native-reanimated";
 import { ThemeProvider } from "@/theme";
 import { ThemeStatusBar } from "@/components/primitives";
@@ -31,6 +31,7 @@ import {
 } from "@/stores/notificationStore";
 import { InAppBanner } from "@/components/inAppBanner";
 import { setupNotificationChannels } from "@/hooks/usePushNotifications";
+import { useBLEStore } from "@/stores/bleStore";
 import { Platform } from "react-native";
 
 Notifications.setNotificationHandler({
@@ -132,9 +133,16 @@ function RootLayoutNav() {
     return () => subscription.remove();
   }, []);
 
+  // Re-creates the Android sound channels whenever the selected tone
+  // changes (an existing channel's sound can't be updated in place — see
+  // setupNotificationChannels). previousToneIndexRef lets the old tone's
+  // channels get cleaned up instead of accumulating forever.
+  const toneIndex = useBLEStore((s) => s.toneIndex);
+  const previousToneIndexRef = useRef<number | null>(null);
   useEffect(() => {
-    setupNotificationChannels();
-  }, []);
+    setupNotificationChannels(toneIndex, previousToneIndexRef.current);
+    previousToneIndexRef.current = toneIndex;
+  }, [toneIndex]);
 
   useEffect(() => {
     // App opened from background

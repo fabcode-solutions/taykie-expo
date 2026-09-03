@@ -394,6 +394,11 @@
         "title": "Centro de cuentas",
         "description": "Gestiona los detalles de tu cuenta"
       }
+    },
+    "dosagePreferences": {
+      "title": "Dosis y Compartimentos",
+      "description": "Cambia cuántas veces al día te recuerda Taykie.",
+      "save": "Guardar Cambios"
     }
   },
   "profile": {
@@ -841,7 +846,6 @@
         "android": "Visibilidad en la pantalla de bloqueo en Android"
       }
     },
-
     "check_in": {
       "title": "Revisión inicial",
       "description": "Antes de Taykie, ¿cómo calificarías tu rutina de suplementos? Sé honesto, aquí no hay respuestas incorrectas.",

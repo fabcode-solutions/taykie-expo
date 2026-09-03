@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import { StyleSheet, TouchableOpacity, Image, Platform } from "react-native";
+import { StyleSheet, TouchableOpacity, Image, Platform, Keyboard } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useForm } from "react-hook-form";
 import { Theme, useTheme } from "@/theme";
@@ -51,11 +51,21 @@ function LoginScreen() {
       });
       const isOnboardingComplete = useOnboardingStore.getState().isOnboardingComplete;
 
-      if (isOnboardingComplete) {
-        router.replace("/(tabs)");
-      } else {
-        router.push("/(onboarding)/country-language");
-      }
+      // The email/password inputs may still have focus (soft keyboard open)
+      // when login resolves. Dismissing it and deferring the navigation lets
+      // the keyboard's own close animation finish before the (auth)→(tabs)
+      // stack replace mounts the whole tab navigator — doing both at once
+      // has been implicated in a native Yoga/Fabric shadow-tree crash on
+      // some Android devices (same class as the modal-transition crashes
+      // fixed elsewhere in this app).
+      Keyboard.dismiss();
+      setTimeout(() => {
+        if (isOnboardingComplete) {
+          router.replace("/(tabs)");
+        } else {
+          router.push("/(onboarding)/country-language");
+        }
+      }, 300);
     } catch (err) {
       alert.show(AlertPresets.error(t(LocalizedStrings.auth.authStart.requestFailed), err.message));
     }

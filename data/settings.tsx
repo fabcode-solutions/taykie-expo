@@ -1,5 +1,6 @@
 import IconAccountCenter from "@/components/icons/settings/IconAccountCenter";
 import IconForward from "@/components/icons/settings/IconForward";
+import IconGrid from "@/components/icons/settings/IconGrid";
 import IconIntegrations from "@/components/icons/settings/IconIntegrations";
 import IconLock from "@/components/icons/settings/IconLock";
 import IconLogout from "@/components/icons/settings/IconLogout";
@@ -24,6 +25,13 @@ export const SETTINGS: SettingsMap = {
       heading: "settings.profile.account_center.title",
       action: "/profile/profile",
       description: "settings.profile.account_center.description",
+      rightIcon: <IconForward />,
+    },
+    {
+      leftIcon: <IconGrid />,
+      heading: "settings.dosagePreferences.title",
+      action: "/settings/dosage-preferences",
+      description: "settings.dosagePreferences.description",
       rightIcon: <IconForward />,
     },
   ],

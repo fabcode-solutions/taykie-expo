@@ -154,7 +154,7 @@ const AddProduct: React.FC<AddProductProps> = ({
           rules={{
             required: !item ? t(LocalizedStrings.product.required) : false,
             pattern: {
-              value: /^[A-Za-z\s]+$/,
+              value: /^[A-Za-z0-9&()'/-]+(?: [A-Za-z0-9&()'/-]+)*$/,
               message: t(LocalizedStrings.errors.validation.name.invalid),
             },
           }}

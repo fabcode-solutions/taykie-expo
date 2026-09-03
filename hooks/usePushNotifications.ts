@@ -4,6 +4,9 @@ import { isNotificationSoundEnabled, useNotificationStore } from "@/stores/notif
 import { PermissionsAndroid, Platform } from "react-native";
 import * as Notifications from "expo-notifications";
 import { useBannerStore } from "@/stores/bannerStore";
+import { useBLEStore } from "@/stores/bleStore";
+import { toneFileName, toneSlug } from "@/utils/toneAudio";
+import { isDosageReminder, triggerDeviceSoundForReminder } from "@/utils/reminderSound";
 import { useAlert } from "@/provider/AlertProvider";
 import { AlertPresets } from "@/utils/alert";
 export function usePushNotifications() {
@@ -81,12 +84,23 @@ export function usePushNotifications() {
   };
 }
 
+// Sound-enabled channel ids are suffixed with the tone slug (e.g.
+// "sound_vibrate_lock_taykie") since an Android channel's sound can't be
+// changed after creation — a different tone means a different channel, not
+// an update to the existing one. Silent channels need no suffix; they never
+// reference a tone.
+const soundChannelId = (base: string, toneIndex: number | null | undefined) =>
+  `${base}_${toneSlug(toneIndex)}`;
+
 export const showLocalNotification = async (remoteMessage: any) => {
   const soundEnabled = isNotificationSoundEnabled(remoteMessage?.data?.type);
 
   const settings = useNotificationStore.getState().notificationSettings;
   const vibrationEnabled = settings?.notifications?.vibration ?? false;
   const lockScreenEnabled = settings?.notifications?.showOnLockScreen ?? true;
+  const toneIndex = useBLEStore.getState().toneIndex;
+  const toneFile = toneFileName(toneIndex);
+
   let baseChannelId = "silent_novibrate";
   if (soundEnabled && vibrationEnabled) {
     baseChannelId = "sound_vibrate";
@@ -96,7 +110,10 @@ export const showLocalNotification = async (remoteMessage: any) => {
     baseChannelId = "silent_vibrate";
   }
 
-  const targetChannelId = `${baseChannelId}_${lockScreenEnabled ? "lock" : "nolock"}`;
+  let targetChannelId = `${baseChannelId}_${lockScreenEnabled ? "lock" : "nolock"}`;
+  if (soundEnabled) {
+    targetChannelId = soundChannelId(targetChannelId, toneIndex);
+  }
 
   await Notifications.scheduleNotificationAsync({
     identifier: remoteMessage.messageId,
@@ -104,24 +121,77 @@ export const showLocalNotification = async (remoteMessage: any) => {
       title: remoteMessage.notification?.title || "New Notification",
       body: remoteMessage.notification?.body || "",
       data: remoteMessage.data,
-      sound: soundEnabled ? "default" : null,
+      // Falls back to "default" if sound is on but no tone is selected
+      // (Mute, or nothing chosen yet) rather than silently going silent.
+      sound: soundEnabled ? (toneFile ?? "default") : undefined,
       vibrate: vibrationEnabled ? [0, 250, 250, 250] : undefined,
     },
     trigger: Platform.OS === "android" ? { channelId: targetChannelId } : null,
   });
+
+  // The custom banner (iOS-only) triggers the physical device for dosage
+  // reminders; this is the Android-foreground equivalent, since Android
+  // foreground messages go through this local-notification path instead of
+  // the banner. No lingering UI element to hook a "stop" to here, so this
+  // relies on BLEService.triggerSound's own ~60s safety timer to end it.
+  if (isDosageReminder(remoteMessage)) {
+    triggerDeviceSoundForReminder();
+  }
 };
 
-export const setupNotificationChannels = async () => {
+// Pass the currently selected tone index; call again whenever it changes
+// (see app/_layout.tsx) so a new tone gets its own channel. previousToneIndex
+// lets old sound channels for a since-abandoned tone get cleaned up instead
+// of accumulating forever in the system's per-app channel list.
+export const setupNotificationChannels = async (
+  toneIndex: number | null | undefined = null,
+  previousToneIndex: number | null | undefined = null,
+) => {
   if (Platform.OS !== "android") return;
 
   const vibrationPattern = [0, 250, 250, 250];
+  const toneFile = toneFileName(toneIndex);
+
+  const soundBaseIds = [
+    "sound_vibrate_lock",
+    "sound_vibrate_nolock",
+    "sound_novibrate_lock",
+    "sound_novibrate_nolock",
+  ];
+
+  if (
+    previousToneIndex !== null &&
+    previousToneIndex !== undefined &&
+    previousToneIndex !== toneIndex
+  ) {
+    for (const base of soundBaseIds) {
+      await Notifications.deleteNotificationChannelAsync(
+        soundChannelId(base, previousToneIndex),
+      ).catch(() => {});
+    }
+  }
 
   // Define our 3 boolean axes: Sound, Vibrate, LockScreen
   const configurations = [
-    { sound: true, vibrate: true, lock: true, id: "sound_vibrate_lock" },
-    { sound: true, vibrate: true, lock: false, id: "sound_vibrate_nolock" },
-    { sound: true, vibrate: false, lock: true, id: "sound_novibrate_lock" },
-    { sound: true, vibrate: false, lock: false, id: "sound_novibrate_nolock" },
+    { sound: true, vibrate: true, lock: true, id: soundChannelId("sound_vibrate_lock", toneIndex) },
+    {
+      sound: true,
+      vibrate: true,
+      lock: false,
+      id: soundChannelId("sound_vibrate_nolock", toneIndex),
+    },
+    {
+      sound: true,
+      vibrate: false,
+      lock: true,
+      id: soundChannelId("sound_novibrate_lock", toneIndex),
+    },
+    {
+      sound: true,
+      vibrate: false,
+      lock: false,
+      id: soundChannelId("sound_novibrate_nolock", toneIndex),
+    },
     { sound: false, vibrate: true, lock: true, id: "silent_vibrate_lock" },
     { sound: false, vibrate: true, lock: false, id: "silent_vibrate_nolock" },
     { sound: false, vibrate: false, lock: true, id: "silent_novibrate_lock" },
@@ -132,7 +202,9 @@ export const setupNotificationChannels = async () => {
     await Notifications.setNotificationChannelAsync(config.id, {
       name: `${config.sound ? "Sound" : "Silent"}, ${config.vibrate ? "Vibrate" : "No Vibrate"} (${config.lock ? "Lock Screen" : "Hidden"})`,
       importance: Notifications.AndroidImportance.MAX,
-      sound: config.sound ? "default" : null,
+      // Falls back to "default" if this is a sound channel but no tone is
+      // selected (Mute, or nothing chosen yet).
+      sound: config.sound ? (toneFile ?? "default") : null,
       enableVibrate: config.vibrate,
       vibrationPattern: config.vibrate ? vibrationPattern : undefined,
       // Here is the lock screen magic:

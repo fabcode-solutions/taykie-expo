@@ -297,14 +297,16 @@ export const PostCard = memo<PostCardProps>(
                 title={item.label}
                 onPress={() => {
                   setMenuVisible(false);
-                  router.push({
-                    pathname: item.navigateTo,
-                    params: {
-                      reportType: item.key,
-                      postId: post.id,
-                      userId: post.userId,
-                    },
-                  });
+                  setTimeout(() => {
+                    router.push({
+                      pathname: item.navigateTo,
+                      params: {
+                        reportType: item.key,
+                        postId: post.id,
+                        userId: post.userId,
+                      },
+                    });
+                  }, 300);
                 }}
                 disabled={item.disabled}
                 variant="text"

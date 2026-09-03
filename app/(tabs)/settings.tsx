@@ -20,6 +20,11 @@ export default function SettingsScreen() {
   const { logout } = useAuthStore();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [accountDelete, setAccountDelete] = useState(false);
+  // DeleteSchedule's own BlurModal closes itself ~2500ms after onYes resolves.
+  // Navigating away immediately would replace the screen while that modal's
+  // native surface is still open/transitioning — defer the navigation until
+  // its onClose (handleCloseDelete) actually fires.
+  const logoutPendingRef = React.useRef(false);
   const styles = useMemo(() => createStyles(theme), [theme]);
   const user = useAuthStore((state) => state.user);
 
@@ -39,7 +44,11 @@ export default function SettingsScreen() {
   }, []);
   const handleCloseDelete = useCallback(() => {
     setAccountDelete((prev) => !prev);
-  }, []);
+    if (logoutPendingRef.current) {
+      logoutPendingRef.current = false;
+      router.replace("/(auth)/auth-start");
+    }
+  }, [router]);
   const performLogout = async () => {
     if (isLoggingOut) return;
 
@@ -47,9 +56,7 @@ export default function SettingsScreen() {
 
     try {
       await logout();
-
-      // Navigate to login screen
-      router.replace("/(auth)/auth-start");
+      logoutPendingRef.current = true;
     } catch (error) {
       crossPlatformAlert(t(LocalizedStrings.common.error), error.message, [
         { text: t(LocalizedStrings.common.ok) },

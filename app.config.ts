@@ -146,6 +146,19 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
         iosDisplayInForeground: true,
         androidMode: "default", // Add this
         androidVibrationPattern: [0, 250, 250, 250], // Add this global default
+        // Bundles these as native notification sound resources (iOS: kept
+        // as-is in the app bundle; Android: copied into res/raw) so they
+        // can be referenced by filename as a real system notification
+        // sound, not just played locally via expo-av. Requires a native
+        // rebuild to take effect — Metro/Fast Refresh can't pick this up.
+        sounds: [
+          "./assets/audio/Taykie.wav",
+          "./assets/audio/Verve.wav",
+          "./assets/audio/Echo.wav",
+          "./assets/audio/Pulse.wav",
+          "./assets/audio/Nudge.wav",
+          "./assets/audio/Shift.wav",
+        ],
       },
     ],
     "@react-native-firebase/app",
