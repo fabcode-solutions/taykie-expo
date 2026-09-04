@@ -25,7 +25,7 @@ interface ScheduleProps {
 }
 
 type FrequencyKey = "daily" | "weekly" | "monthly";
-type TimeOfDayKey = "morning" | "afternoon" | "evening";
+type TimeOfDayKey = "morning" | "afternoon" | "evening"|"night";
 const Frequency_DEFAULTS: Record<FrequencyKey, string> = {
   daily: "Daily",
   weekly: "Weekly",
@@ -35,6 +35,7 @@ const TimeOfDayKey_DEFAULTS: Record<TimeOfDayKey, string> = {
   morning: "Morning",
   afternoon: "Afternoon",
   evening: "Evening",
+  night:"night"
 };
 
 const Schedule = ({ item, onAddRoutine }: ScheduleProps) => {

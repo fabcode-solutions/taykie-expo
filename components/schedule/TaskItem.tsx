@@ -14,7 +14,7 @@ interface TaskItemProps {
   id: string;
   title: string | string[];
   time: string;
-  status: TaskStatus;
+  status: string;
   statusLabel: string;
   isLast?: boolean;
   onPress?: () => void;
@@ -33,6 +33,7 @@ const TaskItem: React.FC<TaskItemProps> = ({
 }) => {
   const theme = useTheme();
   const styles = React.useMemo(() => createStyles(theme), [theme]);
+
   const renderStatusIcon = () => {
     switch (status) {
       case "taken":
@@ -79,10 +80,10 @@ const TaskItem: React.FC<TaskItemProps> = ({
       {/* Task content */}
       <View style={styles.taskContent}>
         <ThemeText variant="manrope.body1Bold" style={styles.taskTitle}>
-          {titleString}
+          {title}
         </ThemeText>
         <ThemeText variant="manrope.caption" style={styles.taskTime}>
-          {timesString}
+          {time}
         </ThemeText>
       </View>
 

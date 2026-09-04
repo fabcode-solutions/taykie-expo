@@ -5,34 +5,35 @@ import { Audio } from "expo-av";
 // previews, keyed by the same tone index used in the BLE F4 SoundControl
 // payload (0 = Mute).
 export const TONE_OPTIONS = [
-  { label: "Mute", value: 0 },
-  { label: "Taykie", value: 1 },
-  { label: "Verve", value: 2 },
-  { label: "Echo", value: 3 },
-  { label: "Pulse", value: 4 },
-  { label: "Nudge", value: 5 },
-  { label: "Shift", value: 6 },
+  { label: "mute", value: 0 },
+  { label: "taykie", value: 1 },
+  { label: "verve", value: 2 },
+  { label: "echo", value: 3 },
+  { label: "pulse", value: 4 },
+  { label: "nudge", value: 5 },
+  { label: "shift", value: 6 },
 ] as const;
 
 const TONE_FILES: Record<string, any> = {
-  Taykie: require("@/assets/audio/Taykie.wav"),
-  Verve: require("@/assets/audio/Verve.wav"),
-  Echo: require("@/assets/audio/Echo.wav"),
-  Pulse: require("@/assets/audio/Pulse.wav"),
-  Nudge: require("@/assets/audio/Nudge.wav"),
-  Shift: require("@/assets/audio/Shift.wav"),
+  Taykie: require("@/assets/audio/taykie.wav"),
+  Verve: require("@/assets/audio/verve.wav"),
+  Echo: require("@/assets/audio/echo.wav"),
+  Pulse: require("@/assets/audio/pulse.wav"),
+  Nudge: require("@/assets/audio/nudge.wav"),
+  Shift: require("@/assets/audio/shift.wav"),
 };
 
 // Fallback used everywhere a tone/volume hasn't been explicitly chosen yet
 // (toneIndex/volumeLevel is null/undefined — before the user has ever
-// visited the picker). This is distinct from an explicit choice of "Mute"
-// (toneIndex === 0) or volume 0, which are respected as real selections.
-export const DEFAULT_TONE_INDEX = 1; // "Taykie"
-export const DEFAULT_VOLUME_LEVEL = 1;
+// visited the picker). Unset now resolves to the same value as an explicit
+// "Mute" choice (0) — a fresh install/reconnect should be silent by
+// default, not default to an audible tone/volume the user never picked.
+export const DEFAULT_TONE_INDEX = 0; // "Mute"
+export const DEFAULT_VOLUME_LEVEL = 0; // "Mute"
 
 export function toneLabelForIndex(toneIndex: number | null | undefined): string {
   const resolvedIndex = toneIndex ?? DEFAULT_TONE_INDEX;
-  return TONE_OPTIONS.find((t) => t.value === resolvedIndex)?.label ?? "Taykie";
+  return TONE_OPTIONS.find((t) => t.value === resolvedIndex)?.label ?? "Mute";
 }
 
 // The filename as bundled via app.config.ts's expo-notifications `sounds`
@@ -42,6 +43,7 @@ export function toneLabelForIndex(toneIndex: number | null | undefined): string 
 // default tone above, same as toneLabelForIndex.
 export function toneFileName(toneIndex: number | null | undefined): string | null {
   const label = toneLabelForIndex(toneIndex);
+  console.log("label=-----",label)
   return label === "Mute" ? null : `${label}.wav`;
 }
 
@@ -65,6 +67,9 @@ export async function playTone(
   if (!soundFile) return null;
 
   const { volumeLevel = DEFAULT_VOLUME_LEVEL, loop = false } = options;
+  // Explicit Mute volume (0) means no sound at all, not "play at 0 gain" —
+  // skip creating/loading the sound entirely.
+  if (volumeLevel <= 0) return null;
 
   await Audio.setAudioModeAsync({
     playsInSilentModeIOS: true,

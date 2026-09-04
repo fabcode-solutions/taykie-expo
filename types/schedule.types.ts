@@ -83,12 +83,15 @@ export interface CreateScheduleRequest {
 }
 
 export interface Schedule extends CreateScheduleRequest {
-  id: string;
-  userId: string;
+  scheduleId?: string;
+  id?: string;
+  userId?: string;
   createdAt: string;
   updatedAt: string;
   status: TaskStatus;
   product?: Medication;
+  time?: string;
+  time24?: string;
 }
 
 export interface UpcomingReminderData {

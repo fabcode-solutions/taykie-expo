@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useRef } from "react";
+import React, { useCallback, useEffect } from "react";
 import { FlatList, ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { SafeAreaScreen, ThemeStatusBar, ThemeText, ThemeView } from "@/components";
@@ -28,8 +28,7 @@ import { AlertPresets, AlertBuilder } from "@/utils/alert";
 import { useAlert } from "@/provider/AlertProvider";
 import { Button } from "@/components/ui/button";
 import Switch from "@/components/ui/Switch";
-import { TONE_OPTIONS, playTone, stopTone, toneLabelForIndex } from "@/utils/toneAudio";
-import type { Audio } from "expo-av";
+import { TONE_OPTIONS, DEFAULT_TONE_INDEX, DEFAULT_VOLUME_LEVEL } from "@/utils/toneAudio";
 
 type DeviceActionKey = "find" | "history" | "rename" | "dismiss";
 interface DeviceAction {
@@ -46,17 +45,26 @@ const ACTIONS: DeviceAction[] = [
   { key: "rename", label: "Rename Device", icon: "pencil" },
 ];
 
-
 export default function DeviceScreen() {
   const theme = useTheme();
   const alert = useAlert();
-  const currentSoundRef = useRef<Audio.Sound | null>(null);
 
   // Store selectors
   const { isScanning, scannedDevices } = useBLEScanning();
   const { connectionStatus } = useBLEConnection();
-  const { batteryLevel, isCharging, toneIndex, volumeLevel, schedules, lastSyncedAt } =
-    useBLEDeviceData();
+  const {
+    batteryLevel,
+    isCharging,
+    toneIndex: rawToneIndex,
+    volumeLevel: rawVolumeLevel,
+    schedules,
+    lastSyncedAt,
+  } = useBLEDeviceData();
+  // Never-selected (null) resolves to Mute (0) — same default used
+  // everywhere else (reminders, notification channels, banner preview) —
+  // so the picker visually shows Mute selected rather than nothing.
+  const toneIndex = rawToneIndex ?? DEFAULT_TONE_INDEX;
+  const volumeLevel = rawVolumeLevel ?? DEFAULT_VOLUME_LEVEL;
   const { historyRecords, refreshCompartmentActivity } = useBLECompartments();
   const {
     scanDevices,
@@ -316,27 +324,6 @@ export default function DeviceScreen() {
     );
   }, []);
 
-  // volumeLevel is the same 0-5 UI scale as the volume picker.
-  async function playSoundPreview(toneLabel: string, volumeLevel: number = 5) {
-    await stopTone(currentSoundRef.current);
-    currentSoundRef.current = null;
-
-    try {
-      const sound = await playTone(toneLabel, { volumeLevel });
-      if (!sound) return; // "Mute" or unknown label
-      currentSoundRef.current = sound;
-
-      sound.setOnPlaybackStatusUpdate((status) => {
-        if (status.isLoaded && status.didJustFinish) {
-          sound.unloadAsync();
-          if (currentSoundRef.current === sound) currentSoundRef.current = null;
-        }
-      });
-    } catch (error) {
-      console.error("Failed to play sound:", error);
-    }
-  }
-
   return (
     <>
       {connectionStatus === "connecting" && <Loader />}
@@ -431,8 +418,13 @@ export default function DeviceScreen() {
                       volumeLevel === level && themedStyles.volumeNodeActive,
                     ]}
                     onPress={() => {
+                      // setDeviceVolume already triggers the device's speaker
+                      // itself as its preview mechanism — calling
+                      // triggerDeviceSoundForReminder() here too fired a
+                      // second, duplicate F4 SoundControl write for every
+                      // tap (confirmed in device logs), which is a likely
+                      // contributor to devices dropping mid-write.
                       setDeviceVolume(level);
-                      playSoundPreview(toneLabelForIndex(toneIndex), level);
                     }}
                   >
                     <ThemeText
@@ -461,11 +453,11 @@ export default function DeviceScreen() {
                       toneIndex === tone.value && themedStyles.toneNodeActive,
                     ]}
                     onPress={() => {
+                      // Same reasoning as the volume handler above —
+                      // setDeviceTone already triggers the device's speaker
+                      // itself; triggerDeviceSoundForReminder() here was a
+                      // redundant, duplicate F4 write.
                       setDeviceTone(tone.value);
-                      // Play locally on the phone too — audible immediately
-                      // and doesn't depend on the BLE device being connected
-                      // or its speaker actually being reachable.
-                      playSoundPreview(tone.label);
                     }}
                   >
                     <ThemeText

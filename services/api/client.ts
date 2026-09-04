@@ -77,9 +77,9 @@ export class ApiClient {
 
         // 📥 LOG RESPONSE DETAILS
         if (res.ok) {
-          console.log(`✅ [API Response Success ${res.status}] <- ${url}`, data);
+          console.log(`✅ [API Response Success ${res.status}] <- ${url}`, JSON.stringify(data));
         } else {
-          console.log(`❌ [API Response Error ${res.status}] <- ${url}`, data);
+          console.log(`❌ [API Response Error ${res.status}] <- ${url}`, JSON.stringify(data));
         }
 
         if (!res.ok) {

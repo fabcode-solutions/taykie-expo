@@ -59,10 +59,14 @@ Notifications.setNotificationHandler({
   },
 });
 
-messaging().setBackgroundMessageHandler(async (remoteMessage) => {
-  console.log("🌙 Background message:", remoteMessage);
-  await useNotificationStore.getState().fetchNotifications();
-});
+try {
+  messaging().setBackgroundMessageHandler(async (remoteMessage) => {
+    console.log("🌙 Background message:", remoteMessage);
+    await useNotificationStore.getState().fetchNotifications();
+  });
+} catch (e) {
+  console.warn("Firebase messaging not available — rebuild the dev client", e);
+}
 // Prevent splash auto hide
 SplashScreen.preventAutoHideAsync();
 

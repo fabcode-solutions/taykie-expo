@@ -47,11 +47,26 @@ class BLEService {
     this.manager = new BleManager();
   }
 
-  // Resolves the promise `waitForReply` is blocking on, once a frame with
-  // the awaited cmdType has been fully reassembled and parsed. Only one
-  // outstanding wait at a time — this app never pipelines multiple
-  // in-flight commands.
-  private pendingReply: { cmdType: number; resolve: () => void } | null = null;
+  // FIFO queue of in-flight replies being waited on, oldest first. Writes
+  // are strictly ordered through writeQueue (see writeCommand) and this
+  // peripheral processes commands sequentially, so replies arrive in the
+  // same order their commands were sent — the oldest pending waiter is
+  // always the correct one to resolve next.
+  //
+  // This used to be a single slot, which worked when the app only ever had
+  // one outstanding command (the original handshake/poll pattern). Once
+  // ensurePasswordVerified() started running before every command, two
+  // independent flows (e.g. the periodic poll and an on-demand
+  // triggerSound from tapping the tone/volume picker) could each call
+  // waitForReply around the same time — the second call's entry silently
+  // overwrote the first's, so the first caller's real reply never resolved
+  // it and it just timed out, dropping the sound with no visible error
+  // (only a console warning). A FIFO queue lets both wait independently.
+  private pendingReplies: {
+    cmdType: number;
+    resolve: () => void;
+    timeoutId: ReturnType<typeof setTimeout>;
+  }[] = [];
 
   // Blocks until a reply with the given cmdType has actually been received
   // and parsed (or timeoutMs elapses). This exists because large replies —
@@ -61,20 +76,33 @@ class BLEService {
   // fragments into the still-incomplete buffer and corrupting both.
   waitForReply(cmdType: number, timeoutMs = 3000): Promise<void> {
     return new Promise((resolve) => {
-      this.pendingReply = { cmdType, resolve };
-      setTimeout(() => {
-        if (this.pendingReply?.resolve === resolve) {
-          this.pendingReply = null;
+      const entry = {
+        cmdType,
+        resolve: () => {},
+        timeoutId: null as unknown as ReturnType<typeof setTimeout>,
+      };
+      entry.resolve = () => {
+        clearTimeout(entry.timeoutId);
+        const idx = this.pendingReplies.indexOf(entry);
+        if (idx !== -1) this.pendingReplies.splice(idx, 1);
+        resolve();
+      };
+      entry.timeoutId = setTimeout(() => {
+        const idx = this.pendingReplies.indexOf(entry);
+        if (idx !== -1) {
+          this.pendingReplies.splice(idx, 1);
           console.warn(
             `⚠️ waitForReply timed out after ${timeoutMs}ms waiting for cmdType 0x${cmdType.toString(16)}. Buffer so far (${this.notifyBuffer.length} bytes):`,
             Buffer.from(this.notifyBuffer).toString("hex"),
           );
-          // A stuck/incomplete buffer would otherwise sit here and corrupt
-          // whatever the NEXT command's reply fragments append to it.
-          this.notifyBuffer = [];
-          resolve(); // Timed out — proceed rather than hang the handshake/poll forever.
+          // Only clear the buffer if nothing else is still waiting —
+          // otherwise this would wipe out bytes another still-pending
+          // command's reply needs mid-reassembly.
+          if (this.pendingReplies.length === 0) this.notifyBuffer = [];
         }
+        resolve(); // Timed out — proceed rather than hang forever.
       }, timeoutMs);
+      this.pendingReplies.push(entry);
     });
   }
 
@@ -107,6 +135,16 @@ class BLEService {
   }
 
   async startScan(onDeviceFound: (device: any) => void) {
+    // Scanning shares the same BLE radio as an active GATT connection.
+    // Running a scan while already connected to a device is a known way to
+    // degrade/corrupt writes and notifications on that connection on
+    // Android — confirmed in device logs as a run of "bad checksum" NACKs
+    // and an eventual disconnect coinciding with a scan in progress.
+    if (this.connectedDevice) {
+      console.warn("⚠️ Skipping scan — already connected to a device.");
+      return;
+    }
+
     const hasPermission = await this.requestPermissions();
     if (!hasPermission) return;
 
@@ -124,6 +162,10 @@ class BLEService {
 
       if (device && device.name) {
         const name = device.name;
+        // TEMP DEBUG: log every advertised device seen during a scan, not
+        // just ones matching the filter below — otherwise a real device
+        // with an unexpected name is silently dropped with zero visibility.
+        console.log(`👀 Saw BLE device: "${name}" (${device.id}) rssi=${device.rssi}`);
         if (
           name.includes("TayKie") ||
           name.toLowerCase().includes("taykie") ||
@@ -254,7 +296,29 @@ class BLEService {
   // incoming multi-packet replies must be reassembled the same way.
   private static readonly CHUNK_SIZE = 20;
 
-  private async writeCommand(base64Payload: string, label: string) {
+  // Independently-triggered commands (e.g. a push-notification's device
+  // sound trigger firing while the background status poll's own write is
+  // still in flight) must never interleave their bytes on the wire — this
+  // peripheral's firmware is conservative about command ordering (per the
+  // factory doc, password-verify must literally be the first command of a
+  // session "or the device may drop the connection"), so a garbled/
+  // interleaved byte stream is a plausible cause of a mid-session drop.
+  // Chaining every write through this queue serializes them regardless of
+  // which caller fired first.
+  private writeQueue: Promise<void> = Promise.resolve();
+
+  private writeCommand(base64Payload: string, label: string): Promise<void> {
+    const task = this.writeQueue.then(() => this.writeCommandExclusive(base64Payload, label));
+    // Keep the queue moving even if this write fails, so one bad/timed-out
+    // command doesn't permanently block every later command.
+    this.writeQueue = task.then(
+      () => undefined,
+      () => undefined,
+    );
+    return task;
+  }
+
+  private async writeCommandExclusive(base64Payload: string, label: string) {
     if (!this.connectedDevice) {
       throw new Error("No Taykie device currently connected");
     }
@@ -269,7 +333,16 @@ class BLEService {
     console.log(`BLE write raw (${label}, ${fullBytes.length} bytes):`, fullBytes.toString("hex"));
 
     for (let offset = 0; offset < fullBytes.length; offset += BLEService.CHUNK_SIZE) {
-      const chunk = fullBytes.subarray(offset, offset + BLEService.CHUNK_SIZE);
+      // Buffer.prototype.subarray is supposed to return another Buffer (via
+      // Symbol.species), but on this Hermes/New Architecture setup it was
+      // silently degrading to a plain Uint8Array — which has no base64-aware
+      // toString and falls back to Array's default comma-joined
+      // stringification (e.g. "90,224,0,..." instead of real base64). That
+      // garbage string was then sent straight to the native BLE write call,
+      // which rejected it as "invalid data format" on every single command.
+      // Re-wrapping with Buffer.from() forces a genuine Buffer instance
+      // regardless of what subarray() handed back.
+      const chunk = Buffer.from(fullBytes.subarray(offset, offset + BLEService.CHUNK_SIZE));
       await this.connectedDevice.writeCharacteristicWithoutResponseForService(
         TAYKIE_UUIDS.SERVICE,
         TAYKIE_UUIDS.WRITE,
@@ -376,10 +449,15 @@ class BLEService {
     // handler error can't corrupt the next frame's reassembly.
     this.notifyBuffer = [];
 
-    if (this.pendingReply?.cmdType === parsed.cmdType) {
-      const resolve = this.pendingReply.resolve;
-      this.pendingReply = null;
-      resolve();
+    // Resolve the oldest pending waiter if this reply matches its cmdType,
+    // or if it's a ChecksumError (cmdType 0x00, which never matches any
+    // awaited command's own cmdType, but is still a definitive reply to
+    // whatever was sent last — without this it'd silently block whatever's
+    // waiting for the full 3s timeout even though the device already told
+    // us the command failed).
+    const oldest = this.pendingReplies[0];
+    if (oldest && (oldest.cmdType === parsed.cmdType || parsed.cmdType === CmdType.ChecksumError)) {
+      oldest.resolve();
     }
 
     switch (parsed.cmdType) {
@@ -445,27 +523,44 @@ class BLEService {
     await this.writeCommand(frame, "E0 PasswordVerify");
   }
 
+  // Per the protocol doc, password verification must be the first command
+  // of every session — but devices were also observed rejecting F3/F6/F4
+  // with genuine (checksum-valid) "bad checksum" NACKs well into an
+  // otherwise healthy connection, consistent with the device expecting a
+  // fresh E0 before each meaningful command rather than just once at
+  // connect. Centralized here so every public command below benefits
+  // without repeating this at each call site (in BLEService or its
+  // callers).
+  private async ensurePasswordVerified() {
+    await this.verifyPassword();
+    await this.waitForReply(CmdType.PasswordVerify);
+  }
+
   async changePassword(newPassword: string) {
     const frame = TaykieProtocol.buildFrame(CmdType.ChangePassword, TaykieProtocol.encodePassword(newPassword));
     await this.writeCommand(frame, "E1 ChangePassword");
   }
 
   async syncTime() {
+    await this.ensurePasswordVerified();
     const frame = TaykieProtocol.buildFrame(CmdType.TimeCalibration, TaykieProtocol.encodeCurrentTime());
     await this.writeCommand(frame, "F1 TimeCalibration");
   }
 
   async queryTime() {
+    await this.ensurePasswordVerified();
     const frame = TaykieProtocol.buildFrame(CmdType.QueryTime);
     await this.writeCommand(frame, "F7 QueryTime");
   }
 
   async queryStatus() {
+    await this.ensurePasswordVerified();
     const frame = TaykieProtocol.buildFrame(CmdType.QueryStatus);
     await this.writeCommand(frame, "F3 QueryStatus");
   }
 
   async setSchedule(slots: ScheduleSlot[]) {
+    await this.ensurePasswordVerified();
     const frame = TaykieProtocol.buildFrame(CmdType.SetSchedule, TaykieProtocol.buildSchedulePayload(slots));
     await this.writeCommand(frame, "F2 SetSchedule");
   }
@@ -484,6 +579,7 @@ class BLEService {
   // onOff true starts the sound with the given type/volume — the device
   // will NOT auto-stop it; onOff false is the only way to silence it.
   async triggerSound(onOff: boolean, soundType: number, volumeLevel: number) {
+    await this.ensurePasswordVerified();
     // UI-facing 0-5 (or up to 0x0F) volume steps map onto the documented
     // 0xE0-0xEF byte range.
     const volumeByte = 0xe0 + Math.min(0x0f, Math.max(0, volumeLevel));
@@ -510,6 +606,7 @@ class BLEService {
   // onOff true starts the light with the given type — the device will NOT
   // auto-stop it; onOff false is the only way to turn it off.
   async triggerLight(onOff: boolean, lightType: number) {
+    await this.ensurePasswordVerified();
     const frame = TaykieProtocol.buildFrame(CmdType.LightControl, [
       onOff ? 0x01 : 0x00,
       lightType,
@@ -538,6 +635,7 @@ class BLEService {
   }
 
   async queryHistory() {
+    await this.ensurePasswordVerified();
     const frame = TaykieProtocol.buildFrame(CmdType.QueryHistory);
     await this.writeCommand(frame, "F6 QueryHistory");
   }
@@ -545,6 +643,7 @@ class BLEService {
   // Destructive: wipes the device's stored history. Not wired to any
   // automatic flow — only call this on explicit user confirmation.
   async eraseHistoryFlash() {
+    await this.ensurePasswordVerified();
     const frame = TaykieProtocol.buildFrame(CmdType.EraseFlash);
     await this.writeCommand(frame, "FF EraseFlash");
   }

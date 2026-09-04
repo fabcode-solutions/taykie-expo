@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  FlatList,
   Image,
   RefreshControl,
   ScrollView,
@@ -156,21 +155,6 @@ export default function HomeScreen() {
     }
   }, [upcomingReminder?.scheduleId, t]);
 
-  // Optimized: Extracted renderItem to prevent recreation on every parent render
-  const renderTaskItem = useCallback(
-    ({ item }: { item: Schedule }) => (
-      <TaskItem
-        id={item.id}
-        status={item.status ?? "upcoming"}
-        statusLabel={statusLabels[item?.status ?? "upcoming"]}
-        time={item.scheduleTime ?? ""}
-        title={item.product?.name ?? ""}
-        onPress={() => handleTask(item)}
-      />
-    ),
-    [statusLabels, handleTask],
-  );
-
   const handleSnooze = useCallback(async () => {
     try {
       if (upcomingReminder?.scheduleId) {
@@ -195,7 +179,8 @@ export default function HomeScreen() {
     [t],
   );
 
-  const keyExtractor = useCallback((item: Schedule) => item.id?.toString(), []);
+  const hasUpcomingReminder = Boolean(upcomingReminder?.scheduleId);
+  const hasStreak = Boolean(userStreak && (userStreak?.currentStreak ?? 0) > 0);
 
   return (
     <SafeAreaScreen
@@ -205,6 +190,30 @@ export default function HomeScreen() {
       showLoader={isLoading || loadingProducts}
     >
       <ThemeStatusBar style={theme.mode === "dark" ? "light" : "dark"} />
+      {/* Reverted from FlatList back to ScrollView + .map(): this screen's
+          list is short (a handful of daily tasks), and FlatList here was
+          confirmed — twice, on-device — to crash with the same Yoga/Fabric
+          shadow-tree assertion seen elsewhere in this app, even after
+          isolating the task-detail modal as a plain sibling. Virtualization
+          isn't worth the crash risk for a list this size.
+
+          Follow-up (2026-09-04): a fresh tombstone showed the same
+          "YGNodeGetOwner(childYogaNode) == &yogaNode_" assertion on a build
+          that should already be ScrollView-only. Root-caused this as the
+          general Fabric/Yoga "ABA ownership" bug class (see
+          facebook/react-native#52349) — it's triggered by shadow-tree churn
+          from conditionally MOUNTING/UNMOUNTING sibling nodes next to a
+          list, not by FlatList specifically. The reminder block and streak
+          card below were toggling in and out of the tree entirely
+          (`condition && <View>...</View>`), which changes the parent's
+          child count/order on every render where the condition flips.
+          Fixed by always mounting a stable wrapper for each section and
+          only conditionally rendering its *inner* content, so the parent
+          Yoga node's set of children stays structurally stable across
+          renders. If this crash resurfaces, the next place to check is
+          whether TaskItem/Tabs/ScheduleModals mount a nested FlatList of
+          their own — that would reintroduce the same churn pattern from
+          inside a component this screen doesn't control directly. */}
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={themedStyles.contentContainer}
@@ -213,18 +222,6 @@ export default function HomeScreen() {
         }
       >
         <AppHeader showGreeting />
-        {task && (
-          <InfoModal visible={!!task} onRequestClose={handleCloseTask}>
-            <MedicineTaken
-              task={task}
-              onClose={handleCloseTask}
-              onEditComplete={async (updatedSchedule) => {
-                await loadData();
-                setTask(updatedSchedule);
-              }}
-            />
-          </InfoModal>
-        )}
         <ThemeView style={themedStyles.card} backgroundColor={theme.colors.white}>
           <View style={themedStyles.cardHeader}>
             <ThemeText
@@ -240,100 +237,127 @@ export default function HomeScreen() {
           </View>
           <Tabs onSelect={(e) => setActiveSegment(e as SegmentKey)} segments={segments} />
 
-          <FlatList
-            data={todaySchedules}
-            keyExtractor={keyExtractor}
-            renderItem={renderTaskItem}
-            ListEmptyComponent={renderEmptyComponent}
-          />
-
-          {upcomingReminder?.scheduleId && (
-            <>
-              <ThemeText variant="manrope.body1Bold" style={themedStyles.reminderTitle}>
-                {`${t(LocalizedStrings.common.take)} ${upcomingReminder.name} ${t(LocalizedStrings.common.in)} ${upcomingReminder.countdownLabel} `}
-              </ThemeText>
-              <View style={themedStyles.reminderDivider} />
-              <View style={themedStyles.reminderActions}>
-                <TouchableOpacity
-                  activeOpacity={0.9}
-                  style={[
-                    themedStyles.reminderButton,
-                    themedStyles.reminderButtonPrimary,
-                    themedStyles.reminderButtonSpacing,
-                    { flex: 2 },
-                  ]}
-                  onPress={handleMarkMedicineAsTaken}
-                >
-                  <Ionicons
-                    name="checkmark-circle"
-                    size={moderateScale(18)}
-                    color={theme.colors.success.main}
-                    style={themedStyles.reminderButtonIcon}
-                  />
-                  <ThemeText variant="manrope.body1Bold" style={themedStyles.reminderButtonText}>
-                    {t(LocalizedStrings.home.reminder.markTaken)}
-                  </ThemeText>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  activeOpacity={0.9}
-                  style={[themedStyles.reminderButton, themedStyles.reminderButtonSpacing]}
-                  onPress={handleSnooze}
-                >
-                  <Ionicons
-                    name="time-outline"
-                    size={moderateScale(18)}
-                    color={theme.colors.text.secondary}
-                    style={themedStyles.reminderButtonIcon}
-                  />
-                  <ThemeText variant="manrope.body1Bold" style={themedStyles.reminderButtonText}>
-                    {t(LocalizedStrings.home.reminder.snooze)}
-                  </ThemeText>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  activeOpacity={0.9}
-                  style={themedStyles.reminderButton}
-                  onPress={() => setLogVisible(true)}
-                >
-                  <Ionicons
-                    name="document-text-outline"
-                    size={moderateScale(18)}
-                    color={theme.colors.text.secondary}
-                    style={themedStyles.reminderButtonIcon}
-                  />
-                  <ThemeText variant="manrope.body1Bold" style={themedStyles.reminderButtonText}>
-                    {t(LocalizedStrings.home.reminder.log)}
-                  </ThemeText>
-                </TouchableOpacity>
-              </View>
-            </>
-          )}
-
-          {userStreak && (userStreak?.currentStreak ?? 0) > 0 && (
-            <LinearGradient
-              colors={["#E3F4C2", "#F8F8D5"]}
-              start={{ x: 0, y: 0.5 }}
-              end={{ x: 0.5, y: 1 }}
-              style={themedStyles.streakCard}
-            >
-              <View style={themedStyles.streakContent}>
-                <ThemeText variant="manrope.body1Bold" style={themedStyles.streakTitle}>
-                  {t("schedule.youAreOnStreak", { streak: userStreak.currentStreak })}
-                </ThemeText>
-              </View>
-              <View style={themedStyles.streakEmojiBubble}>
-                <Image
-                  style={{
-                    aspectRatio: 1,
-                    height: verticalScale(40),
-                  }}
-                  source={Images.streakArm}
+          {todaySchedules?.length
+            ? todaySchedules.map((item) => (
+                <TaskItem
+                  key={item.scheduleId ?? item.id}
+                  id={item.scheduleId ?? item.id ?? ""}
+                  status={item.status ?? "Upcoming"}
+                  statusLabel={statusLabels[item.status ?? "Upcoming"]}
+                  time={item.time24 ?? ""}
+                  title={item.name ?? ""}
+                  onPress={() => handleTask(item)}
                 />
-              </View>
-            </LinearGradient>
-          )}
+              ))
+            : renderEmptyComponent()}
+
+          {/* Stable wrapper: always mounted so the card's child list doesn't
+              gain/lose a node when the reminder appears or disappears.
+              Only the inner content is conditional. */}
+          <View style={!hasUpcomingReminder && themedStyles.hiddenSection}>
+            {hasUpcomingReminder && (
+              <>
+                <ThemeText variant="manrope.body1Bold" style={themedStyles.reminderTitle}>
+                  {`${t(LocalizedStrings.common.take)} ${upcomingReminder?.name} ${t(LocalizedStrings.common.in)} ${upcomingReminder?.countdownLabel} `}
+                </ThemeText>
+                <View style={themedStyles.reminderDivider} />
+                <View style={themedStyles.reminderActions}>
+                  <TouchableOpacity
+                    activeOpacity={0.9}
+                    style={[
+                      themedStyles.reminderButton,
+                      themedStyles.reminderButtonPrimary,
+                      themedStyles.reminderButtonSpacing,
+                      { flex: 2 },
+                    ]}
+                    onPress={handleMarkMedicineAsTaken}
+                  >
+                    <Ionicons
+                      name="checkmark-circle"
+                      size={moderateScale(18)}
+                      color={theme.colors.success.main}
+                      style={themedStyles.reminderButtonIcon}
+                    />
+                    <ThemeText variant="manrope.body1Bold" style={themedStyles.reminderButtonText}>
+                      {t(LocalizedStrings.home.reminder.markTaken)}
+                    </ThemeText>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    activeOpacity={0.9}
+                    style={[themedStyles.reminderButton, themedStyles.reminderButtonSpacing]}
+                    onPress={handleSnooze}
+                  >
+                    <Ionicons
+                      name="time-outline"
+                      size={moderateScale(18)}
+                      color={theme.colors.text.secondary}
+                      style={themedStyles.reminderButtonIcon}
+                    />
+                    <ThemeText variant="manrope.body1Bold" style={themedStyles.reminderButtonText}>
+                      {t(LocalizedStrings.home.reminder.snooze)}
+                    </ThemeText>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    activeOpacity={0.9}
+                    style={themedStyles.reminderButton}
+                    onPress={() => setLogVisible(true)}
+                  >
+                    <Ionicons
+                      name="document-text-outline"
+                      size={moderateScale(18)}
+                      color={theme.colors.text.secondary}
+                      style={themedStyles.reminderButtonIcon}
+                    />
+                    <ThemeText variant="manrope.body1Bold" style={themedStyles.reminderButtonText}>
+                      {t(LocalizedStrings.home.reminder.log)}
+                    </ThemeText>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+          </View>
+
+          {/* Stable wrapper for the streak card, same rationale as above. */}
+          <View style={!hasStreak && themedStyles.hiddenSection}>
+            {hasStreak && (
+              <LinearGradient
+                colors={["#E3F4C2", "#F8F8D5"]}
+                start={{ x: 0, y: 0.5 }}
+                end={{ x: 0.5, y: 1 }}
+                style={themedStyles.streakCard}
+              >
+                <View style={themedStyles.streakContent}>
+                  <ThemeText variant="manrope.body1Bold" style={themedStyles.streakTitle}>
+                    {t("schedule.youAreOnStreak", { streak: userStreak?.currentStreak })}
+                  </ThemeText>
+                </View>
+                <View style={themedStyles.streakEmojiBubble}>
+                  <Image
+                    style={{
+                      aspectRatio: 1,
+                      height: verticalScale(40),
+                    }}
+                    source={Images.streakArm}
+                  />
+                </View>
+              </LinearGradient>
+            )}
+          </View>
         </ThemeView>
       </ScrollView>
 
+      {task && (
+        <InfoModal visible={!!task} onRequestClose={handleCloseTask}>
+          <MedicineTaken
+            task={task}
+            onClose={handleCloseTask}
+            onEditComplete={async (updatedSchedule) => {
+              await loadData();
+              setTask(updatedSchedule);
+            }}
+          />
+        </InfoModal>
+      )}
       <ScheduleModals visible={searchVisible} onClose={() => setSearchVisible(false)} />
       <AddProductLogModal
         scheduleId={upcomingReminder?.scheduleId}
@@ -374,6 +398,13 @@ const createStyles = (theme: Theme) =>
       marginTop: theme.spacing.xs,
       // fontSize: moderateScale(16),
       color: theme.colors.divider,
+    },
+    // Collapses a stable wrapper to zero size when its conditional content
+    // isn't shown, instead of unmounting the wrapper itself. Keeps the
+    // parent's Yoga child count/order stable across renders.
+    hiddenSection: {
+      height: 0,
+      overflow: "hidden",
     },
     reminderTitle: {
       lineHeight: verticalScale(50),

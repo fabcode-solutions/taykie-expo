@@ -13,6 +13,13 @@ const PREVIEW_DURATION_MS = 2500;
 // timer from a previous tap can fire just after a new tap's "on" and cut
 // the new preview off almost immediately.
 let previewOffTimer: ReturnType<typeof setTimeout> | null = null;
+// Tracks whether a preview is currently sounding on the device. Needed
+// because switching tone/volume while one is already playing must send an
+// explicit "off" for the current preview BEFORE sending the new "on" —
+// the device doesn't cleanly cut over between two back-to-back "on" F4
+// frames, so without this the previously-selected tone kept sounding
+// alongside (or instead of) the newly selected one.
+let activePreviewOn = false;
 import {
   bleService,
   TaykieDevice,
@@ -252,6 +259,7 @@ export const useBLEStore = create<BLEState & BLEAction>()(
           clearTimeout(previewOffTimer);
           previewOffTimer = null;
         }
+        activePreviewOn = false;
         set({
           connectedDevice: null,
           connectionStatus: "disconnected",
@@ -350,6 +358,13 @@ export const useBLEStore = create<BLEState & BLEAction>()(
         if (isPolling) return;
         isPolling = true;
         try {
+          // queryStatus/queryHistory each re-verify the password first
+          // internally (see BLEService.ensurePasswordVerified) — devices
+          // were seen rejecting F3/F6 with genuine (checksum-valid) "bad
+          // checksum" NACKs a few seconds into a poll cycle, consistent
+          // with the device expecting a fresh E0 before each command
+          // rather than just once at initial connect.
+          //
           // Waits for each actual reply rather than a guessed delay — F3's
           // 106-byte reply arrives across several BLE packets, and firing
           // the next command before it's fully reassembled corrupts both
@@ -442,17 +457,30 @@ export const useBLEStore = create<BLEState & BLEAction>()(
   setDeviceVolume: async (volumeLevel: number) => {
     try {
       set({ volumeLevel });
-      // Fall back to the first real tone so adjusting volume alone (before
-      // ever picking a tone) still gives audible feedback, instead of
-      // silently no-op'ing because no tone had been selected yet.
-      const toneIndex = get().toneIndex || DEFAULT_TONE_INDEX;
-      const shouldPlay = volumeLevel > 0;
+      // Nullish coalescing, not || — an explicit Mute tone (0) must stay 0,
+      // not get silently overridden with a fallback "real" tone the user
+      // never picked. Unset (null) still resolves to Mute (see
+      // DEFAULT_TONE_INDEX), which is the correct default now too.
+      const toneIndex = get().toneIndex ?? DEFAULT_TONE_INDEX;
+      // Only actually play if BOTH tone and volume are non-Mute — an
+      // explicit Mute on either axis means no sound, regardless of which
+      // one the user is currently adjusting.
+      const shouldPlay = toneIndex > 0 && volumeLevel > 0;
 
       if (previewOffTimer) clearTimeout(previewOffTimer);
+      // Stop whatever's currently sounding before starting the new preview
+      // — sending a fresh "on" without an explicit "off" first left the
+      // previous tone/volume still playing on the device.
+      if (activePreviewOn) {
+        await bleService.triggerSound(false, toneIndex, volumeLevel).catch(() => {});
+        activePreviewOn = false;
+      }
       await bleService.triggerSound(shouldPlay, toneIndex, volumeLevel);
       if (shouldPlay) {
+        activePreviewOn = true;
         previewOffTimer = setTimeout(() => {
           bleService.triggerSound(false, toneIndex, volumeLevel).catch(() => {});
+          activePreviewOn = false;
         }, PREVIEW_DURATION_MS);
       }
     } catch (error) {
@@ -463,14 +491,27 @@ export const useBLEStore = create<BLEState & BLEAction>()(
   setDeviceTone: async (toneIndex: number) => {
     try {
       set({ toneIndex });
-      const volumeLevel = get().volumeLevel || DEFAULT_VOLUME_LEVEL;
-      const shouldPlay = toneIndex > 0;
+      // Nullish coalescing, not || — an explicit Mute volume (0) must stay
+      // 0, not get silently overridden back up to an audible default. This
+      // was the direct cause of sound still playing on a tone change even
+      // when volume was set to Mute.
+      const volumeLevel = get().volumeLevel ?? DEFAULT_VOLUME_LEVEL;
+      // Only actually play if BOTH tone and volume are non-Mute.
+      const shouldPlay = toneIndex > 0 && volumeLevel > 0;
 
       if (previewOffTimer) clearTimeout(previewOffTimer);
+      // Stop whatever's currently sounding before starting the new preview
+      // — same reasoning as setDeviceVolume above.
+      if (activePreviewOn) {
+        await bleService.triggerSound(false, toneIndex, volumeLevel).catch(() => {});
+        activePreviewOn = false;
+      }
       await bleService.triggerSound(shouldPlay, toneIndex, volumeLevel);
       if (shouldPlay) {
+        activePreviewOn = true;
         previewOffTimer = setTimeout(() => {
           bleService.triggerSound(false, toneIndex, volumeLevel).catch(() => {});
+          activePreviewOn = false;
         }, PREVIEW_DURATION_MS);
       }
     } catch (error) {
@@ -581,6 +622,7 @@ export const useBLEStore = create<BLEState & BLEAction>()(
       clearTimeout(previewOffTimer);
       previewOffTimer = null;
     }
+    activePreviewOn = false;
     set(initialState);
   },
     }),

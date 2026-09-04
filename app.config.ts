@@ -152,12 +152,12 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
         // sound, not just played locally via expo-av. Requires a native
         // rebuild to take effect — Metro/Fast Refresh can't pick this up.
         sounds: [
-          "./assets/audio/Taykie.wav",
-          "./assets/audio/Verve.wav",
-          "./assets/audio/Echo.wav",
-          "./assets/audio/Pulse.wav",
-          "./assets/audio/Nudge.wav",
-          "./assets/audio/Shift.wav",
+          "./assets/audio/taykie.wav",
+          "./assets/audio/verve.wav",
+          "./assets/audio/echo.wav",
+          "./assets/audio/pulse.wav",
+          "./assets/audio/nudge.wav",
+          "./assets/audio/shift.wav",
         ],
       },
     ],

@@ -139,7 +139,19 @@ export const useScheduleStore = create<State & Actions>()(
         set({ isLoading: true, error: null });
         try {
           const result = await getTodaySchedules(period);
-          set({ isLoading: false, todaySchedules: result.data });
+          // This endpoint returns a lighter shape than the full Schedule
+          // type — scheduleId instead of id, time24 instead of scheduleTime,
+          // and a capitalized status ("Missed") instead of the lowercase
+          // TaskStatus union the rest of the app expects. Normalizing once
+          // here (rather than in every consumer) keeps HomeScreen/TaskItem/
+          // MedicineTaken working against the Schedule field names as-is.
+          const normalized = (result.data as unknown as Record<string, any>[]).map((item) => ({
+            ...item,
+            id: item.id ?? item.scheduleId,
+            scheduleTime: item.scheduleTime ?? item.time24 ?? item.time,
+            status: typeof item.status === "string" ? item.status.toLowerCase() : item.status,
+          })) as Schedule[];
+          set({ isLoading: false, todaySchedules: normalized });
         } catch (error) {
           const message = getErrorMessage(error);
           set({

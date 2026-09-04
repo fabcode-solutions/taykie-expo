@@ -46,10 +46,15 @@ const MedicineTaken = ({ task, onClose, onEditComplete }: MedicineTakenProp) => 
   const dosageCount = Number(medication?.dosage?.split(" ")[0]) || 1;
   const strengthCount = Number(medication?.strength?.split(" ")[0]) || 500;
 
+  // The /schedules/today endpoint only returns scheduleId, not id — resolve
+  // whichever is present once, since delete/mark-taken/update below all
+  // need it.
+  const resolvedTaskId = task.scheduleId ?? task.id ?? "";
+
   useEffect(() => {
     setMedication({
       id: task.product?.id ?? task.productId,
-      userId: task.userId,
+      userId: task.userId ?? "",
       type: task.product?.type ?? "private",
 
       name: task.product?.name ?? task.name,
@@ -88,7 +93,7 @@ const MedicineTaken = ({ task, onClose, onEditComplete }: MedicineTakenProp) => 
 
   const handleDeleteSchedule = useCallback(async () => {
     try {
-      const message = await deleteSchedule(task.id);
+      const message = await deleteSchedule(resolvedTaskId);
       alert.show(AlertPresets.success(t(LocalizedStrings.common.success), message));
       onClose();
     } catch (error) {
@@ -102,7 +107,7 @@ const MedicineTaken = ({ task, onClose, onEditComplete }: MedicineTakenProp) => 
 
   const markScheduleAsTaken = useCallback(async () => {
     try {
-      await markMedicineAsTaken(task.id);
+      await markMedicineAsTaken(resolvedTaskId);
       onClose();
     } catch (error) {
       const message = getErrorMessage(error);
@@ -161,7 +166,7 @@ const MedicineTaken = ({ task, onClose, onEditComplete }: MedicineTakenProp) => 
       };
 
       try {
-        const result = await updateUserSchedule(task.id, payload);
+        const result = await updateUserSchedule(resolvedTaskId, payload);
 
         // ✅ THIS is the key fix
         const updatedSchedule = result.data;
@@ -178,7 +183,7 @@ const MedicineTaken = ({ task, onClose, onEditComplete }: MedicineTakenProp) => 
         alert.show(AlertPresets.error(t(LocalizedStrings.common.error), error.message));
       }
     },
-    [medication, task.id],
+    [medication, resolvedTaskId],
   );
 
   const scheduleFor = useMemo(() => {
