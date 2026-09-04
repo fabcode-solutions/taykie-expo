@@ -20,6 +20,93 @@ let previewOffTimer: ReturnType<typeof setTimeout> | null = null;
 // frames, so without this the previously-selected tone kept sounding
 // alongside (or instead of) the newly selected one.
 let activePreviewOn = false;
+// Serializes every mutation of activePreviewOn/previewOffTimer through one
+// queue. setDeviceVolume and setDeviceTone each read activePreviewOn to
+// decide whether to send an "off" before their "on" — but that check ran
+// immediately on tap, before awaiting anything, so two taps close together
+// (tone then volume, or two tone taps) could both see activePreviewOn still
+// false and both skip the "off", sending back-to-back "on" F4 frames with
+// no "off" between them. The device doesn't cleanly cut over between two
+// "on" frames (see the comment below), so the second tap's tone silently
+// queued up behind the first instead of interrupting it — audibly, the new
+// tone only started once the first one finished playing on its own.
+// Routing every preview command through this queue guarantees a later
+// tap's "off" always runs after an earlier tap's "on" has fully landed.
+let previewCommandQueue: Promise<void> = Promise.resolve();
+
+function queuePreviewCommand(fn: () => Promise<void>): Promise<void> {
+  const run = previewCommandQueue.then(fn);
+  previewCommandQueue = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
+}
+
+// Stops whatever's currently previewing (if anything) before starting the
+// new tone/volume, then arms the auto-off timer — shared by setDeviceVolume
+// and setDeviceTone since they trigger the same F4 SoundControl frame.
+async function runSoundPreview(soundType: number, volumeLevel: number, shouldPlay: boolean) {
+  if (previewOffTimer) {
+    clearTimeout(previewOffTimer);
+    previewOffTimer = null;
+  }
+  if (activePreviewOn) {
+    await bleService.triggerSound(false, soundType, volumeLevel).catch(() => {});
+    activePreviewOn = false;
+  }
+  await bleService.triggerSound(shouldPlay, soundType, volumeLevel);
+  if (shouldPlay) {
+    activePreviewOn = true;
+    previewOffTimer = setTimeout(() => {
+      queuePreviewCommand(async () => {
+        // A newer tap may have already turned this preview off (or
+        // replaced it) by the time this timer fires — nothing to do.
+        if (!activePreviewOn) return;
+        await bleService.triggerSound(false, soundType, volumeLevel).catch(() => {});
+        activePreviewOn = false;
+        previewOffTimer = null;
+      });
+    }, PREVIEW_DURATION_MS);
+  }
+}
+
+// Tracks a pending auto-reconnect attempt after an unexpected disconnect
+// (see bleService.onDeviceDisconnected below) so a second unexpected drop —
+// or a manual reconnect — cancels any earlier attempt still in flight.
+let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+// Backoff between auto-reconnect attempts after an unexpected drop (e.g. a
+// lid-open triggering a brief power glitch on the BLE radio — see the F6/E0
+// disconnect investigation). Short and few: this is for a brief physical
+// glitch self-healing, not for chasing a device that's genuinely out of
+// range or powered off.
+const RECONNECT_DELAYS_MS = [1000, 3000, 6000];
+
+function attemptReconnect(deviceId: string, attempt: number) {
+  reconnectTimer = setTimeout(async () => {
+    try {
+      await useBLEStore.getState().connectToDevice(deviceId);
+      reconnectTimer = null;
+    } catch (error) {
+      const isLastAttempt = attempt + 1 >= RECONNECT_DELAYS_MS.length;
+      console.warn(
+        `Auto-reconnect attempt ${attempt + 1}/${RECONNECT_DELAYS_MS.length} failed:`,
+        error,
+      );
+      if (isLastAttempt) {
+        reconnectTimer = null;
+        useBLEStore.setState({ connectedDevice: null, connectionStatus: "disconnected" });
+        return;
+      }
+      // connectToDevice's own failure path already set connectionStatus
+      // back to "disconnected" — restore "connecting" so the UI doesn't
+      // flicker between attempts.
+      useBLEStore.setState({ connectionStatus: "connecting" });
+      attemptReconnect(deviceId, attempt + 1);
+    }
+  }, RECONNECT_DELAYS_MS[attempt]);
+}
+
 import {
   bleService,
   TaykieDevice,
@@ -249,8 +336,12 @@ export const useBLEStore = create<BLEState & BLEAction>()(
 
       // Fires on both a user-initiated disconnect and an unexpected link
       // drop — either way the last-known device data is now stale, so
-      // clear it rather than leaving the UI showing a frozen snapshot.
-      bleService.onDeviceDisconnected = () => {
+      // clear it rather than leaving the UI showing a frozen snapshot. An
+      // unexpected drop (wasIntentional false — out of range, a lid-open
+      // power glitch, etc.) additionally kicks off a short auto-reconnect
+      // attempt rather than dumping the user back to "disconnected" and
+      // requiring a manual re-pair for what's often a brief glitch.
+      bleService.onDeviceDisconnected = (wasIntentional) => {
         if (devicePollInterval) {
           clearInterval(devicePollInterval);
           devicePollInterval = null;
@@ -260,9 +351,20 @@ export const useBLEStore = create<BLEState & BLEAction>()(
           previewOffTimer = null;
         }
         activePreviewOn = false;
+        if (reconnectTimer) {
+          clearTimeout(reconnectTimer);
+          reconnectTimer = null;
+        }
+
+        const lostDevice = get().connectedDevice;
+        const shouldReconnect = !wasIntentional && !!lostDevice;
+
         set({
-          connectedDevice: null,
-          connectionStatus: "disconnected",
+          // Keep the device id/name around while we're about to retry so
+          // the UI can still say which device it's reconnecting to; a
+          // failed final attempt (or an intentional disconnect) clears it.
+          connectedDevice: shouldReconnect ? lostDevice : null,
+          connectionStatus: shouldReconnect ? "connecting" : "disconnected",
           deviceData: null,
           batteryLevel: null,
           isCharging: false,
@@ -279,6 +381,10 @@ export const useBLEStore = create<BLEState & BLEAction>()(
           historyProgress: 0,
           syncSessionId: null,
         });
+
+        if (shouldReconnect) {
+          attemptReconnect(lostDevice.id, 0);
+        }
       };
     } catch (error) {
       console.error("BLE init error:", error);
@@ -402,6 +508,14 @@ export const useBLEStore = create<BLEState & BLEAction>()(
   // ----------------------
   disconnectDevice: async () => {
     try {
+      // A reconnect attempt may currently be scheduled (mid-backoff, with
+      // no live native connection for bleService.disconnect() to tear
+      // down) — clear it explicitly so it can't fire later and silently
+      // undo this manual disconnect.
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+      }
       await bleService.disconnect();
       set({
         connectedDevice: null,
@@ -416,6 +530,10 @@ export const useBLEStore = create<BLEState & BLEAction>()(
     try {
       const deviceId = get().connectedDevice?.id;
       if (deviceId) {
+        if (reconnectTimer) {
+          clearTimeout(reconnectTimer);
+          reconnectTimer = null;
+        }
         await unpairDevice(deviceId); // Delete from backend
         await bleService.disconnect(); // Disconnect Bluetooth
         set({
@@ -467,22 +585,11 @@ export const useBLEStore = create<BLEState & BLEAction>()(
       // one the user is currently adjusting.
       const shouldPlay = toneIndex > 0 && volumeLevel > 0;
 
-      if (previewOffTimer) clearTimeout(previewOffTimer);
-      // Stop whatever's currently sounding before starting the new preview
-      // — sending a fresh "on" without an explicit "off" first left the
-      // previous tone/volume still playing on the device.
-      if (activePreviewOn) {
-        await bleService.triggerSound(false, toneIndex, volumeLevel).catch(() => {});
-        activePreviewOn = false;
-      }
-      await bleService.triggerSound(shouldPlay, toneIndex, volumeLevel);
-      if (shouldPlay) {
-        activePreviewOn = true;
-        previewOffTimer = setTimeout(() => {
-          bleService.triggerSound(false, toneIndex, volumeLevel).catch(() => {});
-          activePreviewOn = false;
-        }, PREVIEW_DURATION_MS);
-      }
+      // Queued (not awaited directly against activePreviewOn here) so a
+      // tap that lands while an earlier tap's own preview command is still
+      // in flight always sees that command's final state instead of racing
+      // it — see runSoundPreview's comment.
+      await queuePreviewCommand(() => runSoundPreview(toneIndex, volumeLevel, shouldPlay));
     } catch (error) {
       console.error("Failed to set volume:", error);
     }
@@ -499,21 +606,8 @@ export const useBLEStore = create<BLEState & BLEAction>()(
       // Only actually play if BOTH tone and volume are non-Mute.
       const shouldPlay = toneIndex > 0 && volumeLevel > 0;
 
-      if (previewOffTimer) clearTimeout(previewOffTimer);
-      // Stop whatever's currently sounding before starting the new preview
-      // — same reasoning as setDeviceVolume above.
-      if (activePreviewOn) {
-        await bleService.triggerSound(false, toneIndex, volumeLevel).catch(() => {});
-        activePreviewOn = false;
-      }
-      await bleService.triggerSound(shouldPlay, toneIndex, volumeLevel);
-      if (shouldPlay) {
-        activePreviewOn = true;
-        previewOffTimer = setTimeout(() => {
-          bleService.triggerSound(false, toneIndex, volumeLevel).catch(() => {});
-          activePreviewOn = false;
-        }, PREVIEW_DURATION_MS);
-      }
+      // Queued — see setDeviceVolume above for why.
+      await queuePreviewCommand(() => runSoundPreview(toneIndex, volumeLevel, shouldPlay));
     } catch (error) {
       console.error("Failed to set tone:", error);
     }
@@ -621,6 +715,10 @@ export const useBLEStore = create<BLEState & BLEAction>()(
     if (previewOffTimer) {
       clearTimeout(previewOffTimer);
       previewOffTimer = null;
+    }
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
     }
     activePreviewOn = false;
     set(initialState);

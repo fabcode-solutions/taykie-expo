@@ -19,10 +19,23 @@ export function isDosageReminder(remoteMessage: any): boolean {
 // to the settings picker's brief preview).
 export async function triggerDeviceSoundForReminder() {
   const { connectionStatus, toneIndex, volumeLevel } = useBLEStore.getState();
-  if (connectionStatus !== "connected") return;
+  // Logged unconditionally (not just on the early-return branches) so a
+  // background-handler invocation that silently no-ops is still visible in
+  // device logs — a call that never reaches this function at all (e.g. FCM
+  // never invoking the JS background handler for a payload that also
+  // carries a top-level "notification" field) is a different bug from one
+  // that reaches here and bails.
+  console.log(`🔊 triggerDeviceSoundForReminder called — connectionStatus=${connectionStatus}, toneIndex=${toneIndex}`);
+  if (connectionStatus !== "connected") {
+    console.warn("🔊 Skipped: BLE not connected in this JS context.");
+    return;
+  }
 
   const resolvedTone = toneIndex ?? DEFAULT_TONE_INDEX;
-  if (resolvedTone <= 0) return; // Explicit Mute — respected, not overridden.
+  if (resolvedTone <= 0) {
+    console.warn("🔊 Skipped: tone is explicitly Mute.");
+    return;
+  }
 
   const resolvedVolume = volumeLevel ?? DEFAULT_VOLUME_LEVEL;
   try {

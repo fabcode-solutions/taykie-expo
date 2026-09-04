@@ -31,6 +31,7 @@ import {
 } from "@/stores/notificationStore";
 import { InAppBanner } from "@/components/inAppBanner";
 import { setupNotificationChannels } from "@/hooks/usePushNotifications";
+import { isDosageReminder, triggerDeviceSoundForReminder } from "@/utils/reminderSound";
 import { useBLEStore } from "@/stores/bleStore";
 import { Platform } from "react-native";
 
@@ -61,8 +62,26 @@ Notifications.setNotificationHandler({
 
 try {
   messaging().setBackgroundMessageHandler(async (remoteMessage) => {
-    console.log("🌙 Background message:", remoteMessage);
+    // If this log never shows up in device logs while the app is
+    // backgrounded, the JS background handler isn't being invoked at all —
+    // the classic cause is the push payload carrying a top-level
+    // "notification" field alongside "data": Android/iOS auto-display that
+    // via the system tray while backgrounded and never call into JS, so
+    // triggerDeviceSoundForReminder() below is unreachable regardless of
+    // BLE state. Fix in that case is on the backend: send dosage_reminder
+    // pushes as data-only (no top-level "notification" key).
+    console.log("🌙 Background message:", JSON.stringify(remoteMessage));
     await useNotificationStore.getState().fetchNotifications();
+
+    // Mirrors showLocalNotification's foreground behavior — without this a
+    // dosage reminder that arrives while the app is backgrounded/killed
+    // never reaches the physical device's speaker, only the system
+    // notification does.
+    if (isDosageReminder(remoteMessage)) {
+      await triggerDeviceSoundForReminder();
+    } else {
+      console.log("🌙 Not a dosage reminder — data.type =", remoteMessage?.data?.type);
+    }
   });
 } catch (e) {
   console.warn("Firebase messaging not available — rebuild the dev client", e);

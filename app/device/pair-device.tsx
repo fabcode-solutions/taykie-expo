@@ -7,19 +7,28 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ThemeText } from "@/components";
 import { useTranslation } from "react-i18next";
 import { fontFamily, Theme, useTheme } from "@/theme";
 import { useRouter } from "expo-router";
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import IconBackArrow from "@/components/icons/IconBackArrow";
 import { Button } from "@/components/ui/button";
 import Svg, { Path } from "react-native-svg";
 import { useAuthStore } from "@/stores/authStore";
 import { moderateScale, scale, verticalScale } from "@/utils/scale";
 import { LocalizedStrings } from "@/i18n/LocalizedStrings";
+import {
+  useBLEStore,
+  useBLEScanning,
+  useBLEConnection,
+  useBLEPermissions,
+} from "@/stores/bleStore";
+import { AlertPresets } from "@/utils/alert";
+import { useAlert } from "@/provider/AlertProvider";
 
 export default function PairDeviceScreen() {
   const { t } = useTranslation();
@@ -27,6 +36,41 @@ export default function PairDeviceScreen() {
   const router = useRouter();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const user = useAuthStore((state) => state.user);
+  const alert = useAlert();
+
+  const { isScanning, scannedDevices } = useBLEScanning();
+  const { connectionStatus } = useBLEConnection();
+  const { hasPermissions, isBluetoothEnabled } = useBLEPermissions();
+  const { initBLE, scanDevices, stopScan, connectToDevice } = useBLEStore();
+  const [isConnecting, setIsConnecting] = useState(false);
+
+  // The BLE scan itself already only matches on names containing
+  // "TayKie"/"tk-" (see BLEService.startScan), so the first result is the
+  // one we care about — no need for a picker here.
+  const foundDevice = scannedDevices[0] ?? null;
+
+  useEffect(() => {
+    initBLE();
+    return () => {
+      stopScan();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!hasPermissions) return;
+    if (!isBluetoothEnabled) {
+      alert.show(
+        AlertPresets.error(
+          t(LocalizedStrings.device.bluetooth.alert),
+          t(LocalizedStrings.device.bluetooth.alertMessage),
+        ),
+      );
+      return;
+    }
+    scanDevices().catch((error: any) => {
+      alert.show(AlertPresets.error(t(LocalizedStrings.common.error), error.message));
+    });
+  }, [hasPermissions, isBluetoothEnabled]);
 
   const displayName = React.useMemo(() => {
     if (!user) return null;
@@ -39,6 +83,27 @@ export default function PairDeviceScreen() {
   const handleBack = React.useCallback(() => {
     router.back();
   }, [router]);
+
+  const handleConnect = React.useCallback(async () => {
+    if (!foundDevice || isConnecting || connectionStatus !== "disconnected") return;
+    setIsConnecting(true);
+    try {
+      await connectToDevice(foundDevice.id);
+      router.back();
+    } catch (error: any) {
+      alert.show(AlertPresets.error(t(LocalizedStrings.common.error), error.message));
+    } finally {
+      setIsConnecting(false);
+    }
+  }, [foundDevice, isConnecting, connectionStatus, connectToDevice, router]);
+
+  const handleRetryScan = React.useCallback(async () => {
+    try {
+      await scanDevices();
+    } catch (error: any) {
+      alert.show(AlertPresets.error(t(LocalizedStrings.common.error), error.message));
+    }
+  }, [scanDevices]);
 
   return (
     <KeyboardAvoidingView
@@ -80,15 +145,38 @@ export default function PairDeviceScreen() {
               </View>
             </View>
           </View>
-          <Text style={styles.searching}>Searching for nearby devices...</Text>
-          <Text style={styles.selectedDevice}>PillBox_1015</Text>
-          <View style={{ marginTop: verticalScale(30) }}>
-            <Button
-              title={"Connect"}
-              onPress={() => router.push("/device/connected-device")}
-              textStyle={{ fontSize: moderateScale(20) }}
-              rightIcon={null}
+          <Text style={styles.searching}>
+            {isScanning
+              ? "Searching for nearby devices..."
+              : foundDevice
+                ? "Device found"
+                : "No Taykie device found nearby"}
+          </Text>
+          {isScanning && !foundDevice ? (
+            <ActivityIndicator
+              style={{ marginTop: verticalScale(20) }}
+              color={theme.colors.primary.main}
             />
+          ) : (
+            <Text style={styles.selectedDevice}>{foundDevice?.name || "--"}</Text>
+          )}
+          <View style={{ marginTop: verticalScale(30) }}>
+            {!isScanning && !foundDevice ? (
+              <Button
+                title="Try Again"
+                onPress={handleRetryScan}
+                textStyle={{ fontSize: moderateScale(20) }}
+                rightIcon={null}
+              />
+            ) : (
+              <Button
+                title={isConnecting ? "Connecting..." : "Connect"}
+                onPress={handleConnect}
+                disabled={!foundDevice || isConnecting}
+                textStyle={{ fontSize: moderateScale(20) }}
+                rightIcon={null}
+              />
+            )}
           </View>
           <View style={styles.manuallyWrapper}>
             <Text style={styles.manuallyWrapperText}>

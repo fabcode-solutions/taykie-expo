@@ -35,7 +35,7 @@ import { useNotificationStore } from "@/stores/notificationStore";
 import { AlertPresets } from "@/utils/alert";
 import { useAlert } from "@/provider/AlertProvider";
 
-type SegmentKey = "morning" | "afternoon" | "evening";
+type SegmentKey = "morning" | "afternoon" | "evening" | "night";
 
 export type Task = {
   id: string;
@@ -49,6 +49,7 @@ const SEGMENT_DEFAULTS: Record<SegmentKey, string> = {
   morning: "Morning",
   afternoon: "Afternoon",
   evening: "Evening",
+  night: "Night",
 };
 
 export default function HomeScreen() {
@@ -217,9 +218,9 @@ export default function HomeScreen() {
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={themedStyles.contentContainer}
-        refreshControl={
-          <RefreshControl onRefresh={loadData} refreshing={isLoading || loadingProducts} />
-        }
+        // refreshControl={
+        //   <RefreshControl onRefresh={loadData} refreshing={loadingProducts} />
+        // }
       >
         <AppHeader showGreeting />
         <ThemeView style={themedStyles.card} backgroundColor={theme.colors.white}>

@@ -13,6 +13,9 @@ export const truncateWords = (text: string, limit: number) => {
   return words.length > limit ? `${words.slice(0, limit).join(" ")}...` : text;
 };
 
+export const capitalizeText = (str: string) => str.replace(/\b\w/g, (char) => char.toUpperCase());
+
+
 /**
  * Formats a date string into a readable format
  */

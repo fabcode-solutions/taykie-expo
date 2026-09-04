@@ -39,9 +39,18 @@ class BLEService {
   public onHistoryReceived?: (records: HistoryRecord[]) => void;
   public onPasswordVerified?: (success: boolean) => void;
   // Fires for BOTH a user-initiated disconnect() and an unexpected link
-  // drop (out of range, device powered off, etc.) — the store uses this as
-  // the single place to clear stale device data (battery, schedules, ...).
-  public onDeviceDisconnected?: () => void;
+  // drop (out of range, device powered off, a lid-open triggering a brief
+  // power glitch on the radio, etc.) — the store uses this as the single
+  // place to clear stale device data (battery, schedules, ...). The
+  // wasIntentional flag lets the store tell the two apart: only an
+  // unexpected drop should trigger an automatic reconnect attempt.
+  public onDeviceDisconnected?: (wasIntentional: boolean) => void;
+
+  // Set right before we ourselves tear down the connection (disconnect() /
+  // connectToDevice()'s own disconnect-then-reconnect) so the native
+  // onDisconnected callback below can tell a deliberate teardown apart from
+  // the device dropping the link on its own.
+  private isIntentionalDisconnect = false;
 
   constructor() {
     this.manager = new BleManager();
@@ -226,7 +235,9 @@ class BLEService {
     );
 
     device.onDisconnected(() => {
-      console.log("🔌 Device disconnected.");
+      const wasIntentional = this.isIntentionalDisconnect;
+      this.isIntentionalDisconnect = false;
+      console.log(`🔌 Device disconnected. (${wasIntentional ? "intentional" : "unexpected"})`);
       this.connectedDevice = null;
       if (this.notifySubscription) {
         this.notifySubscription.remove();
@@ -241,7 +252,7 @@ class BLEService {
         clearTimeout(this.lightOffTimer);
         this.lightOffTimer = null;
       }
-      if (this.onDeviceDisconnected) this.onDeviceDisconnected();
+      if (this.onDeviceDisconnected) this.onDeviceDisconnected(wasIntentional);
     });
 
     // Per the protocol spec, password verification (E0) must be the first
@@ -279,6 +290,7 @@ class BLEService {
 
   async disconnect() {
     if (this.connectedDevice) {
+      this.isIntentionalDisconnect = true;
       await this.manager.cancelDeviceConnection(this.connectedDevice.id);
       this.connectedDevice = null;
     }
@@ -576,19 +588,44 @@ class BLEService {
   private soundOffTimer: ReturnType<typeof setTimeout> | null = null;
   private lightOffTimer: ReturnType<typeof setTimeout> | null = null;
 
+  // Serializes each command's FULL request/reply round trip (E0 handshake,
+  // then the command write, then that command's own reply) end-to-end —
+  // unlike writeQueue, which only serializes the raw write call itself.
+  // Without this, two independently-triggered calls (e.g. tapping the Tone
+  // picker and the Volume picker in quick succession) could each start
+  // their own ensurePasswordVerified() before the other's E0 reply had
+  // arrived. Confirmed in device logs: two back-to-back E0 writes going out
+  // before either got a reply, both timing out with zero bytes back, and
+  // the SoundControl command that was actually supposed to sound the
+  // device either never got sent cleanly or was ignored by the (now
+  // desynced) firmware — the device stayed silent.
+  private commandLock: Promise<void> = Promise.resolve();
+
+  private withCommandLock<T>(fn: () => Promise<T>): Promise<T> {
+    const run = this.commandLock.then(fn);
+    this.commandLock = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
+
   // onOff true starts the sound with the given type/volume — the device
   // will NOT auto-stop it; onOff false is the only way to silence it.
   async triggerSound(onOff: boolean, soundType: number, volumeLevel: number) {
-    await this.ensurePasswordVerified();
-    // UI-facing 0-5 (or up to 0x0F) volume steps map onto the documented
-    // 0xE0-0xEF byte range.
-    const volumeByte = 0xe0 + Math.min(0x0f, Math.max(0, volumeLevel));
-    const frame = TaykieProtocol.buildFrame(CmdType.SoundControl, [
-      onOff ? 0x01 : 0x00,
-      soundType,
-      volumeByte,
-    ]);
-    await this.writeCommand(frame, "F4 SoundControl");
+    await this.withCommandLock(async () => {
+      await this.ensurePasswordVerified();
+      // UI-facing 0-5 (or up to 0x0F) volume steps map onto the documented
+      // 0xE0-0xEF byte range.
+      const volumeByte = 0xe0 + Math.min(0x0f, Math.max(0, volumeLevel));
+      const frame = TaykieProtocol.buildFrame(CmdType.SoundControl, [
+        onOff ? 0x01 : 0x00,
+        soundType,
+        volumeByte,
+      ]);
+      await this.writeCommand(frame, "F4 SoundControl");
+      await this.waitForReply(CmdType.SoundControl);
+    });
 
     if (this.soundOffTimer) {
       clearTimeout(this.soundOffTimer);
@@ -606,13 +643,16 @@ class BLEService {
   // onOff true starts the light with the given type — the device will NOT
   // auto-stop it; onOff false is the only way to turn it off.
   async triggerLight(onOff: boolean, lightType: number) {
-    await this.ensurePasswordVerified();
-    const frame = TaykieProtocol.buildFrame(CmdType.LightControl, [
-      onOff ? 0x01 : 0x00,
-      lightType,
-      0x00,
-    ]);
-    await this.writeCommand(frame, "F5 LightControl");
+    await this.withCommandLock(async () => {
+      await this.ensurePasswordVerified();
+      const frame = TaykieProtocol.buildFrame(CmdType.LightControl, [
+        onOff ? 0x01 : 0x00,
+        lightType,
+        0x00,
+      ]);
+      await this.writeCommand(frame, "F5 LightControl");
+      await this.waitForReply(CmdType.LightControl);
+    });
 
     if (this.lightOffTimer) {
       clearTimeout(this.lightOffTimer);

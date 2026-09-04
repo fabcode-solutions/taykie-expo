@@ -23,7 +23,7 @@ export const timeMap: Record<string, string> = {
   morning: "06:00",
   afternoon: "12:00",
   evening: "17:00",
-  night: "01:10"
+  night: "03:20"
 };
 
 const ScheduleModals = ({

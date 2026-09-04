@@ -29,6 +29,7 @@ import { useAlert } from "@/provider/AlertProvider";
 import { Button } from "@/components/ui/button";
 import Switch from "@/components/ui/Switch";
 import { TONE_OPTIONS, DEFAULT_TONE_INDEX, DEFAULT_VOLUME_LEVEL } from "@/utils/toneAudio";
+import { capitalizeText } from "@/utils/formatter";
 
 type DeviceActionKey = "find" | "history" | "rename" | "dismiss";
 interface DeviceAction {
@@ -465,7 +466,7 @@ export default function DeviceScreen() {
                         toneIndex === tone.value ? themedStyles.textWhite : themedStyles.textDark
                       }
                     >
-                      {tone.label}
+                      {capitalizeText(tone.label)}
                     </ThemeText>
                   </TouchableOpacity>
                 ))}
@@ -718,7 +719,7 @@ export default function DeviceScreen() {
           </ThemeView>
 
           {/* SCANNING OVERVIEW (Only when disconnected) */}
-          {connectionStatus !== "connected" && (
+          {/* {connectionStatus !== "connected" && (
             <ThemeView style={themedStyles.card} backgroundColor={theme.colors.white} rounded="lg">
               <ThemeText variant="manrope.h4" style={themedStyles.cardTitle}>
                 {t(LocalizedStrings.device.avlDevices)}
@@ -824,7 +825,7 @@ export default function DeviceScreen() {
                 </>
               )}
             </ThemeView>
-          )}
+          )} */}
         </ScrollView>
       </SafeAreaScreen>
     </>
