@@ -11,6 +11,25 @@ import { useOnboardingStore } from "@/stores/onboardingStore";
 import OnboardingLayout from "@/components/onboarding/OnboardingLayout";
 import { t } from "i18next";
 import { LocalizedStrings } from "@/i18n/LocalizedStrings";
+import { getDeviceTimezone } from "@/utils/timezone";
+
+// The backend accepts any valid IANA timezone, not just these — this list
+// is just a convenience picker for the app's target market (Australia).
+// If the device's auto-detected zone isn't one of these (e.g. a tester on a
+// non-AU phone), it's still preserved and sent as-is; see selectedTimezoneName.
+export const TIMEZONES = [
+  { code: "Australia/Sydney", name: "Sydney (NSW / ACT / VIC / TAS)" },
+  { code: "Australia/Melbourne", name: "Melbourne (VIC)" },
+  { code: "Australia/Brisbane", name: "Brisbane (QLD)" },
+  { code: "Australia/Adelaide", name: "Adelaide (SA)" },
+  { code: "Australia/Darwin", name: "Darwin (NT)" },
+  { code: "Australia/Perth", name: "Perth (WA)" },
+  { code: "Australia/Hobart", name: "Hobart (TAS)" },
+  { code: "Australia/Broken_Hill", name: "Broken Hill (Far West NSW)" },
+  { code: "Australia/Eucla", name: "Eucla (WA border)" },
+  { code: "Australia/Lindeman", name: "Lindeman (Whitsundays, QLD)" },
+  { code: "Australia/Lord_Howe", name: "Lord Howe Island" },
+];
 
 export const COUNTRIES = [
   { code: "AU", name: "Australia", languages: [{ code: "en", name: "English" }] },
@@ -62,7 +81,9 @@ export default function CountryLanguage() {
     totalSteps,
     user_country,
     user_language,
+    user_timezone,
     setCountryLanguage,
+    setTimezone,
     prevStep,
     setStep,
   } = useOnboardingStore();
@@ -76,9 +97,16 @@ export default function CountryLanguage() {
   const [selectedLanguage, setSelectedLanguage] = React.useState(
     user_language || UNIQUE_LANGUAGES[0].code,
   );
+  // Falls back to the device's own detected zone (not just Sydney) so a
+  // tester/user outside Australia still sees their real zone pre-selected
+  // rather than a wrong default.
+  const [selectedTimezone, setSelectedTimezone] = React.useState(
+    user_timezone ||  TIMEZONES[0].code, // ||getDeviceTimezone() 
+  );
 
   const [countryOpen, setCountryOpen] = React.useState(false);
   const [languageOpen, setLanguageOpen] = React.useState(false);
+  const [timezoneOpen, setTimezoneOpen] = React.useState(false);
 
   const selectedCountryName = React.useMemo(
     () =>
@@ -94,6 +122,14 @@ export default function CountryLanguage() {
     [selectedLanguage],
   );
 
+  // Any valid IANA zone is accepted by the backend, so a detected zone
+  // outside our AU picker list (e.g. a non-AU tester) still shows its real
+  // name rather than falling back to a generic placeholder.
+  const selectedTimezoneName = React.useMemo(
+    () => TIMEZONES.find((z) => z.code === selectedTimezone)?.name || selectedTimezone,
+    [selectedTimezone],
+  );
+
   useEffect(() => {
     const defaultLang = getDefaultLanguage(selectedCountry);
     setSelectedLanguage(defaultLang);
@@ -101,6 +137,7 @@ export default function CountryLanguage() {
 
   const handleContinue = () => {
     setCountryLanguage(selectedCountry, selectedLanguage);
+    setTimezone(selectedTimezone);
     setStep(2);
     router.push("/(onboarding)/pair-device");
   };
@@ -256,6 +293,72 @@ export default function CountryLanguage() {
                   {l.name}
                 </ThemeText>
                 {selectedLanguage === l.code && (
+                  <Ionicons
+                    name="checkmark"
+                    size={moderateScale(16)}
+                    color={theme.colors.primary.main}
+                  />
+                )}
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      )}
+
+      {/* Timezone Selector */}
+      <ThemeText
+        variant="manrope.body2Bold"
+        style={[styles.label, { marginTop: verticalScale(16) }]}
+      >
+        {t(LocalizedStrings.onboarding.timezone)}
+      </ThemeText>
+      <TouchableOpacity
+        style={[
+          styles.selector,
+          { borderColor: theme.colors.border, backgroundColor: theme.colors.inputBackground },
+        ]}
+        onPress={() => {
+          setTimezoneOpen(!timezoneOpen);
+          setCountryOpen(false);
+          setLanguageOpen(false);
+        }}
+      >
+        <ThemeText variant="manrope.body1" style={{ color: theme.colors.text.primary }}>
+          {selectedTimezoneName}
+        </ThemeText>
+        <Ionicons
+          name={timezoneOpen ? "chevron-up" : "chevron-down"}
+          size={moderateScale(18)}
+          color={theme.colors.text.secondary2}
+        />
+      </TouchableOpacity>
+
+      {timezoneOpen && (
+        <View
+          style={[
+            styles.dropdown,
+            { backgroundColor: theme.colors.background.paper, borderColor: theme.colors.border },
+          ]}
+        >
+          <ScrollView style={styles.dropdownScroll} nestedScrollEnabled>
+            {TIMEZONES.map((z) => (
+              <TouchableOpacity
+                key={z.code}
+                style={[
+                  styles.dropdownItem,
+                  selectedTimezone === z.code && {
+                    backgroundColor: theme.colors.primary.main,
+                  },
+                ]}
+                onPress={() => {
+                  setSelectedTimezone(z.code);
+                  setTimezoneOpen(false);
+                }}
+              >
+                <ThemeText variant="manrope.body1" style={{ color: theme.colors.text.primary }}>
+                  {z.name}
+                </ThemeText>
+                {selectedTimezone === z.code && (
                   <Ionicons
                     name="checkmark"
                     size={moderateScale(16)}

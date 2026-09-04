@@ -778,6 +778,7 @@ export const LocalizedStrings = {
     taykie_is_ready: "onboarding.taykie_is_ready",
     select_language: "onboarding.select_language",
     select_country: "onboarding.select_country",
+    timezone: "onboarding.timezone",
     set_up_taykie_location: "onboarding.set_up_taykie_location",
     your_location: "onboarding.your_location",
     searching: "onboarding.searching",

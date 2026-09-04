@@ -769,6 +769,7 @@
     },
     "select_language": "Select Language",
     "select_country": "Select Country",
+    "timezone": "Timezone",
     "set_up_taykie_location": "Before we get started, let's make sure Taykie is set up for your location.",
     "your_location": "Your Location",
     "searching": "Searching for Taykie…",

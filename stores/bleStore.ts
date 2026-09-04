@@ -20,6 +20,14 @@ let previewOffTimer: ReturnType<typeof setTimeout> | null = null;
 // frames, so without this the previously-selected tone kept sounding
 // alongside (or instead of) the newly selected one.
 let activePreviewOn = false;
+// The type/volume actually sounding on the device right now (as opposed to
+// the type/volume being requested by the current tap). These can differ —
+// e.g. tone A is playing and the user taps tone B — and the "off" frame
+// must carry A's parameters, not B's, or the device has nothing to match
+// against and leaves A playing until it finishes on its own. Undefined
+// until the first preview starts.
+let activePreviewType: number | undefined;
+let activePreviewVolume: number | undefined;
 // Serializes every mutation of activePreviewOn/previewOffTimer through one
 // queue. setDeviceVolume and setDeviceTone each read activePreviewOn to
 // decide whether to send an "off" before their "on" — but that check ran
@@ -52,12 +60,19 @@ async function runSoundPreview(soundType: number, volumeLevel: number, shouldPla
     previewOffTimer = null;
   }
   if (activePreviewOn) {
-    await bleService.triggerSound(false, soundType, volumeLevel).catch(() => {});
+    // Stop using the CURRENTLY SOUNDING type/volume, not the new
+    // selection's — an off frame stamped with the new tone's bytes doesn't
+    // match what's actually playing on the device.
+    await bleService
+      .triggerSound(false, activePreviewType ?? soundType, activePreviewVolume ?? volumeLevel)
+      .catch(() => {});
     activePreviewOn = false;
   }
   await bleService.triggerSound(shouldPlay, soundType, volumeLevel);
   if (shouldPlay) {
     activePreviewOn = true;
+    activePreviewType = soundType;
+    activePreviewVolume = volumeLevel;
     previewOffTimer = setTimeout(() => {
       queuePreviewCommand(async () => {
         // A newer tap may have already turned this preview off (or

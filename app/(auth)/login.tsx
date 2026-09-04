@@ -58,13 +58,11 @@ function LoginScreen() {
       // has been implicated in a native Yoga/Fabric shadow-tree crash on
       // some Android devices (same class as the modal-transition crashes
       // fixed elsewhere in this app).
-      //  if (isOnboardingComplete) {
-      //   router.replace("/(tabs)");
-      // } else {
-      //   router.push("/(onboarding)/country-language");
-      // }
-              router.replace("/(tabs)");
-
+       if (isOnboardingComplete) {
+        router.replace("/(tabs)");
+      } else {
+        router.push("/(onboarding)/country-language");
+      }
     } catch (err) {
       alert.show(AlertPresets.error(t(LocalizedStrings.auth.authStart.requestFailed), err.message));
     }

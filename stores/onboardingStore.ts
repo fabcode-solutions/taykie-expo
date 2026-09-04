@@ -9,6 +9,7 @@ import {
   saveOnboarding,
 } from "@/services/api/auth";
 import { omitNullUndefined } from "@/utils/formatter";
+import { getDeviceTimezone } from "@/utils/timezone";
 import { useAuthStore } from "./authStore";
 
 export interface SupplementItem {
@@ -33,6 +34,7 @@ export interface OtherSupplement {
 export interface OnboardRequest {
   user_country?: string; // e.g., "AU"
   user_language?: string; // e.g., "en-AU"
+  user_timezone?: string; // IANA zone, e.g. "Australia/Sydney"
   devicePaired?: boolean;
   pairedDeviceName?: string | null;
 
@@ -100,6 +102,7 @@ type State = {
   // Screen 2 — Country & Language
   user_country: string;
   user_language: string;
+  user_timezone: string;
 
   // Screen 5 — Dosage Frequency
   dose_frequency: 1 | 2 | 3;
@@ -138,6 +141,7 @@ type Actions = {
   nextStep: () => void;
   prevStep: () => void;
   setCountryLanguage: (country: string, language: string) => void;
+  setTimezone: (timezone: string) => void;
   setPairedDeviceName: (name: string | null) => void;
   setDoseFrequency: (freq: 1 | 2 | 3, times: string[]) => void;
   setSupplements: (supplements: SupplementSlot[]) => void;
@@ -173,6 +177,10 @@ const initialState: State = {
   isOnboardingComplete: false,
   user_country: "AU",
   user_language: "en-AU",
+  // Pre-filled from the device so the onboarding screen shows a sensible
+  // selection immediately rather than an empty picker — the user can still
+  // override it there before continuing.
+  user_timezone:  "Australia/Sydney",// getDeviceTimezone() ??,
   dose_frequency: 1,
   dose_times: ["08:00"],
   supplements: buildDefaultSupplements(1),
@@ -196,6 +204,7 @@ const mapResponseToState = (data: any): Partial<State> => ({
 
   user_country: data.user_country ?? "AU",
   user_language: data.user_language ?? "en-AU",
+  user_timezone: data.user_timezone ?? getDeviceTimezone() ?? "Australia/Sydney",
 
   dose_frequency: Number(data.dose_frequency ?? 1) as 1 | 2 | 3,
 
@@ -240,6 +249,7 @@ const buildOnboardRequestFromStore = (state: State): OnboardRequest => {
   const request: OnboardRequest = {
     user_country: state.user_country,
     user_language: state.user_language,
+    user_timezone: state.user_timezone,
     devicePaired: false,
     pairedDeviceName: state.pairedDeviceName ?? null,
 
@@ -281,6 +291,7 @@ export const useOnboardingStore = create<State & Actions>()(
 
       setCountryLanguage: (country, language) =>
         set({ user_country: country, user_language: language }),
+      setTimezone: (timezone) => set({ user_timezone: timezone }),
 
       setDoseFrequency: (freq, times) =>
         set({

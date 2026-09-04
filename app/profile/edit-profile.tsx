@@ -25,6 +25,7 @@ import { moderateScale, scale, verticalScale } from "@/utils/scale";
 import { useForm } from "react-hook-form";
 import { Loader } from "@/components/shared/loader";
 import { ProfileUpdateRequest } from "@/services/api/auth";
+import { getDeviceTimezone } from "@/utils/timezone";
 import { Images } from "@/assets";
 import { LocalizedStrings } from "@/i18n/LocalizedStrings";
 import { COUNTRIES } from "../(onboarding)/country-language";
@@ -167,6 +168,7 @@ export default function EditProfileScreen() {
       const nameParts = changedFields.name?.trim().split(" ").filter(Boolean) || [];
       const firstName = nameParts[0] || "";
       const lastName = nameParts.slice(1).join(" ") || "";
+      const deviceTimezone = getDeviceTimezone();
 
       const requestBody: ProfileUpdateRequest = {
         ...(firstName && { firstName }),
@@ -180,6 +182,10 @@ export default function EditProfileScreen() {
         ...(changedFields.bio && { bio: changedFields.bio }),
         ...(changedFields.username && { username: changedFields.username }),
         ...(changedFields.phone && { phoneNumber: changedFields.phone }),
+        // Not a form field the user edits — piggybacks on any profile save
+        // so a device that's changed timezone (e.g. travel) since last
+        // update gets picked up without a dedicated settings toggle.
+        ...(deviceTimezone && { timezone: deviceTimezone }),
       };
 
       const message = await updateProfile(requestBody);
