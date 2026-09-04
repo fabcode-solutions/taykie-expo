@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect } from "react";
-import { FlatList, RefreshControl, StyleSheet, View } from "react-native";
+import { NativeScrollEvent, NativeSyntheticEvent, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaScreen, ThemeInput, ThemeStatusBar } from "@/components";
 import { useTheme } from "@/theme/hooks";
 import type { Theme } from "@/theme";
@@ -250,6 +250,23 @@ export default function CommunityScreen() {
     (item: any, index: number) => item?.id?.toString() || `fallback-${index}`,
     [],
   );
+
+  // ScrollView has no built-in onEndReached — approximate FlatList's
+  // onEndReachedThreshold by firing handleLoadMore once the scroll position
+  // gets within a fixed distance of the bottom. handleLoadMore's own
+  // isLoading/hasMore/isFetchingMore guards make repeated calls while
+  // lingering near the bottom harmless no-ops.
+  const NEAR_BOTTOM_THRESHOLD_PX = 200;
+  const handleScroll = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const { layoutMeasurement, contentOffset, contentSize } = event.nativeEvent;
+      const isCloseToBottom =
+        layoutMeasurement.height + contentOffset.y >=
+        contentSize.height - NEAR_BOTTOM_THRESHOLD_PX;
+      if (isCloseToBottom) handleLoadMore();
+    },
+    [handleLoadMore],
+  );
   return (
     <SafeAreaScreen
       withBackground={false}
@@ -278,19 +295,22 @@ export default function CommunityScreen() {
           />
         </View>
 
-        <FlatList
-          data={userPosts}
-          extraData={userPosts}
-          keyExtractor={keyExtractor}
+        <ScrollView
           showsVerticalScrollIndicator={false}
-          renderItem={renderPostItem}
-          onEndReached={handleLoadMore}
-          onEndReachedThreshold={0.5}
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
           contentContainerStyle={{ flexGrow: 1 }}
           refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />}
-          ListFooterComponent={renderFooterComponent}
-          ListEmptyComponent={renderEmptyComponent}
-        />
+        >
+          {userPosts.length === 0
+            ? renderEmptyComponent()
+            : userPosts.map((item, index) => (
+                <React.Fragment key={keyExtractor(item, index)}>
+                  {renderPostItem({ item })}
+                </React.Fragment>
+              ))}
+          {renderFooterComponent()}
+        </ScrollView>
 
         <SocialPost />
       </>

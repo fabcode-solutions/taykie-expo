@@ -66,6 +66,28 @@ export default function DeviceScreen() {
   // so the picker visually shows Mute selected rather than nothing.
   const toneIndex = rawToneIndex ?? DEFAULT_TONE_INDEX;
   const volumeLevel = rawVolumeLevel ?? DEFAULT_VOLUME_LEVEL;
+
+  // Rapidly tapping through tones (or volumes) previously queued a full
+  // stop-then-play BLE round trip PER TAP in bleStore — so tapping A, B, C
+  // fast still made the device audibly play A, then B, then C in sequence,
+  // instead of just landing on C. Debouncing the actual setDeviceTone/
+  // setDeviceVolume call means only the tap the user settles on reaches the
+  // device, while `pendingToneIndex`/`pendingVolumeLevel` keep the pill
+  // highlight feeling instant on every tap regardless.
+  const TONE_PREVIEW_DEBOUNCE_MS = 250;
+  const [pendingToneIndex, setPendingToneIndex] = React.useState<number | null>(null);
+  const [pendingVolumeLevel, setPendingVolumeLevel] = React.useState<number | null>(null);
+  const toneDebounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const volumeDebounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const displayToneIndex = pendingToneIndex ?? toneIndex;
+  const displayVolumeLevel = pendingVolumeLevel ?? volumeLevel;
+
+  useEffect(() => {
+    return () => {
+      if (toneDebounceRef.current) clearTimeout(toneDebounceRef.current);
+      if (volumeDebounceRef.current) clearTimeout(volumeDebounceRef.current);
+    };
+  }, []);
   const { historyRecords, refreshCompartmentActivity } = useBLECompartments();
   const {
     scanDevices,
@@ -325,6 +347,37 @@ export default function DeviceScreen() {
     );
   }, []);
 
+  // Updates the highlight immediately, but only fires the actual BLE
+  // command (setDeviceTone -> stop-old/play-new) once the user pauses on a
+  // selection for TONE_PREVIEW_DEBOUNCE_MS — see the comment near
+  // pendingToneIndex above for why this matters for rapid taps.
+  const handleSelectTone = useCallback(
+    (value: number) => {
+      setPendingToneIndex(value);
+      if (toneDebounceRef.current) clearTimeout(toneDebounceRef.current);
+      toneDebounceRef.current = setTimeout(() => {
+        toneDebounceRef.current = null;
+        setDeviceTone(value);
+        // Let the store-driven toneIndex take back over once it catches up.
+        setPendingToneIndex(null);
+      }, TONE_PREVIEW_DEBOUNCE_MS);
+    },
+    [setDeviceTone],
+  );
+
+  const handleSelectVolume = useCallback(
+    (value: number) => {
+      setPendingVolumeLevel(value);
+      if (volumeDebounceRef.current) clearTimeout(volumeDebounceRef.current);
+      volumeDebounceRef.current = setTimeout(() => {
+        volumeDebounceRef.current = null;
+        setDeviceVolume(value);
+        setPendingVolumeLevel(null);
+      }, TONE_PREVIEW_DEBOUNCE_MS);
+    },
+    [setDeviceVolume],
+  );
+
   return (
     <>
       {connectionStatus === "connecting" && <Loader />}
@@ -416,20 +469,23 @@ export default function DeviceScreen() {
                     key={`vol-${level}`}
                     style={[
                       themedStyles.volumeNode,
-                      volumeLevel === level && themedStyles.volumeNodeActive,
+                      displayVolumeLevel === level && themedStyles.volumeNodeActive,
                     ]}
                     onPress={() => {
-                      // setDeviceVolume already triggers the device's speaker
-                      // itself as its preview mechanism — calling
-                      // triggerDeviceSoundForReminder() here too fired a
-                      // second, duplicate F4 SoundControl write for every
-                      // tap (confirmed in device logs), which is a likely
-                      // contributor to devices dropping mid-write.
-                      setDeviceVolume(level);
+                      // Debounced — see handleSelectVolume. setDeviceVolume
+                      // (once it actually fires) already triggers the
+                      // device's speaker itself as its preview mechanism —
+                      // calling triggerDeviceSoundForReminder() here too
+                      // fired a second, duplicate F4 SoundControl write for
+                      // every tap (confirmed in device logs), which is a
+                      // likely contributor to devices dropping mid-write.
+                      handleSelectVolume(level);
                     }}
                   >
                     <ThemeText
-                      style={volumeLevel === level ? themedStyles.textWhite : themedStyles.textDark}
+                      style={
+                        displayVolumeLevel === level ? themedStyles.textWhite : themedStyles.textDark
+                      }
                     >
                       {level === 0 ? "Mute" : level}
                     </ThemeText>
@@ -451,19 +507,22 @@ export default function DeviceScreen() {
                     key={`tone-${tone.value}`}
                     style={[
                       themedStyles.toneNode,
-                      toneIndex === tone.value && themedStyles.toneNodeActive,
+                      displayToneIndex === tone.value && themedStyles.toneNodeActive,
                     ]}
                     onPress={() => {
-                      // Same reasoning as the volume handler above —
+                      // Debounced — see handleSelectTone. Same reasoning as
+                      // the volume handler above once it actually fires:
                       // setDeviceTone already triggers the device's speaker
                       // itself; triggerDeviceSoundForReminder() here was a
                       // redundant, duplicate F4 write.
-                      setDeviceTone(tone.value);
+                      handleSelectTone(tone.value);
                     }}
                   >
                     <ThemeText
                       style={
-                        toneIndex === tone.value ? themedStyles.textWhite : themedStyles.textDark
+                        displayToneIndex === tone.value
+                          ? themedStyles.textWhite
+                          : themedStyles.textDark
                       }
                     >
                       {capitalizeText(tone.label)}
