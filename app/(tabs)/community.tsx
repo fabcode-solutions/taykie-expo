@@ -1,7 +1,7 @@
 "use client";
-
+ 
 import React, { useCallback, useEffect } from "react";
-import { NativeScrollEvent, NativeSyntheticEvent, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
+import { FlatList, RefreshControl, StyleSheet, View } from "react-native";
 import { SafeAreaScreen, ThemeInput, ThemeStatusBar } from "@/components";
 import { useTheme } from "@/theme/hooks";
 import type { Theme } from "@/theme";
@@ -23,7 +23,7 @@ import { Loader } from "@/components/shared/loader";
 import { useAlert } from "@/provider/AlertProvider";
 import { AlertPresets } from "@/utils/alert";
 import { CommunityFilter } from "@/types/posts.types";
-
+ 
 export const FILTERS = [
   {
     key: "new",
@@ -38,7 +38,7 @@ export const FILTERS = [
     label: "Following",
   },
 ];
-
+ 
 export default function CommunityScreen() {
   const theme = useTheme();
   const alert = useAlert();
@@ -63,7 +63,7 @@ export default function CommunityScreen() {
   const { sendNotification } = useNotificationStore();
   const [activeFilter, setActiveFilter] = React.useState<CommunityFilter>("new");
   const themedStyles = React.useMemo(() => createStyles(theme), [theme]);
-
+ 
   const filters = React.useMemo(
     () =>
       FILTERS.map((item) => ({
@@ -72,7 +72,7 @@ export default function CommunityScreen() {
       })),
     [t],
   );
-
+ 
   const loadData = useCallback(
     async (isRefresh: boolean) => {
       try {
@@ -87,7 +87,7 @@ export default function CommunityScreen() {
     },
     [activeFilter, searchText, searchUserPosts, fetchUserPosts, t], // Dependencies are now stable actions
   );
-
+ 
   useEffect(() => {
     // If searching, use debounce
     if (searchText.trim().length > 0) {
@@ -96,21 +96,21 @@ export default function CommunityScreen() {
       }, 500);
       return () => clearTimeout(delayDebounceFn);
     }
-
+ 
     // If not searching, just load based on filter
     loadData(true);
-
+ 
     // CRITICAL: We only want this to run when the filter or text changes.
     // Do NOT put loadData in here if it changes on every render.
   }, [activeFilter, searchText]);
-
+ 
   // 3. Handle Pull-to-Refresh
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
     await loadData(true);
     setIsRefreshing(false);
   }, [loadData]);
-
+ 
   const handleLoadMore = useCallback(async () => {
     if (!isLoading && hasMore && !isFetchingMore && userPosts.length > 0) {
       setIsFetchingMore(true);
@@ -118,7 +118,7 @@ export default function CommunityScreen() {
       setIsFetchingMore(false);
     }
   }, [isLoading, hasMore, isFetchingMore, userPosts, loadData]);
-
+ 
   const handleApiLike = useCallback(
     async (postId: string, isLiked: boolean, userId: string) => {
       try {
@@ -147,7 +147,7 @@ export default function CommunityScreen() {
     },
     [likePost, unLikePost, sendNotification, user?.id, user?.firstName, t],
   );
-
+ 
   const handleApiComment = useCallback(
     async (postId: string) => {
       try {
@@ -159,7 +159,7 @@ export default function CommunityScreen() {
     },
     [fetchPostComments, t],
   );
-
+ 
   const handleApiShare = useCallback(
     async (postId: string, isBookmarked: boolean) => {
       try {
@@ -174,7 +174,7 @@ export default function CommunityScreen() {
     },
     [bookmarkPost, unBookmarkPost, t],
   );
-
+ 
   const handleApiPollSubmit = useCallback(
     async (postId: string, optionId: string) => {
       console.log("API: Submit poll:", postId, "option:", optionId);
@@ -186,11 +186,11 @@ export default function CommunityScreen() {
     },
     [voteOnPollPost, t],
   );
-
+ 
   const handleMenuPress = useCallback((postId: string) => {
     console.log("Menu pressed for post:", postId);
   }, []);
-
+ 
   const handleAuthorPress = useCallback((authorId: string) => {
     console.log("Navigate to author profile:", authorId);
     router.push({
@@ -200,7 +200,7 @@ export default function CommunityScreen() {
       },
     });
   }, []);
-
+ 
   // Optimized: Extracted renderItem
   const renderPostItem = useCallback(
     ({ item }: { item: any }) => (
@@ -226,7 +226,7 @@ export default function CommunityScreen() {
       handleAuthorPress,
     ],
   );
-
+ 
   const renderFooterComponent = useCallback(() => {
     if (isFetchingMore) return <Loader fullScreen={false} size="small" />;
     if (!hasMore && userPosts.length > 0) {
@@ -234,7 +234,7 @@ export default function CommunityScreen() {
     }
     return <View />;
   }, [isFetchingMore, hasMore, userPosts.length]);
-
+ 
   const renderEmptyComponent = useCallback(() => {
     return (
       <EmptyView
@@ -245,27 +245,10 @@ export default function CommunityScreen() {
       />
     );
   }, [t]);
-
+ 
   const keyExtractor = useCallback(
     (item: any, index: number) => item?.id?.toString() || `fallback-${index}`,
     [],
-  );
-
-  // ScrollView has no built-in onEndReached — approximate FlatList's
-  // onEndReachedThreshold by firing handleLoadMore once the scroll position
-  // gets within a fixed distance of the bottom. handleLoadMore's own
-  // isLoading/hasMore/isFetchingMore guards make repeated calls while
-  // lingering near the bottom harmless no-ops.
-  const NEAR_BOTTOM_THRESHOLD_PX = 200;
-  const handleScroll = useCallback(
-    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-      const { layoutMeasurement, contentOffset, contentSize } = event.nativeEvent;
-      const isCloseToBottom =
-        layoutMeasurement.height + contentOffset.y >=
-        contentSize.height - NEAR_BOTTOM_THRESHOLD_PX;
-      if (isCloseToBottom) handleLoadMore();
-    },
-    [handleLoadMore],
   );
   return (
     <SafeAreaScreen
@@ -276,10 +259,10 @@ export default function CommunityScreen() {
       {isLoading && <Loader />}
       <>
         <ThemeStatusBar style={theme.mode === "dark" ? "light" : "dark"} />
-
+ 
         <View style={{ paddingTop: theme.spacing.lg, paddingHorizontal: theme.spacing.lg }}>
           <AppHeader />
-
+ 
           <ThemeInput
             value={searchText}
             placeholder={t(LocalizedStrings.schedule.placeHolders.search)}
@@ -294,30 +277,27 @@ export default function CommunityScreen() {
             segments={filters}
           />
         </View>
-
-        <ScrollView
+ 
+        <FlatList
+          data={userPosts}
+          extraData={userPosts}
+          keyExtractor={keyExtractor}
           showsVerticalScrollIndicator={false}
-          onScroll={handleScroll}
-          scrollEventThrottle={16}
+          renderItem={renderPostItem}
+          onEndReached={handleLoadMore}
+          onEndReachedThreshold={0.5}
           contentContainerStyle={{ flexGrow: 1 }}
           refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />}
-        >
-          {userPosts.length === 0
-            ? renderEmptyComponent()
-            : userPosts.map((item, index) => (
-                <React.Fragment key={keyExtractor(item, index)}>
-                  {renderPostItem({ item })}
-                </React.Fragment>
-              ))}
-          {renderFooterComponent()}
-        </ScrollView>
-
+          ListFooterComponent={renderFooterComponent}
+          ListEmptyComponent={renderEmptyComponent}
+        />
+ 
         <SocialPost />
       </>
     </SafeAreaScreen>
   );
 }
-
+ 
 const createStyles = (theme: Theme) =>
   StyleSheet.create({
     screen: {
