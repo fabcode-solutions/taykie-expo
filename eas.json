@@ -18,13 +18,17 @@
         "gradleCommand": ":app:assembleRelease"
       },
       "ios": {
-        "distribution": "internal"
+        "distribution": "internal",
+        "image": "macos-sequoia-15.6-xcode-26.2"
       }
     },
     "production": {
       "autoIncrement": true,
       "android": {
         "buildType": "app-bundle"
+      },
+      "ios": {
+        "image": "macos-sequoia-15.6-xcode-26.2"
       },
       "node": "18.17.1"
     }

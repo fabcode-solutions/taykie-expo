@@ -26,7 +26,6 @@ import { t } from "i18next";
 import { LocalizedStrings } from "@/i18n/LocalizedStrings";
 import { AlertPresets, AlertBuilder } from "@/utils/alert";
 import { useAlert } from "@/provider/AlertProvider";
-import { Button } from "@/components/ui/button";
 import Switch from "@/components/ui/Switch";
 import { TONE_OPTIONS, DEFAULT_TONE_INDEX, DEFAULT_VOLUME_LEVEL } from "@/utils/toneAudio";
 import { capitalizeText } from "@/utils/formatter";
