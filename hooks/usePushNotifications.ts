@@ -6,7 +6,11 @@ import * as Notifications from "expo-notifications";
 import { useBannerStore } from "@/stores/bannerStore";
 import { useBLEStore } from "@/stores/bleStore";
 import { toneFileName, toneSlug } from "@/utils/toneAudio";
-import { isDosageReminder, triggerDeviceSoundForReminder } from "@/utils/reminderSound";
+import {
+  isDosageReminder,
+  triggerDeviceLightForReminder,
+  triggerDeviceSoundForReminder,
+} from "@/utils/reminderSound";
 import { useAlert } from "@/provider/AlertProvider";
 import { AlertPresets } from "@/utils/alert";
 export function usePushNotifications() {
@@ -136,6 +140,7 @@ export const showLocalNotification = async (remoteMessage: any) => {
   // relies on BLEService.triggerSound's own ~60s safety timer to end it.
   if (isDosageReminder(remoteMessage)) {
     triggerDeviceSoundForReminder();
+    triggerDeviceLightForReminder();
   }
 };
 

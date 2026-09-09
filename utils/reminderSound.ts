@@ -1,6 +1,12 @@
 import { bleService } from "@/services/ble/BLEService";
 import { useBLEStore } from "@/stores/bleStore";
+import { useNotificationStore } from "@/stores/notificationStore";
 import { DEFAULT_TONE_INDEX, DEFAULT_VOLUME_LEVEL } from "@/utils/toneAudio";
+
+// No protocol documentation distinguishes light "colors" 0x01-0x05 from each
+// other (unlike sound's TONE_OPTIONS) — 0x01 is used as the on-value here
+// since 0x00 is reserved for "off" everywhere else in the protocol.
+const DEFAULT_LIGHT_TYPE = 0x01;
 
 // The one FCM data.type that should trigger the physical device's speaker —
 // social notifications (Like/Comment/Follow/etc.) show their banner/system
@@ -49,6 +55,43 @@ export async function stopDeviceSoundForReminder() {
   if (useBLEStore.getState().connectionStatus !== "connected") return;
   try {
     await bleService.triggerSound(false, 0, 0);
+  } catch {
+    // Best-effort — the 60s safety timer covers this if it fails.
+  }
+}
+
+// Triggers the connected Taykie device's light for a dosage reminder.
+// Respects the "Reminder Light" setting — unlike sound, there's no
+// per-notification "mute" value to fall back on, so the setting is the only
+// gate. The device never auto-stops F5 on its own — BLEService.triggerLight's
+// own 60s safety timer is what eventually turns it off if nothing else does.
+export async function triggerDeviceLightForReminder() {
+  const { connectionStatus } = useBLEStore.getState();
+  const lightEnabled =
+    useNotificationStore.getState().notificationSettings?.reminders?.reminderLight ?? false;
+  console.log(
+    `💡 triggerDeviceLightForReminder called — connectionStatus=${connectionStatus}, lightEnabled=${lightEnabled}`,
+  );
+  if (!lightEnabled) {
+    console.warn("💡 Skipped: reminder light is disabled in settings.");
+    return;
+  }
+  if (connectionStatus !== "connected") {
+    console.warn("💡 Skipped: BLE not connected in this JS context.");
+    return;
+  }
+
+  try {
+    await bleService.triggerLight(true, DEFAULT_LIGHT_TYPE);
+  } catch (e) {
+    console.warn("Failed to trigger device light for reminder:", e);
+  }
+}
+
+export async function stopDeviceLightForReminder() {
+  if (useBLEStore.getState().connectionStatus !== "connected") return;
+  try {
+    await bleService.triggerLight(false, 0x00);
   } catch {
     // Best-effort — the 60s safety timer covers this if it fails.
   }

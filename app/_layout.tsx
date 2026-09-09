@@ -31,7 +31,11 @@ import {
 } from "@/stores/notificationStore";
 import { InAppBanner } from "@/components/inAppBanner";
 import { setupNotificationChannels } from "@/hooks/usePushNotifications";
-import { isDosageReminder, triggerDeviceSoundForReminder } from "@/utils/reminderSound";
+import {
+  isDosageReminder,
+  triggerDeviceLightForReminder,
+  triggerDeviceSoundForReminder,
+} from "@/utils/reminderSound";
 import { useBLEStore } from "@/stores/bleStore";
 import { Platform } from "react-native";
 
@@ -79,6 +83,7 @@ try {
     // notification does.
     if (isDosageReminder(remoteMessage)) {
       await triggerDeviceSoundForReminder();
+      await triggerDeviceLightForReminder();
     } else {
       console.log("🌙 Not a dosage reminder — data.type =", remoteMessage?.data?.type);
     }

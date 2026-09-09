@@ -128,7 +128,6 @@ import {
   DeviceData,
   ScheduleSlot,
   HistoryRecord,
-  CmdType,
 } from "../services/ble/BLEService";
 import { DEFAULT_TONE_INDEX, DEFAULT_VOLUME_LEVEL } from "../utils/toneAudio";
 import {
@@ -477,6 +476,14 @@ export const useBLEStore = create<BLEState & BLEAction>()(
       let isPolling = false;
       devicePollInterval = setInterval(async () => {
         if (isPolling) return;
+        // Skip this cycle entirely while a tone/volume preview is actively
+        // sounding or mid-switch — see runSoundPreview/activePreviewOn.
+        // pollStatusAndHistory now shares triggerSound's withCommandLock, so
+        // starting it here would just queue behind the lock rather than
+        // interleave, but a poll already ahead in that queue still delays a
+        // user's tap by a full ~multi-second round trip. Deferring one 15s
+        // cycle is free; a laggy tone switch is not.
+        if (activePreviewOn) return;
         isPolling = true;
         try {
           // queryStatus/queryHistory each re-verify the password first
@@ -489,11 +496,11 @@ export const useBLEStore = create<BLEState & BLEAction>()(
           // Waits for each actual reply rather than a guessed delay — F3's
           // 106-byte reply arrives across several BLE packets, and firing
           // the next command before it's fully reassembled corrupts both
-          // replies (see BLEService.waitForReply).
-          await bleService.queryStatus();
-          await bleService.waitForReply(CmdType.QueryStatus);
-          await bleService.queryHistory();
-          await bleService.waitForReply(CmdType.QueryHistory);
+          // replies (see BLEService.waitForReply). The whole sequence now
+          // runs under BLEService's withCommandLock (pollStatusAndHistory)
+          // so it can't interleave with a triggerSound/triggerLight call —
+          // see the comment on that method for why.
+          await bleService.pollStatusAndHistory();
         } catch (error) {
           console.warn("Device poll failed:", error);
         } finally {

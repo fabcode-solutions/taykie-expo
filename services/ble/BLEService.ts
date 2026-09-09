@@ -680,6 +680,32 @@ class BLEService {
     await this.writeCommand(frame, "F6 QueryHistory");
   }
 
+  // The periodic background poll (status + history) used to run queryStatus/
+  // queryHistory directly, outside withCommandLock — only triggerSound/
+  // triggerLight went through the lock. That let a poll cycle already in
+  // flight (E0/F3/E0/F6, each waiting up to 3s per reply) interleave its
+  // writes with a tone/volume preview's own E0/F4 off-then-on sequence:
+  // whichever flow's writeCommand() call landed first won the wire, so a
+  // preview tap that happened to land mid-poll could sit behind the poll's
+  // full ~multi-second round trip before the device even received the "off"
+  // frame — audibly indistinguishable from the old tone "finishing on its
+  // own" before the new one started. Wrapping the whole poll sequence in the
+  // same lock as triggerSound/triggerLight guarantees one flow always runs
+  // to completion before the other begins, instead of interleaving.
+  async pollStatusAndHistory() {
+    await this.withCommandLock(async () => {
+      await this.ensurePasswordVerified();
+      const statusFrame = TaykieProtocol.buildFrame(CmdType.QueryStatus);
+      await this.writeCommand(statusFrame, "F3 QueryStatus");
+      await this.waitForReply(CmdType.QueryStatus);
+
+      await this.ensurePasswordVerified();
+      const historyFrame = TaykieProtocol.buildFrame(CmdType.QueryHistory);
+      await this.writeCommand(historyFrame, "F6 QueryHistory");
+      await this.waitForReply(CmdType.QueryHistory);
+    });
+  }
+
   // Destructive: wipes the device's stored history. Not wired to any
   // automatic flow — only call this on explicit user confirmation.
   async eraseHistoryFlash() {

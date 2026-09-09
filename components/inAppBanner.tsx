@@ -18,6 +18,8 @@ import {
   isDosageReminder,
   triggerDeviceSoundForReminder,
   stopDeviceSoundForReminder,
+  triggerDeviceLightForReminder,
+  stopDeviceLightForReminder,
 } from "@/utils/reminderSound";
 import type { Audio } from "expo-av";
 
@@ -49,6 +51,7 @@ export function InAppBanner() {
         .catch((e) => console.warn("Failed to play banner tone:", e));
 
       triggerDeviceSoundForReminder();
+      triggerDeviceLightForReminder();
     }
 
     // Auto-hide after 4 seconds
@@ -66,6 +69,7 @@ export function InAppBanner() {
     currentSoundRef.current = null;
     if (isDosageReminder(message)) {
       stopDeviceSoundForReminder();
+      stopDeviceLightForReminder();
     }
     translateY.value = withTiming(-150, { duration: 300 }, () => {
       runOnJS(hideBanner)();
