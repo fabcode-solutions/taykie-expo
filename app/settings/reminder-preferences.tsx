@@ -13,6 +13,7 @@ import IconNotifications from "@/components/icons/settings/IconNotifications";
 import SnoozeDuration from "@/components/settings/SnoozeDuration";
 import { moderateScale, scale, verticalScale } from "@/utils/scale";
 import { NotificationSettingsModel, useNotificationStore } from "@/stores/notificationStore";
+import { useBLEStore } from "@/stores/bleStore";
 import { Loader } from "@/components/shared/loader";
 import IconClock from "@/components/icons/settings/IconClock";
 import IconInformation from "@/components/icons/IconInformation";
@@ -20,6 +21,7 @@ import IconTorch from "@/components/icons/settings/IconTorch";
 import { LocalizedStrings } from "@/i18n/LocalizedStrings";
 import { AlertPresets } from "@/utils/alert";
 import { useAlert } from "@/provider/AlertProvider";
+import { flashDeviceLightPreview } from "@/utils/reminderSound";
 
 export default function ReminderSettingsScreen() {
   const { t } = useTranslation();
@@ -28,12 +30,13 @@ export default function ReminderSettingsScreen() {
   const router = useRouter();
   const { fetchNotificationSettings, updateNotificationSettings, notificationSettings, isLoading } =
     useNotificationStore();
+  const lightEnabled = useBLEStore((s) => s.lightEnabled);
+  const setLightEnabled = useBLEStore((s) => s.setLightEnabled);
   const styles = useMemo(() => createStyles(theme), [theme]);
   const [reminder, setreminder] = useState({
     snoozeDuration: notificationSettings?.reminders?.snoozeDuration ?? "5 min",
     earlyReminderAlert: notificationSettings?.reminders?.earlyReminderAlert ?? false,
     missedDoseNotifications: notificationSettings?.reminders?.missedDoseNotifications ?? false,
-    reminderLight: notificationSettings?.reminders?.reminderLight ?? false,
     reminderSound: notificationSettings?.reminders?.reminderSound ?? false,
   });
   const [reminderSoundIsOpen, setreminderSoundIsOpen] = useState(false);
@@ -49,6 +52,16 @@ export default function ReminderSettingsScreen() {
       alert.show(AlertPresets.error(t(LocalizedStrings.common.error), error.message));
     }
   }, []);
+
+  const handleToggleLight = useCallback(() => {
+    const next = !lightEnabled;
+    setLightEnabled(next);
+    // Only preview on the OFF -> ON transition — flashing the light right
+    // as the user turns it off would look like the toggle didn't work.
+    if (next) {
+      flashDeviceLightPreview();
+    }
+  }, [lightEnabled, setLightEnabled]);
 
   const handleReminders = useCallback(
     async (key: keyof typeof reminder) => {
@@ -149,8 +162,8 @@ export default function ReminderSettingsScreen() {
           <Switch
             style={styles.switch}
             trackColors={{ on: theme.colors.text.primary, off: "#B4B4B4" }}
-            onPress={() => handleReminders("reminderLight")}
-            value={reminder.reminderLight}
+            onPress={handleToggleLight}
+            value={lightEnabled}
           />
         ),
       },
@@ -160,11 +173,11 @@ export default function ReminderSettingsScreen() {
       styles.switch,
       reminder.earlyReminderAlert,
       reminder.missedDoseNotifications,
-      reminder.reminderLight,
       reminder.reminderSound,
       reminder.snoozeDuration,
       handleReminders,
-      ,
+      lightEnabled,
+      handleToggleLight,
     ],
   );
 

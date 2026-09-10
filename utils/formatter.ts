@@ -101,6 +101,28 @@ export const getFrequency = (scheduleDay?: string) => {
   return days.length === 7 ? "daily" : "weekly";
 };
 
+/**
+ * Converts a 24h "HH:MM" time string to a 12h "H:MM AM/PM" display string.
+ * Returns the input unchanged if it already contains am/pm, and "--:--" for
+ * anything that isn't a recognizable time string.
+ */
+export const formatTimeAmPm = (time24?: string): string => {
+  if (!time24 || typeof time24 !== "string" || !time24.includes(":")) {
+    return "--:--";
+  }
+  if (/am|pm/i.test(time24)) {
+    return time24;
+  }
+
+  const [hours, minutes] = time24.split(":");
+  const h = parseInt(hours, 10);
+  if (isNaN(h)) return "--:--";
+
+  const ampm = h >= 12 ? "PM" : "AM";
+  const formattedHours = (h % 12 || 12).toString();
+  return `${formattedHours}:${minutes} ${ampm}`;
+};
+
 export const getTimeOfDay = (time?: string) => {
   if (!time) return "morning";
 
@@ -108,7 +130,8 @@ export const getTimeOfDay = (time?: string) => {
 
   if (hour < 12) return "morning";
   if (hour < 17) return "afternoon";
-  return "evening";
+  if (hour < 20) return "evening";
+  return "night";
 };
 
 // Utility to remove undefined values from an object

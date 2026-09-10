@@ -71,6 +71,8 @@
     "save": "Guardar",
     "delete": "Eliminar",
     "edit": "Editar",
+    "editTime": "Editar hora",
+    "warning": "Advertencia",
     "loading": "Cargando...",
     "error": "Error",
     "success": "Éxito",
@@ -500,7 +502,8 @@
       "rename": "Renombrar dispositivo",
       "dismiss": "Descartar alerta activa",
       "history": "Historial de sincronización",
-      "quick_action": "Acciones rápidas"
+      "quick_action": "Acciones rápidas",
+      "password": "Cambiar contraseña del dispositivo"
     },
     "permissions": {
       "title": "Permisos de Bluetooth",
@@ -539,12 +542,10 @@
     "changeDevice": "Cambiar dispositivo",
     "pairDevice": "Vincula tu dispositivo",
     "connectViaBluetooth": "Conecta tu dispensador inteligente vía Bluetooth para comenzar.",
-    "cantFindDevice": "¿No encuentras tu dispositivo?",
-    "enterManually": "Introduce el ID manualmente.",
     "audio_settings": "Ajustes de audio",
     "volume_level": "Nivel de volumen",
     "alert_tone": "Tono de alerta",
-    "active_schedules": "Horarios activos",
+    "active_schedules": "Recordatorios en el dispositivo",
     "no_schedules_loaded": "No hay horarios cargados."
   },
   "insights": {
@@ -584,6 +585,9 @@
     "scheduleSuccess": "¡Agenda creada correctamente!",
     "routine": {
       "submit": "Guardar rutina",
+      "selectTime": "Seleccionar hora",
+      "addTime": "Añadir otra hora",
+      "duplicateTime": "Esta hora ya se ha añadido a este horario. Elige una hora diferente.",
       "reminders": {
         "title": "Recordatorios",
         "push": "Push",
@@ -649,6 +653,7 @@
       "morning": "Mañana",
       "evening": "Noche",
       "afternoon": "Tarde",
+      "night": "Madrugada",
       "daily": "Diario",
       "weekly": "Semanal",
       "monthly": "Mensual"

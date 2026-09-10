@@ -9,11 +9,17 @@ import {
   DeviceStatus,
   HistoryRecord,
 } from "./TaykieProtocol";
+import { volumePercentToByte } from "../../utils/toneAudio";
 
 export { TAYKIE_UUIDS, CmdType, TaykieProtocol };
 export type { ScheduleSlot, DeviceStatus, HistoryRecord };
 
-const DEFAULT_PASSWORD = "000000";
+export const DEFAULT_PASSWORD = "000000";
+
+// How long a scan runs before stopping itself — exported so bleStore's UI
+// timeout can match it, so "isScanning" in the UI never goes false while
+// the radio is still actually scanning underneath it.
+export const BLE_SCAN_DURATION_MS = 15000;
 
 export interface TaykieDevice {
   id: string;
@@ -34,6 +40,11 @@ class BLEService {
   private manager: BleManager;
   private connectedDevice: Device | null = null;
   private notifySubscription: any = null;
+  // The password every command re-verifies against (see
+  // ensurePasswordVerified) — starts at the factory default, but the store
+  // seeds it from persisted storage on init, and changePassword() updates it
+  // in place once the device confirms a change.
+  private currentPassword: string = DEFAULT_PASSWORD;
 
   public onStatusUpdated?: (status: Partial<DeviceData>) => void;
   public onHistoryReceived?: (records: HistoryRecord[]) => void;
@@ -45,6 +56,14 @@ class BLEService {
   // wasIntentional flag lets the store tell the two apart: only an
   // unexpected drop should trigger an automatic reconnect attempt.
   public onDeviceDisconnected?: (wasIntentional: boolean) => void;
+  // iOS only: fires when the OS silently killed the app in the background
+  // (memory pressure, etc.) and then relaunched it because a previously
+  // connected peripheral is still linked at the native CoreBluetooth level.
+  // This does NOT fire after a user manually force-quits the app from the
+  // app switcher — Apple blocks any background relaunch in that case
+  // regardless of what this app does. Only useful for the "OS silently
+  // killed it" case, not "user swiped it away."
+  public onStateRestored?: (restoredDeviceIds: string[]) => void;
 
   // Set right before we ourselves tear down the connection (disconnect() /
   // connectToDevice()'s own disconnect-then-reconnect) so the native
@@ -52,8 +71,37 @@ class BLEService {
   // the device dropping the link on its own.
   private isIntentionalDisconnect = false;
 
+  // Tracks a real native scan in progress, plus every caller's callback for
+  // it — startScan can legitimately be called from more than one mounted
+  // screen at once (e.g. the Device tab's own "scan while disconnected"
+  // effect is still mounted underneath when the dedicated pair-device
+  // screen mounts and starts its own scan). Calling
+  // manager.startDeviceScan() a second time while one is already active
+  // throws "Cannot start scanning operation" — and worse, stopping first
+  // doesn't reliably help, since the native stop isn't guaranteed to have
+  // fully released the radio before a start immediately follows it. So a
+  // second (or third) caller now just attaches its callback to the ALREADY
+  // running scan instead of ever issuing a second native start.
+  private activeScanListeners: ((device: any) => void)[] | null = null;
+  private scanStopTimer: ReturnType<typeof setTimeout> | null = null;
+
   constructor() {
-    this.manager = new BleManager();
+    this.manager = new BleManager({
+      // iOS-only (react-native-ble-plx no-ops this on Android). Lets iOS
+      // relaunch the app in the background to keep handling an
+      // already-connected peripheral if the OS silently killed the app
+      // process — a real improvement over having nothing configured, but
+      // it categorically does not apply to a manual force-quit; Apple
+      // blocks background relaunch entirely in that case.
+      restoreStateIdentifier: "TaykieBleRestoreID",
+      restoreStateFunction: (restoredState) => {
+        const restoredIds = restoredState?.connectedPeripherals.map((d) => d.id) ?? [];
+        if (restoredIds.length > 0) {
+          console.log("🔄 iOS restored BLE state for:", restoredIds);
+        }
+        this.onStateRestored?.(restoredIds);
+      },
+    });
   }
 
   // FIFO queue of in-flight replies being waited on, oldest first. Writes
@@ -73,7 +121,7 @@ class BLEService {
   // (only a console warning). A FIFO queue lets both wait independently.
   private pendingReplies: {
     cmdType: number;
-    resolve: () => void;
+    resolve: (acked: boolean) => void;
     timeoutId: ReturnType<typeof setTimeout>;
   }[] = [];
 
@@ -83,18 +131,25 @@ class BLEService {
   // arrive across several 20-byte BLE packets; a fixed delay can fire the
   // next command before reassembly finishes, interleaving the next reply's
   // fragments into the still-incomplete buffer and corrupting both.
-  waitForReply(cmdType: number, timeoutMs = 3000): Promise<void> {
+  //
+  // Resolves `true` only if the device's own reply confirmed success (or the
+  // reply has no simple success/fail byte to check, e.g. QueryStatus) —
+  // `false` for an explicit failure byte, a ChecksumError reply, or a
+  // timeout with no reply at all. Callers that only care "did a reply
+  // arrive" (the original handshake steps) can still just `await` this
+  // without inspecting the result.
+  waitForReply(cmdType: number, timeoutMs = 3000): Promise<boolean> {
     return new Promise((resolve) => {
       const entry = {
         cmdType,
-        resolve: () => {},
+        resolve: (_acked: boolean) => {},
         timeoutId: null as unknown as ReturnType<typeof setTimeout>,
       };
-      entry.resolve = () => {
+      entry.resolve = (acked: boolean) => {
         clearTimeout(entry.timeoutId);
         const idx = this.pendingReplies.indexOf(entry);
         if (idx !== -1) this.pendingReplies.splice(idx, 1);
-        resolve();
+        resolve(acked);
       };
       entry.timeoutId = setTimeout(() => {
         const idx = this.pendingReplies.indexOf(entry);
@@ -109,7 +164,7 @@ class BLEService {
           // command's reply needs mid-reassembly.
           if (this.pendingReplies.length === 0) this.notifyBuffer = [];
         }
-        resolve(); // Timed out — proceed rather than hang forever.
+        resolve(false); // Timed out — no confirmation, but proceed rather than hang forever.
       }, timeoutMs);
       this.pendingReplies.push(entry);
     });
@@ -160,41 +215,62 @@ class BLEService {
     const state = await this.manager.state();
     if (state !== "PoweredOn") return;
 
+    // A scan is already running (started by another caller) — just add
+    // this caller's callback to it rather than issuing a second native
+    // start, which is what used to throw "Cannot start scanning operation".
+    if (this.activeScanListeners) {
+      this.activeScanListeners.push(onDeviceFound);
+      return;
+    }
+
     console.log("🟢 All systems go! Starting scan...");
+    this.activeScanListeners = [onDeviceFound];
 
     this.manager.startDeviceScan(null, null, (error, device) => {
       if (error) {
         console.log("❌ Scan error:", error.message);
+        this.activeScanListeners = null;
+        if (this.scanStopTimer) {
+          clearTimeout(this.scanStopTimer);
+          this.scanStopTimer = null;
+        }
         this.manager.stopDeviceScan();
         return;
       }
 
       if (device && device.name) {
         const name = device.name;
-        // TEMP DEBUG: log every advertised device seen during a scan, not
-        // just ones matching the filter below — otherwise a real device
-        // with an unexpected name is silently dropped with zero visibility.
-        console.log(`👀 Saw BLE device: "${name}" (${device.id}) rssi=${device.rssi}`);
         if (
           name.includes("TayKie") ||
           name.toLowerCase().includes("taykie") ||
           name.toLowerCase().includes("tk-")
         ) {
-          console.log(`🎯 Target found: ${device.name} (${device.id})`);
-          this.manager.stopDeviceScan();
-          onDeviceFound(device);
+          console.log(`🎯 Target found: "${name}" (${device.id}) rssi=${device.rssi}`);
+          // Deliberately NOT stopping the scan here — stopping on the first
+          // match meant a second (or third) nearby Taykie device could never
+          // be discovered, let alone chosen between. The scan now keeps
+          // running its full window, and every caller currently attached
+          // (see activeScanListeners above) hears about each match.
+          this.activeScanListeners?.forEach((listener) => listener(device));
         }
       }
     });
 
-    setTimeout(() => {
+    this.scanStopTimer = setTimeout(() => {
+      this.activeScanListeners = null;
+      this.scanStopTimer = null;
       this.manager.stopDeviceScan();
       console.log("⏱️ Scan timed out and stopped automatically.");
-    }, 15000);
+    }, BLE_SCAN_DURATION_MS);
   }
 
   stopScan() {
     console.log("🛑 Stopping scan...");
+    this.activeScanListeners = null;
+    if (this.scanStopTimer) {
+      clearTimeout(this.scanStopTimer);
+      this.scanStopTimer = null;
+    }
     this.manager.stopDeviceScan();
   }
 
@@ -207,13 +283,12 @@ class BLEService {
 
     await device.discoverAllServicesAndCharacteristics();
 
-    // Opportunistic MTU bump — NOT required for correctness. Per the factory
-    // reference doc, the device chunks both directions at a fixed 20 bytes
-    // at the app protocol level regardless of negotiated MTU (writeCommand
-    // chunks writes, handleNotification reassembles replies), so this is
-    // just a best-effort optimization if the peripheral happens to support
-    // it. Bounded with a timeout since an unbounded requestMTU previously
-    // hung the connection on some devices.
+    // This MTU bump is now load-bearing for F2 SetSchedule (103 bytes) — see
+    // writeCommandExclusive's comment for why writes can no longer be
+    // manually split into 20-byte chunks. Still wrapped in try/catch since
+    // an unbounded requestMTU previously hung the connection on some
+    // devices, and every other command is small enough to fit even at the
+    // un-negotiated default MTU (23, i.e. 20 usable bytes) if this fails.
     try {
       await Promise.race([
         device.requestMTU(247),
@@ -260,7 +335,7 @@ class BLEService {
     // Each step waits for its actual reply (not a guessed delay) before
     // sending the next — see waitForReply's comment for why that matters.
     try {
-      await this.verifyPassword(DEFAULT_PASSWORD);
+      await this.verifyPassword();
       await this.waitForReply(CmdType.PasswordVerify);
       await this.syncTime();
       await this.waitForReply(CmdType.TimeCalibration);
@@ -300,13 +375,11 @@ class BLEService {
   // so a reply can be correlated with the command that triggered it.
   private lastCommandLabel: string | null = null;
 
-  // Per the factory reference doc, both directions are chunked at 20 bytes —
-  // the device does NOT rely on BLE MTU negotiation, it's an app-level
-  // protocol convention. Any frame over 20 bytes (F2 SetSchedule, and every
-  // reply longer than 20 bytes: F3 QueryStatus at 106, F6 QueryHistory once
-  // more than ~2 records exist) must be split into 20-byte writes, and
-  // incoming multi-packet replies must be reassembled the same way.
-  private static readonly CHUNK_SIZE = 20;
+  // The device's OWN replies longer than 20 bytes (F3 QueryStatus at 106,
+  // F6 QueryHistory once more than ~2 records exist) still arrive split
+  // across multiple ~20-byte notify packets, reassembled in notifyBuffer
+  // below — that direction is unaffected by writeCommandExclusive's single-
+  // write fix above, since it's the device (not us) doing the chunking there.
 
   // Independently-triggered commands (e.g. a push-notification's device
   // sound trigger firing while the background status poll's own write is
@@ -344,28 +417,33 @@ class BLEService {
     const fullBytes = Buffer.from(base64Payload, "base64");
     console.log(`BLE write raw (${label}, ${fullBytes.length} bytes):`, fullBytes.toString("hex"));
 
-    for (let offset = 0; offset < fullBytes.length; offset += BLEService.CHUNK_SIZE) {
-      // Buffer.prototype.subarray is supposed to return another Buffer (via
-      // Symbol.species), but on this Hermes/New Architecture setup it was
-      // silently degrading to a plain Uint8Array — which has no base64-aware
-      // toString and falls back to Array's default comma-joined
-      // stringification (e.g. "90,224,0,..." instead of real base64). That
-      // garbage string was then sent straight to the native BLE write call,
-      // which rejected it as "invalid data format" on every single command.
-      // Re-wrapping with Buffer.from() forces a genuine Buffer instance
-      // regardless of what subarray() handed back.
-      const chunk = Buffer.from(fullBytes.subarray(offset, offset + BLEService.CHUNK_SIZE));
-      await this.connectedDevice.writeCharacteristicWithoutResponseForService(
-        TAYKIE_UUIDS.SERVICE,
-        TAYKIE_UUIDS.WRITE,
-        chunk.toString("base64"),
+    // ATT overhead is 3 bytes, so usable payload per write is mtu-3. If MTU
+    // negotiation didn't stick (see connectToDevice's try/catch), a large
+    // frame like F2 will now fail the native write outright instead of the
+    // old silent per-chunk corruption — surfacing that clearly here rather
+    // than leaving it to a cryptic native error.
+    const negotiatedMtu = this.connectedDevice.mtu ?? 23;
+    if (fullBytes.length > negotiatedMtu - 3) {
+      console.warn(
+        `${label}: ${fullBytes.length}-byte frame exceeds usable MTU (${negotiatedMtu - 3} bytes) — MTU negotiation likely didn't stick on this device. Write may fail.`,
       );
-      // Small gap between chunks so the peripheral isn't flooded — matches
-      // the factory's own chunked-write loop behavior.
-      if (offset + BLEService.CHUNK_SIZE < fullBytes.length) {
-        await new Promise((resolve) => setTimeout(resolve, 20));
-      }
     }
+
+    // Previously split into 20-byte writes in a loop (per the factory doc's
+    // description of the legacy iOS app), on the assumption the device
+    // reassembles multiple separate write calls into one logical frame —
+    // the same way it reassembles its OWN multi-packet notify replies. Real
+    // hardware testing disproved that: F2 SetSchedule (the only command over
+    // 20 bytes) came back with one distinct ChecksumError reply PER 20-byte
+    // chunk sent (e.g. 6 separate errors for 6 chunks), meaning the device
+    // validates each individual BLE write as its own standalone frame rather
+    // than reassembling. So the whole frame must arrive in a single write —
+    // which is exactly what the negotiated MTU bump at connect (247) is for.
+    await this.connectedDevice.writeCharacteristicWithoutResponseForService(
+      TAYKIE_UUIDS.SERVICE,
+      TAYKIE_UUIDS.WRITE,
+      base64Payload,
+    );
   }
 
   // Fixed reply lengths (header+cmdType+payload+checksum) per the factory
@@ -469,7 +547,22 @@ class BLEService {
     // us the command failed).
     const oldest = this.pendingReplies[0];
     if (oldest && (oldest.cmdType === parsed.cmdType || parsed.cmdType === CmdType.ChecksumError)) {
-      oldest.resolve();
+      // Only these cmdTypes reply with a simple 00/01 success/fail byte per
+      // the protocol — QueryStatus/QueryHistory/QueryTime reply with actual
+      // data instead, so their arrival alone counts as a confirmed reply.
+      const isSimpleAckReply = [
+        CmdType.PasswordVerify,
+        CmdType.ChangePassword,
+        CmdType.TimeCalibration,
+        CmdType.SetSchedule,
+        CmdType.SoundControl,
+        CmdType.LightControl,
+        CmdType.EraseFlash,
+      ].includes(parsed.cmdType);
+      const acked =
+        parsed.cmdType !== CmdType.ChecksumError &&
+        (!isSimpleAckReply || parsed.data[0] === 0x01);
+      oldest.resolve(acked);
     }
 
     switch (parsed.cmdType) {
@@ -530,7 +623,15 @@ class BLEService {
     }
   }
 
-  async verifyPassword(password: string = DEFAULT_PASSWORD) {
+  // Seeds the password this instance authenticates every command with —
+  // called by the store on init/reconnect with whatever was last persisted,
+  // since a fresh BLEService instance otherwise has no memory of a password
+  // that was changed away from the factory default in a previous session.
+  setPassword(password: string) {
+    this.currentPassword = password;
+  }
+
+  async verifyPassword(password: string = this.currentPassword) {
     const frame = TaykieProtocol.buildFrame(CmdType.PasswordVerify, TaykieProtocol.encodePassword(password));
     await this.writeCommand(frame, "E0 PasswordVerify");
   }
@@ -548,9 +649,29 @@ class BLEService {
     await this.waitForReply(CmdType.PasswordVerify);
   }
 
-  async changePassword(newPassword: string) {
-    const frame = TaykieProtocol.buildFrame(CmdType.ChangePassword, TaykieProtocol.encodePassword(newPassword));
-    await this.writeCommand(frame, "E1 ChangePassword");
+  // Verifies the password the user typed against what the device actually
+  // has right now (rather than trusting our own persisted copy, which could
+  // be stale) before attempting the change — this is the only path that's
+  // allowed to move currentPassword away from ensurePasswordVerified's
+  // default, and only once the device has confirmed the change.
+  async changePassword(
+    currentPassword: string,
+    newPassword: string,
+  ): Promise<{ verified: boolean; changed: boolean }> {
+    return this.withCommandLock(async () => {
+      await this.verifyPassword(currentPassword);
+      const verified = await this.waitForReply(CmdType.PasswordVerify);
+      if (!verified) return { verified: false, changed: false };
+
+      const frame = TaykieProtocol.buildFrame(
+        CmdType.ChangePassword,
+        TaykieProtocol.encodePassword(newPassword),
+      );
+      await this.writeCommand(frame, "E1 ChangePassword");
+      const changed = await this.waitForReply(CmdType.ChangePassword);
+      if (changed) this.currentPassword = newPassword;
+      return { verified: true, changed };
+    });
   }
 
   async syncTime() {
@@ -571,10 +692,29 @@ class BLEService {
     await this.writeCommand(frame, "F3 QueryStatus");
   }
 
-  async setSchedule(slots: ScheduleSlot[]) {
+  // F2 is the only outbound command longer than 20 bytes (100-byte payload,
+  // ~6 chunks) — every other write fits in a single chunk. A ChecksumError
+  // reply is the device's own well-defined "what I received doesn't match
+  // what you say you sent" signal (see the protocol doc's Checksum Error
+  // Command), which is exactly the retry-safe case: resending the identical
+  // frame is correct, not a workaround, since nothing about the command
+  // itself was wrong.
+  private static readonly SET_SCHEDULE_MAX_ATTEMPTS = 3;
+
+  async setSchedule(slots: ScheduleSlot[]): Promise<boolean> {
     await this.ensurePasswordVerified();
     const frame = TaykieProtocol.buildFrame(CmdType.SetSchedule, TaykieProtocol.buildSchedulePayload(slots));
-    await this.writeCommand(frame, "F2 SetSchedule");
+
+    for (let attempt = 1; attempt <= BLEService.SET_SCHEDULE_MAX_ATTEMPTS; attempt++) {
+      await this.writeCommand(frame, `F2 SetSchedule (attempt ${attempt})`);
+      const acked = await this.waitForReply(CmdType.SetSchedule);
+      if (acked) return true;
+      console.warn(
+        `F2 SetSchedule attempt ${attempt}/${BLEService.SET_SCHEDULE_MAX_ATTEMPTS} was rejected` +
+          (attempt < BLEService.SET_SCHEDULE_MAX_ATTEMPTS ? " — retrying." : " — giving up."),
+      );
+    }
+    return false;
   }
 
   // Per the protocol doc, F4/F5 never auto-stop on their own — once turned
@@ -612,19 +752,31 @@ class BLEService {
 
   // onOff true starts the sound with the given type/volume — the device
   // will NOT auto-stop it; onOff false is the only way to silence it.
-  async triggerSound(onOff: boolean, soundType: number, volumeLevel: number) {
-    await this.withCommandLock(async () => {
+  // Returns whether the device's own reply actually confirmed it (vs. a
+  // failure byte or no reply at all within the timeout) — callers that only
+  // care the write went out can ignore the return value.
+  async triggerSound(onOff: boolean, soundType: number, volumeLevel: number): Promise<boolean> {
+    const acked = await this.withCommandLock(async () => {
       await this.ensurePasswordVerified();
-      // UI-facing 0-5 (or up to 0x0F) volume steps map onto the documented
-      // 0xE0-0xEF byte range.
-      const volumeByte = 0xe0 + Math.min(0x0f, Math.max(0, volumeLevel));
+      // The UI presents a smooth 0-100% range (device.tsx's volume slider),
+      // but the protocol's actual volume byte only has 16 real steps
+      // (0xE0-0xEF) — every percentage necessarily quantizes onto one of
+      // those 16 steps. volumePercentToByte (utils/toneAudio.ts) is the one
+      // shared place this scaling happens, so the schedule-sync F2 builder
+      // computes byte-for-byte the same value for a given percentage.
+      const volumeByte = volumePercentToByte(volumeLevel);
+      console.log(
+        `🔊 triggerSound: onOff=${onOff}, soundType=${soundType}, volumeLevel(0-100)=${volumeLevel} -> volumeByte=0x${volumeByte.toString(16)}`,
+      );
       const frame = TaykieProtocol.buildFrame(CmdType.SoundControl, [
         onOff ? 0x01 : 0x00,
         soundType,
         volumeByte,
       ]);
       await this.writeCommand(frame, "F4 SoundControl");
-      await this.waitForReply(CmdType.SoundControl);
+      const acked = await this.waitForReply(CmdType.SoundControl);
+      console.log(`🔊 triggerSound: F4 SoundControl reply acked=${acked}`);
+      return acked;
     });
 
     if (this.soundOffTimer) {
@@ -638,12 +790,14 @@ class BLEService {
         );
       }, BLEService.TRIGGER_SAFETY_TIMEOUT_MS);
     }
+    return acked;
   }
 
   // onOff true starts the light with the given type — the device will NOT
-  // auto-stop it; onOff false is the only way to turn it off.
-  async triggerLight(onOff: boolean, lightType: number) {
-    await this.withCommandLock(async () => {
+  // auto-stop it; onOff false is the only way to turn it off. Returns
+  // whether the device's own reply confirmed it — see triggerSound.
+  async triggerLight(onOff: boolean, lightType: number): Promise<boolean> {
+    const acked = await this.withCommandLock(async () => {
       await this.ensurePasswordVerified();
       const frame = TaykieProtocol.buildFrame(CmdType.LightControl, [
         onOff ? 0x01 : 0x00,
@@ -651,7 +805,7 @@ class BLEService {
         0x00,
       ]);
       await this.writeCommand(frame, "F5 LightControl");
-      await this.waitForReply(CmdType.LightControl);
+      return this.waitForReply(CmdType.LightControl);
     });
 
     if (this.lightOffTimer) {
@@ -665,6 +819,7 @@ class BLEService {
         );
       }, BLEService.TRIGGER_SAFETY_TIMEOUT_MS);
     }
+    return acked;
   }
 
   // There's no explicit "dismiss" command in the protocol — the documented

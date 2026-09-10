@@ -6,6 +6,7 @@ import { API_BASE_URL } from "@/utils/config";
 import { GoogleSignin } from "@react-native-google-signin/google-signin";
 import { useAuthStore } from "@/stores/authStore";
 import { OnboardRequest } from "@/stores/onboardingStore";
+import messaging from "@react-native-firebase/messaging";
 
 type ProviderType = "google" | "apple";
 export type LoginResponse = {
@@ -218,7 +219,14 @@ export async function getNextAuthSession(): Promise<any> {
 }
 
 export async function logoutUser(): Promise<any> {
-  return apiClient.post(endpoints.auth.logout);
+  let fcmToken: string | undefined;
+  try {
+    fcmToken = (await messaging().getToken()) || undefined;
+  } catch {
+    fcmToken = undefined;
+  }
+
+  return apiClient.post(endpoints.auth.logout, fcmToken ? { fcmToken } : {});
 }
 
 export async function signOutNextAuth(): Promise<void> {

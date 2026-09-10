@@ -1,9 +1,18 @@
 import { fontFamily, Theme, useTheme } from "@/theme";
 import React, { useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import {
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  useWindowDimensions,
+  View,
+} from "react-native";
 import { ThemeText } from "@/components";
 import { Ionicons } from "@expo/vector-icons";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import { Medication } from "@/types/products.types";
 import Tabs from "../shared/tabs/Tabs";
 import { Button } from "@/components/ui/button";
@@ -13,11 +22,14 @@ import { format } from "date-fns";
 import { LocalizedStrings } from "@/i18n/LocalizedStrings";
 import { moderateScale, scale, verticalScale } from "@/utils/scale";
 import { FrequencyType } from "@/types/schedule.types";
+import { getTimeOfDay } from "@/utils/formatter";
+import { useAlert } from "@/provider/AlertProvider";
+import { AlertPresets } from "@/utils/alert";
 interface ScheduleProps {
   item: Medication | null;
   onAddRoutine?: (
     frequency: FrequencyType,
-    timeOfDay: string | string[],
+    timeOfDay: string,
     selectedDay?: string,
     seletedMonthDay?: number,
     reminders?: { push?: boolean; led?: boolean; sound?: boolean },
@@ -25,7 +37,7 @@ interface ScheduleProps {
 }
 
 type FrequencyKey = "daily" | "weekly" | "monthly";
-type TimeOfDayKey = "morning" | "afternoon" | "evening"|"night";
+type TimeOfDayKey = "morning" | "afternoon" | "evening" | "night";
 const Frequency_DEFAULTS: Record<FrequencyKey, string> = {
   daily: "Daily",
   weekly: "Weekly",
@@ -35,12 +47,37 @@ const TimeOfDayKey_DEFAULTS: Record<TimeOfDayKey, string> = {
   morning: "Morning",
   afternoon: "Afternoon",
   evening: "Evening",
-  night:"night"
+  night: "Night",
+};
+const TimeOfDayKey_ICONS: Record<TimeOfDayKey, React.ComponentProps<typeof Ionicons>["name"]> = {
+  morning: "sunny-outline",
+  afternoon: "sunny",
+  evening: "moon-outline",
+  night: "moon",
+};
+
+const parseScheduleTime = (time?: string): Date => {
+  const date = new Date();
+  if (!time) return date;
+  const [hours, minutes] = time.split(":").map(Number);
+  if (Number.isNaN(hours) || Number.isNaN(minutes)) return date;
+  date.setHours(hours, minutes, 0, 0);
+  return date;
+};
+
+const parseScheduleTimes = (raw?: string): Date[] => {
+  const parts = raw
+    ?.split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+  return parts && parts.length ? parts.map(parseScheduleTime) : [new Date()];
 };
 
 const Schedule = ({ item, onAddRoutine }: ScheduleProps) => {
   const theme = useTheme();
   const { t } = useTranslation();
+  const alert = useAlert();
+  const { height: windowHeight } = useWindowDimensions();
   const themedStyles = React.useMemo(() => createStyles(theme), [theme]);
   const [reminders, setReminders] = React.useState({
     push: true,
@@ -70,148 +107,287 @@ const Schedule = ({ item, onAddRoutine }: ScheduleProps) => {
       })),
     [t],
   );
-  const timeOfday = React.useMemo(
-    () =>
-      (Object.keys(TimeOfDayKey_DEFAULTS) as TimeOfDayKey[]).map((key) => ({
-        key,
-        label: t(`home.schedule.${key}`, { defaultValue: TimeOfDayKey_DEFAULTS[key] }),
-      })),
-    [t],
-  );
   const [activeFrequency, setActiveFrequency] = React.useState<FrequencyKey>(
     item?.frequency ?? "daily",
   );
-  const [activeTime, setActiveTime] = React.useState<TimeOfDayKey>("morning");
+  const [times, setTimes] = React.useState<Date[]>(() => parseScheduleTimes(item?.timeOfDay));
+  const [activePickerIndex, setActivePickerIndex] = React.useState<number | null>(null);
+
+  const getTimeOfDayInfo = useCallback(
+    (time: Date) => {
+      const key = getTimeOfDay(format(time, "HH:mm")) as TimeOfDayKey;
+      return {
+        key,
+        label: t(`home.schedule.${key}`, { defaultValue: TimeOfDayKey_DEFAULTS[key] }),
+      };
+    },
+    [t],
+  );
+
+  const warnDuplicateTime = useCallback(() => {
+    alert.show(
+      AlertPresets.warning(
+        t(LocalizedStrings.common.warning),
+        t(LocalizedStrings.schedule.routine.duplicateTime),
+      ),
+    );
+  }, [alert, t]);
+
+  const addTime = useCallback(() => {
+    setTimes((prev) => [...prev, new Date()]);
+  }, []);
+
+  const removeTime = useCallback((index: number) => {
+    setActivePickerIndex(null);
+    setTimes((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
+  const updateTime = useCallback(
+    (index: number, date: Date) => {
+      const newTimeKey = format(date, "HH:mm");
+      const isDuplicate = times.some(
+        (time, i) => i !== index && format(time, "HH:mm") === newTimeKey,
+      );
+      if (isDuplicate) {
+        warnDuplicateTime();
+        return;
+      }
+      setTimes((prev) => prev.map((time, i) => (i === index ? date : time)));
+    },
+    [times, warnDuplicateTime],
+  );
 
   const handleAddProduct = useCallback(() => {
+    const timeKeys = times.map((time) => format(time, "HH:mm"));
+    if (new Set(timeKeys).size !== timeKeys.length) {
+      warnDuplicateTime();
+      return;
+    }
+
     const selectedDay =
       activeFrequency === "weekly"
         ? selectedDayName
         : activeFrequency === "monthly"
           ? String(selectedMonthDay)
           : undefined;
-    onAddRoutine?.(activeFrequency, activeTime, selectedDay, selectedMonthDay, reminders);
-  }, [activeFrequency, activeTime, selectedDayName, selectedMonthDay, onAddRoutine, reminders]);
+    const scheduleTime = timeKeys.join(", ");
+    onAddRoutine?.(activeFrequency, scheduleTime, selectedDay, selectedMonthDay, reminders);
+  }, [
+    activeFrequency,
+    times,
+    selectedDayName,
+    selectedMonthDay,
+    onAddRoutine,
+    reminders,
+    warnDuplicateTime,
+  ]);
 
   return (
     <View>
-      <Tabs
-        initialKey={item?.frequency}
-        onSelect={(e) => setActiveFrequency(e as FrequencyKey)}
-        segments={frequency}
-      />
+      <ScrollView
+        style={[themedStyles.scrollArea, { maxHeight: windowHeight * 0.5 }]}
+        contentContainerStyle={themedStyles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        nestedScrollEnabled
+      >
+        <Tabs
+          initialKey={item?.frequency}
+          onSelect={(e) => setActiveFrequency(e as FrequencyKey)}
+          segments={frequency}
+        />
 
-      <Tabs
-        multiSelect
-        initialKey={item?.timeOfDay}
-        onSelect={(e) => setActiveTime(e as TimeOfDayKey)}
-        segments={timeOfday}
-      />
+        <View style={themedStyles.timePickerSection}>
+          <ThemeText variant="manrope.body1Bold" style={themedStyles.timePickerLabel}>
+            {t(LocalizedStrings.schedule.routine.selectTime)}
+          </ThemeText>
 
-      {activeFrequency === "weekly" && (
-        <View style={themedStyles.dateRowWrapper}>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={themedStyles.dateRow}
-            className="gap-0"
-          >
-            {weekDays.map((day, index) => {
-              const isActive = index === selectedDayIndex;
-              return (
-                <TouchableOpacity
-                  key={day.weekday + index}
-                  onPress={() => setSelectedDayIndex(index)}
-                  activeOpacity={0.9}
-                  style={[themedStyles.datePill, isActive && themedStyles.datePillActive]}
-                >
-                  <Text
-                    style={[isActive ? themedStyles.dateActive : themedStyles.dateInactive]}
-                    className={` ${isActive ? "text-primary" : "text-triatry-20"} font-Manrope-Bold font-semibold text-xs leading-4`}
+          {times.map((time, index) => {
+            
+            const { key, label } = getTimeOfDayInfo(time);
+            const isPickerOpen = activePickerIndex === index;
+            return (
+              <View key={index}>
+                <View style={themedStyles.timeRow}>
+                  <TouchableOpacity
+                    style={themedStyles.timeRowButton}
+                    onPress={() => setActivePickerIndex(isPickerOpen ? null : index)}
+                    activeOpacity={0.85}
+                    accessibilityRole="button"
+                    accessibilityLabel="Select dosage time"
                   >
-                    {day.weekday.slice(0, 2)}
-                  </Text>
-                  <Text
-                    style={[isActive ? themedStyles.dateActive : themedStyles.dateInactive]}
-                    className={` ${isActive ? "text-primary" : "text-triatry-20"} font-Manrope-Bold font-semibold text-xs leading-4`}
-                  >
-                    {day.dayNumber}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-        </View>
-      )}
-      {activeFrequency === "monthly" && (
-        <View style={themedStyles.dateRowWrapper}>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={themedStyles.dateRow}
-          >
-            {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => {
-              const isActive = day === selectedMonthDay;
-              return (
-                <TouchableOpacity
-                  key={day}
-                  onPress={() => setSelectedMonthDay(day)}
-                  activeOpacity={0.9}
-                  style={[themedStyles.datePill, isActive && themedStyles.datePillActive]}
-                >
-                  <Text
-                    style={[isActive ? themedStyles.dateActive : themedStyles.dateInactive]}
-                    className={`${isActive ? "text-primary" : "text-triatry-20"} font-Manrope-Bold font-semibold text-xs leading-4`}
-                  >
-                    {day}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-        </View>
-      )}
-      <ThemeText variant="manrope.body1Bold" style={themedStyles.modalSectionLabel}>
-        {t(LocalizedStrings.schedule.routine.reminders.title)}
-      </ThemeText>
+                    <Ionicons
+                      name="time-outline"
+                      size={moderateScale(18)}
+                      color={theme.colors.text.primary}
+                    />
+                    <Text style={themedStyles.timeRowText}>{format(time, "h:mm a")}</Text>
+                  </TouchableOpacity>
 
-      <View style={themedStyles.reminderRow}>
-        {(["push", "led", "sound"] as (keyof typeof reminders)[]).map((key) => {
-          const isActive = reminders[key];
-          return (
-            <TouchableOpacity
-              key={key}
-              style={[themedStyles.checkWrapper]}
-              activeOpacity={0.85}
-              onPress={() => toggleReminder(key)}
-            >
-              <View
-                style={[themedStyles.reminderToggle, isActive && themedStyles.reminderToggleActive]}
-              >
-                {isActive && (
-                  <Ionicons
-                    name="checkmark"
-                    size={moderateScale(18)}
-                    color={theme.colors.text.primary}
-                    style={themedStyles.reminderToggleIcon}
+                  <View style={themedStyles.timeOfDayBadge}>
+                    <Ionicons
+                      name={TimeOfDayKey_ICONS[key]}
+                      size={moderateScale(14)}
+                      color={theme.colors.primary.dark}
+                    />
+                    <Text style={themedStyles.timeOfDayBadgeText}>{label}</Text>
+                  </View>
+
+                  {times.length > 1 && (
+                    <TouchableOpacity
+                      onPress={() => removeTime(index)}
+                      accessibilityRole="button"
+                      accessibilityLabel="Remove time"
+                    >
+                      <Ionicons
+                        name="close-circle"
+                        size={moderateScale(20)}
+                        color={theme.colors.text.secondary}
+                      />
+                    </TouchableOpacity>
+                  )}
+                </View>
+
+                {isPickerOpen && (
+                  <DateTimePicker
+                    value={time}
+                    mode="time"
+                    display={Platform.OS === "ios" ? "spinner" : "default"}
+                    onChange={(event, date) => {
+                      if (Platform.OS === "android") setActivePickerIndex(null);
+                      if (event.type !== "dismissed" && date) updateTime(index, date);
+                    }}
                   />
                 )}
               </View>
-              <ThemeText
-                variant="manrope.body1Bold"
-                style={[
-                  themedStyles.reminderToggleText,
-                  isActive && themedStyles.reminderToggleTextActive,
-                ]}
+            );
+          })}
+
+          <TouchableOpacity
+            style={themedStyles.addTimeButton}
+            onPress={addTime}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel="Add another time"
+          >
+            <Ionicons
+              name="add-circle-outline"
+              size={moderateScale(18)}
+              color={theme.colors.text.primary}
+            />
+            <Text style={themedStyles.addTimeButtonText}>
+              {t(LocalizedStrings.schedule.routine.addTime)}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {activeFrequency === "weekly" && (
+          <View style={themedStyles.dateRowWrapper}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={themedStyles.dateRow}
+              className="gap-0"
+            >
+              {weekDays.map((day, index) => {
+                const isActive = index === selectedDayIndex;
+                return (
+                  <TouchableOpacity
+                    key={day.weekday + index}
+                    onPress={() => setSelectedDayIndex(index)}
+                    activeOpacity={0.9}
+                    style={[themedStyles.datePill, isActive && themedStyles.datePillActive]}
+                  >
+                    <Text
+                      style={[isActive ? themedStyles.dateActive : themedStyles.dateInactive]}
+                      className={` ${isActive ? "text-primary" : "text-triatry-20"} font-Manrope-Bold font-semibold text-xs leading-4`}
+                    >
+                      {day.weekday.slice(0, 2)}
+                    </Text>
+                    <Text
+                      style={[isActive ? themedStyles.dateActive : themedStyles.dateInactive]}
+                      className={` ${isActive ? "text-primary" : "text-triatry-20"} font-Manrope-Bold font-semibold text-xs leading-4`}
+                    >
+                      {day.dayNumber}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        )}
+        {activeFrequency === "monthly" && (
+          <View style={themedStyles.dateRowWrapper}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={themedStyles.dateRow}
+            >
+              {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => {
+                const isActive = day === selectedMonthDay;
+                return (
+                  <TouchableOpacity
+                    key={day}
+                    onPress={() => setSelectedMonthDay(day)}
+                    activeOpacity={0.9}
+                    style={[themedStyles.datePill, isActive && themedStyles.datePillActive]}
+                  >
+                    <Text
+                      style={[isActive ? themedStyles.dateActive : themedStyles.dateInactive]}
+                      className={`${isActive ? "text-primary" : "text-triatry-20"} font-Manrope-Bold font-semibold text-xs leading-4`}
+                    >
+                      {day}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        )}
+        <ThemeText variant="manrope.body1Bold" style={themedStyles.modalSectionLabel}>
+          {t(LocalizedStrings.schedule.routine.reminders.title)}
+        </ThemeText>
+
+        <View style={themedStyles.reminderRow}>
+          {(["push", "led", "sound"] as (keyof typeof reminders)[]).map((key) => {
+            const isActive = reminders[key];
+            return (
+              <TouchableOpacity
+                key={key}
+                style={[themedStyles.checkWrapper]}
+                activeOpacity={0.85}
+                onPress={() => toggleReminder(key)}
               >
-                {t(`schedule.routine.reminders.${key}`, {
-                  defaultValue: key === "push" ? "Push" : key === "led" ? "LED" : "Sound",
-                })}
-              </ThemeText>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
+                <View
+                  style={[
+                    themedStyles.reminderToggle,
+                    isActive && themedStyles.reminderToggleActive,
+                  ]}
+                >
+                  {isActive && (
+                    <Ionicons
+                      name="checkmark"
+                      size={moderateScale(18)}
+                      color={theme.colors.text.primary}
+                      style={themedStyles.reminderToggleIcon}
+                    />
+                  )}
+                </View>
+                <ThemeText
+                  variant="manrope.body1Bold"
+                  style={[
+                    themedStyles.reminderToggleText,
+                    isActive && themedStyles.reminderToggleTextActive,
+                  ]}
+                >
+                  {t(`schedule.routine.reminders.${key}`, {
+                    defaultValue: key === "push" ? "Push" : key === "led" ? "LED" : "Sound",
+                  })}
+                </ThemeText>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </ScrollView>
       <Button
         title={t(LocalizedStrings.schedule.routine.submit)}
         onPress={handleAddProduct}
@@ -249,6 +425,68 @@ const createStyles = (theme: Theme) =>
     modalSectionLabel: {
       color: theme.colors.text.primary,
       marginBottom: theme.spacing.smd,
+    },
+    scrollArea: {
+      flexGrow: 0,
+    },
+    scrollContent: {
+      paddingBottom: theme.spacing.smd,
+    },
+    timePickerSection: {
+      marginBottom: theme.spacing.lg,
+    },
+    timePickerLabel: {
+      color: theme.colors.text.primary,
+      marginBottom: theme.spacing.smd,
+    },
+    timeRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: theme.spacing.smd,
+      marginBottom: theme.spacing.smd,
+    },
+    timeRowButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: theme.spacing.smd,
+      flex: 1,
+      height: verticalScale(50),
+      paddingHorizontal: theme.spacing.md,
+      borderRadius: theme.spacing.smd,
+      backgroundColor: theme.colors.background.default,
+      borderWidth: scale(1),
+      borderColor: "rgba(0,0,0,0.08)",
+    },
+    timeRowText: {
+      color: theme.colors.text.primary,
+      fontFamily: fontFamily.manrope.medium,
+      fontSize: moderateScale(16),
+    },
+    timeOfDayBadge: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: theme.spacing.xs,
+      paddingHorizontal: theme.spacing.smd,
+      paddingVertical: verticalScale(6),
+      borderRadius: 999,
+      backgroundColor: theme.colors.primary.main,
+    },
+    timeOfDayBadgeText: {
+      color: theme.colors.primary.dark,
+      fontFamily: fontFamily.manrope.bold,
+      fontSize: moderateScale(12),
+    },
+    addTimeButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: theme.spacing.xs,
+      alignSelf: "flex-start",
+      paddingVertical: theme.spacing.xs,
+    },
+    addTimeButtonText: {
+      color: theme.colors.text.primary,
+      fontFamily: fontFamily.manrope.bold,
+      fontSize: moderateScale(14),
     },
     reminderRow: {
       flexDirection: "row",

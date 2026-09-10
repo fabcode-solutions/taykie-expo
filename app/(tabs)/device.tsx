@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect } from "react";
-import { FlatList, ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, FlatList, ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { SafeAreaScreen, ThemeStatusBar, ThemeText, ThemeView } from "@/components";
 import { fontFamily, useTheme } from "@/theme";
@@ -27,10 +27,12 @@ import { LocalizedStrings } from "@/i18n/LocalizedStrings";
 import { AlertPresets, AlertBuilder } from "@/utils/alert";
 import { useAlert } from "@/provider/AlertProvider";
 import Switch from "@/components/ui/Switch";
+import RangeSlider from "@/components/ui/RangeSlider";
 import { TONE_OPTIONS, DEFAULT_TONE_INDEX, DEFAULT_VOLUME_LEVEL } from "@/utils/toneAudio";
+import { findTaykieDevice } from "@/utils/reminderSound";
 import { capitalizeText } from "@/utils/formatter";
 
-type DeviceActionKey = "find" | "history" | "rename" | "dismiss";
+type DeviceActionKey = "find" | "history" | "rename" | "dismiss" | "password";
 interface DeviceAction {
   key: DeviceActionKey;
   label: string;
@@ -43,6 +45,7 @@ const ACTIONS: DeviceAction[] = [
   { key: "history", label: "Sync History", icon: "refresh" },
   { key: "find", label: "Find My Taykie", icon: "search", detail: "v1.4.2" },
   { key: "rename", label: "Rename Device", icon: "pencil" },
+  { key: "password", label: "Change Device Password", icon: "lock-closed" },
 ];
 
 export default function DeviceScreen() {
@@ -102,6 +105,8 @@ export default function DeviceScreen() {
     toggleScheduleSlot,
     eraseHistory,
   } = useBLEStore();
+  const toneAck = useBLEStore((s) => s.toneAck);
+  const volumeAck = useBLEStore((s) => s.volumeAck);
   const { hasPermissions, isBluetoothEnabled } = useBLEPermissions();
   const dose_frequency = useOnboardingStore((s) => s.dose_frequency);
   const [isRefreshingCompartments, setIsRefreshingCompartments] = React.useState(false);
@@ -257,6 +262,17 @@ export default function DeviceScreen() {
     return active.join(", ");
   };
 
+  // On-device schedule slots store a plain 24h hour/minute (no Date/ISO
+  // value to hand to Intl), so this formats those two numbers directly as
+  // e.g. "01:00PM" rather than reusing formatEventTime.
+  const formatScheduleTime = (hour?: number, minute?: number) => {
+    const h = hour ?? 0;
+    const m = minute ?? 0;
+    const period = h >= 12 ? "PM" : "AM";
+    const hour12 = h % 12 === 0 ? 12 : h % 12;
+    return `${hour12.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}${period}`;
+  };
+
   // Formats a compartment-activity timestamp as e.g. "Sep 3, 2:32 PM"
   const formatEventTime = (isoTimestamp: string) => {
     const date = new Date(isoTimestamp);
@@ -279,6 +295,12 @@ export default function DeviceScreen() {
       if (connectionStatus !== "disconnected") return;
       try {
         await connectToDevice(deviceId);
+        // Per Delivered_Feature_Description.md §1 ("Warm white light —
+        // connection test method"): tapping the device name is what should
+        // trigger the confirmation blink, not just the standalone "Find My
+        // Taykie" action — this is the same pattern, just fired at the
+        // point of connecting instead of on demand.
+        findTaykieDevice();
       } catch (error) {
         alert.show(AlertPresets.error(t(LocalizedStrings.common.error), error.message));
       }
@@ -366,16 +388,43 @@ export default function DeviceScreen() {
 
   const handleSelectVolume = useCallback(
     (value: number) => {
+      console.log(`🎚️ handleSelectVolume: raw value from slider = ${value}`);
       setPendingVolumeLevel(value);
       if (volumeDebounceRef.current) clearTimeout(volumeDebounceRef.current);
       volumeDebounceRef.current = setTimeout(() => {
         volumeDebounceRef.current = null;
+        console.log(`🎚️ handleSelectVolume: debounce settled, calling setDeviceVolume(${value})`);
         setDeviceVolume(value);
         setPendingVolumeLevel(null);
       }, TONE_PREVIEW_DEBOUNCE_MS);
     },
     [setDeviceVolume],
   );
+
+  // Small inline indicator next to a tone/volume button's label reflecting
+  // whether the device actually confirmed that specific tap — a spinner
+  // while waiting on the ack, then a check/error mark for a moment once it
+  // settles. Only ever shown on the exact button the ack belongs to.
+  const renderAckIndicator = (
+    ack: { value: number; status: "pending" | "confirmed" | "failed" } | null,
+    value: number,
+    tintColor: string,
+  ) => {
+    if (ack?.value !== value) return null;
+    if (ack.status === "pending") {
+      return (
+        <ActivityIndicator size="small" color={tintColor} style={{ marginLeft: scale(6) }} />
+      );
+    }
+    return (
+      <Ionicons
+        name={ack.status === "confirmed" ? "checkmark-circle" : "close-circle"}
+        size={moderateScale(14)}
+        color={ack.status === "confirmed" ? theme.colors.success.main : theme.colors.error.main}
+        style={{ marginLeft: scale(6) }}
+      />
+    );
+  };
 
   return (
     <>
@@ -398,6 +447,29 @@ export default function DeviceScreen() {
                 <ThemeText variant="manrope.h4" style={themedStyles.cardTitle}>
                   {t(LocalizedStrings.device.connection.title)}
                 </ThemeText>
+                <TouchableOpacity
+                  onPress={() =>
+                    alert.show(
+                      AlertPresets.info(
+                        "Device LED Colors",
+                        "Your Taykie's light ring reflects its state automatically — this isn't controlled by the app:\n\n" +
+                          "⚪ White — Connected\n" +
+                          "🔴 Red — Low battery\n" +
+                          "🟢 Green — Fully charged\n" +
+                          "🔵 Blue — Medication reminder active\n" +
+                          "🟡 Warm Yellow — Charging",
+                      ),
+                    )
+                  }
+                  activeOpacity={0.7}
+                  style={{ marginLeft: scale(6) }}
+                >
+                  <Ionicons
+                    name="information-circle-outline"
+                    size={moderateScale(16)}
+                    color={theme.colors.text.secondary}
+                  />
+                </TouchableOpacity>
               </View>
               {connectionStatus === "connected" && (
                 <TouchableOpacity
@@ -458,39 +530,41 @@ export default function DeviceScreen() {
                 {t(LocalizedStrings.device.audio_settings)}
               </ThemeText>
 
-              {/* Volume Control (0-5) */}
-              <ThemeText variant="manrope.body1Bold" style={themedStyles.settingLabel}>
-                {t(LocalizedStrings.device.volume_level)}
-              </ThemeText>
-              <View style={themedStyles.volumeContainer}>
-                {[0, 1, 2, 3, 4, 5].map((level) => (
-                  <TouchableOpacity
-                    key={`vol-${level}`}
-                    style={[
-                      themedStyles.volumeNode,
-                      displayVolumeLevel === level && themedStyles.volumeNodeActive,
-                    ]}
-                    onPress={() => {
-                      // Debounced — see handleSelectVolume. setDeviceVolume
-                      // (once it actually fires) already triggers the
-                      // device's speaker itself as its preview mechanism —
-                      // calling triggerDeviceSoundForReminder() here too
-                      // fired a second, duplicate F4 SoundControl write for
-                      // every tap (confirmed in device logs), which is a
-                      // likely contributor to devices dropping mid-write.
-                      handleSelectVolume(level);
-                    }}
-                  >
-                    <ThemeText
-                      style={
-                        displayVolumeLevel === level ? themedStyles.textWhite : themedStyles.textDark
-                      }
-                    >
-                      {level === 0 ? "Mute" : level}
-                    </ThemeText>
-                  </TouchableOpacity>
-                ))}
+              {/* Volume Control (0-100%) */}
+              <View style={themedStyles.sliderLabelRow}>
+                <ThemeText variant="manrope.body1Bold" style={themedStyles.settingLabel}>
+                  {t(LocalizedStrings.device.volume_level)}
+                </ThemeText>
+                <View style={{ flexDirection: "row", alignItems: "center" }}>
+                  <ThemeText variant="manrope.body1Bold" style={{ color: theme.colors.primary.main }}>
+                    {displayVolumeLevel === 0 ? "Mute" : `${displayVolumeLevel}%`}
+                  </ThemeText>
+                  {renderAckIndicator(volumeAck, displayVolumeLevel, theme.colors.primary.main)}
+                </View>
               </View>
+              <RangeSlider
+                value={displayVolumeLevel}
+                minimumValue={0}
+                maximumValue={100}
+                step={1}
+                onValueChange={(level) => {
+                  // Debounced — see handleSelectVolume. setDeviceVolume
+                  // (once it actually fires) already triggers the
+                  // device's speaker itself as its preview mechanism —
+                  // calling triggerDeviceSoundForReminder() here too
+                  // fired a second, duplicate F4 SoundControl write for
+                  // every tap (confirmed in device logs), which is a
+                  // likely contributor to devices dropping mid-write.
+                  // The debounce matters even more here than for the old
+                  // buttons — a drag can cross several steps per second,
+                  // and only the value the user settles on should actually
+                  // reach the device.
+                  handleSelectVolume(level);
+                }}
+                trackColor="rgba(0,0,0,0.08)"
+                thumbColor={theme.colors.primary.main}
+                style={themedStyles.volumeSlider}
+              />
 
               {/* Tone Control (0-5) */}
               <ThemeText variant="manrope.body1Bold" style={themedStyles.settingLabel}>
@@ -517,15 +591,12 @@ export default function DeviceScreen() {
                       handleSelectTone(tone.value);
                     }}
                   >
-                    <ThemeText
-                      style={
-                        displayToneIndex === tone.value
-                          ? themedStyles.textWhite
-                          : themedStyles.textDark
-                      }
-                    >
-                      {capitalizeText(tone.label)}
-                    </ThemeText>
+                    <View style={{ flexDirection: "row", alignItems: "center" }}>
+                      <ThemeText style={themedStyles.textDark}>
+                        {capitalizeText(tone.label)}
+                      </ThemeText>
+                      {renderAckIndicator(toneAck, tone.value, theme.colors.text.primary)}
+                    </View>
                   </TouchableOpacity>
                 ))}
               </ScrollView>
@@ -535,8 +606,19 @@ export default function DeviceScreen() {
           {/* SCHEDULES OVERVIEW CARD */}
           {connectionStatus === "connected" && (
             <ThemeView style={themedStyles.card} backgroundColor={theme.colors.white} rounded="lg">
-              <ThemeText variant="manrope.h4" style={themedStyles.cardTitle}>
-                {t(LocalizedStrings.device.active_schedules)}
+              <View style={themedStyles.scheduleCardHeaderRow}>
+                <ThemeText variant="manrope.h4" style={themedStyles.cardTitle}>
+                  {t(LocalizedStrings.device.active_schedules)}
+                </ThemeText>
+                <TouchableOpacity onPress={() => router.push("/device/schedule-sync")}>
+                  <ThemeText variant="manrope.body2" style={{ color: theme.colors.primary.dark }}>
+                    Manage
+                  </ThemeText>
+                </TouchableOpacity>
+              </View>
+              <ThemeText variant="manrope.caption" style={themedStyles.scheduleCardSubtitle}>
+                These fire directly from the device's own clock, even when your phone isn't
+                connected.
               </ThemeText>
               <View style={themedStyles.schedulesContainer}>
                 {schedules?.map((schedule, index) => (
@@ -552,8 +634,7 @@ export default function DeviceScreen() {
                         variant="manrope.body1Bold"
                         style={{ fontSize: moderateScale(18) }}
                       >
-                        {schedule?.hour?.toString().padStart(2, "0") ?? "00"}:
-                        {schedule?.minute?.toString().padStart(2, "0") ?? "00"}
+                        {formatScheduleTime(schedule?.hour, schedule?.minute)}
                       </ThemeText>
                       <ThemeText variant="manrope.caption">
                         {formatDays(schedule.weekdayBitmask)}
@@ -722,7 +803,12 @@ export default function DeviceScreen() {
                     if (action.key === "history") startHistorySync();
                     else if (action.key === "dismiss") dismissAlert();
                     else if (action.key === "rename") router.push("/device/rename-device");
-                    else router.push("/device/pair-device");
+                    else if (action.key === "find") {
+                      findTaykieDevice();
+                      router.push("/device/pair-device");
+                    } else if (action.key === "password") {
+                      router.push("/device/change-device-password");
+                    }
                   }}
                   key={action.key}
                   activeOpacity={0.9}
@@ -749,6 +835,13 @@ export default function DeviceScreen() {
                           name="notifications-off"
                           size={moderateScale(16)}
                           color="#FF3B30"
+                        />
+                      )}
+                      {action.icon === "lock-closed" && (
+                        <Ionicons
+                          name="lock-closed-outline"
+                          size={moderateScale(16)}
+                          color={theme.colors.slateCharcoal}
                         />
                       )}
                     </View>
@@ -973,7 +1066,6 @@ const createStyles = (theme: Theme) =>
     },
     onlineText: { color: "#47D257" },
     warningText: { color: "#FF9800" },
-    textWhite: { color: theme.colors.white, fontFamily: fontFamily.manrope.bold },
     textDark: { color: theme.colors.text.primary, fontFamily: fontFamily.manrope.medium },
 
     batteryWrapper: {
@@ -1005,21 +1097,14 @@ const createStyles = (theme: Theme) =>
       marginBottom: theme.spacing.xs,
       color: theme.colors.text.secondary,
     },
-    volumeContainer: {
+    sliderLabelRow: {
       flexDirection: "row",
       justifyContent: "space-between",
-      marginBottom: theme.spacing.md,
-    },
-    volumeNode: {
-      flex: 1,
-      paddingVertical: verticalScale(8),
-      marginHorizontal: scale(2),
-      backgroundColor: "rgba(0,0,0,0.05)",
-      borderRadius: moderateScale(6),
       alignItems: "center",
     },
-    volumeNodeActive: {
-      backgroundColor: theme.colors.primary.main,
+    volumeSlider: {
+      marginTop: verticalScale(8),
+      marginBottom: theme.spacing.md,
     },
     toneContainer: {
       flexDirection: "row",
@@ -1037,6 +1122,16 @@ const createStyles = (theme: Theme) =>
       backgroundColor: theme.colors.primary.main,
     },
 
+    scheduleCardHeaderRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+    },
+    scheduleCardSubtitle: {
+      color: theme.colors.text.secondary,
+      marginTop: verticalScale(2),
+      marginBottom: theme.spacing.sm,
+    },
     schedulesContainer: {
       flexDirection: "column",
       gap: theme.spacing.sm,

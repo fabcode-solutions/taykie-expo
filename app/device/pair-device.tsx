@@ -6,15 +6,23 @@ import {
   Text,
   KeyboardAvoidingView,
   Platform,
-  Pressable,
   ActivityIndicator,
+  FlatList,
 } from "react-native";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ThemeText } from "@/components";
 import { useTranslation } from "react-i18next";
 import { fontFamily, Theme, useTheme } from "@/theme";
 import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withTiming,
+} from "react-native-reanimated";
 import IconBackArrow from "@/components/icons/IconBackArrow";
 import { Button } from "@/components/ui/button";
 import Svg, { Path } from "react-native-svg";
@@ -29,6 +37,7 @@ import {
 } from "@/stores/bleStore";
 import { AlertPresets } from "@/utils/alert";
 import { useAlert } from "@/provider/AlertProvider";
+import { findTaykieDevice } from "@/utils/reminderSound";
 
 export default function PairDeviceScreen() {
   const { t } = useTranslation();
@@ -44,10 +53,40 @@ export default function PairDeviceScreen() {
   const { initBLE, scanDevices, stopScan, connectToDevice } = useBLEStore();
   const [isConnecting, setIsConnecting] = useState(false);
 
-  // The BLE scan itself already only matches on names containing
-  // "TayKie"/"tk-" (see BLEService.startScan), so the first result is the
-  // one we care about — no need for a picker here.
-  const foundDevice = scannedDevices[0] ?? null;
+  // The scan (see BLEService.startScan) no longer stops itself after the
+  // first match, so more than one nearby Taykie device can actually show up
+  // here now. Sorted strongest-signal-first so the closest device — the
+  // most likely one the user actually means — leads the list.
+  const sortedDevices = React.useMemo(
+    () => [...scannedDevices].sort((a, b) => (b.rssi ?? -999) - (a.rssi ?? -999)),
+    [scannedDevices],
+  );
+  const hasMultipleDevices = sortedDevices.length > 1;
+  // With exactly one match, keep the simpler single-device flow below
+  // (found name + one "Connect" button) rather than a one-row list.
+  const foundDevice = !hasMultipleDevices ? (sortedDevices[0] ?? null) : null;
+  const isSearching = isScanning && sortedDevices.length === 0;
+  const isBusy = isSearching || isConnecting || connectionStatus === "connecting";
+
+  // Pulsing ring around the bluetooth icon while actively searching for a
+  // device or connecting to one — the static icon otherwise gave no
+  // feedback that anything was happening until the scan/connect either
+  // succeeded or failed, which could take several seconds either way.
+  const pulse = useSharedValue(1);
+  useEffect(() => {
+    if (isBusy) {
+      pulse.value = withRepeat(
+        withTiming(1.15, { duration: 700, easing: Easing.inOut(Easing.ease) }),
+        -1,
+        true,
+      );
+    } else {
+      pulse.value = withTiming(1, { duration: 200 });
+    }
+  }, [isBusy]);
+  const pulseStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: pulse.value }],
+  }));
 
   useEffect(() => {
     initBLE();
@@ -56,7 +95,19 @@ export default function PairDeviceScreen() {
     };
   }, []);
 
+  // Covers both cases: a device already connected before this screen was
+  // opened (nothing to scan/connect for — just reflect it and leave), and a
+  // device that becomes connected during this screen's own scan/connect flow
+  // (replacing the old router.back(), which returned to whatever screen
+  // happened to open this one rather than reliably landing on Device).
   useEffect(() => {
+    if (connectionStatus === "connected") {
+      router.replace("/(tabs)/device");
+    }
+  }, [connectionStatus, router]);
+
+  useEffect(() => {
+    if (connectionStatus === "connected") return;
     if (!hasPermissions) return;
     if (!isBluetoothEnabled) {
       alert.show(
@@ -70,7 +121,7 @@ export default function PairDeviceScreen() {
     scanDevices().catch((error: any) => {
       alert.show(AlertPresets.error(t(LocalizedStrings.common.error), error.message));
     });
-  }, [hasPermissions, isBluetoothEnabled]);
+  }, [hasPermissions, isBluetoothEnabled, connectionStatus]);
 
   const displayName = React.useMemo(() => {
     if (!user) return null;
@@ -84,18 +135,32 @@ export default function PairDeviceScreen() {
     router.back();
   }, [router]);
 
-  const handleConnect = React.useCallback(async () => {
-    if (!foundDevice || isConnecting || connectionStatus !== "disconnected") return;
-    setIsConnecting(true);
-    try {
-      await connectToDevice(foundDevice.id);
-      router.back();
-    } catch (error: any) {
-      alert.show(AlertPresets.error(t(LocalizedStrings.common.error), error.message));
-    } finally {
-      setIsConnecting(false);
-    }
-  }, [foundDevice, isConnecting, connectionStatus, connectToDevice, router]);
+  const handleConnectToId = React.useCallback(
+    async (deviceId: string) => {
+      if (isConnecting || connectionStatus !== "disconnected") return;
+      setIsConnecting(true);
+      try {
+        // No explicit navigation here — the connectionStatus effect above
+        // redirects to Device as soon as connectToDevice flips it to
+        // "connected".
+        await connectToDevice(deviceId);
+        // Per Delivered_Feature_Description.md §1: tapping the device name
+        // is the documented trigger for the warm-white connection-confirm
+        // blink (3 blinks over 21s) — same pattern "Find My Taykie" uses.
+        findTaykieDevice();
+      } catch (error: any) {
+        alert.show(AlertPresets.error(t(LocalizedStrings.common.error), error.message));
+      } finally {
+        setIsConnecting(false);
+      }
+    },
+    [isConnecting, connectionStatus, connectToDevice],
+  );
+
+  const handleConnect = React.useCallback(() => {
+    if (!foundDevice) return;
+    return handleConnectToId(foundDevice.id);
+  }, [foundDevice, handleConnectToId]);
 
   const handleRetryScan = React.useCallback(async () => {
     try {
@@ -131,7 +196,7 @@ export default function PairDeviceScreen() {
             </Text>
           </View>
           <View style={styles.iconWrapper}>
-            <View style={styles.iconC1}>
+            <Animated.View style={[styles.iconC1, isBusy && pulseStyle]}>
               <View style={styles.iconC2}>
                 <Svg width="60" height="60" viewBox="0 0 60 60" fill="none">
                   <Path
@@ -143,16 +208,46 @@ export default function PairDeviceScreen() {
                   />
                 </Svg>
               </View>
-            </View>
+            </Animated.View>
           </View>
           <Text style={styles.searching}>
-            {isScanning
-              ? "Searching for nearby devices..."
-              : foundDevice
-                ? "Device found"
-                : "No Taykie device found nearby"}
+            {isConnecting || connectionStatus === "connecting"
+              ? "Connecting to device..."
+              : isSearching
+                ? "Searching for nearby devices..."
+                : hasMultipleDevices
+                  ? "Multiple devices found — tap one to connect"
+                  : foundDevice
+                    ? "Device found"
+                    : "No Taykie device found nearby"}
           </Text>
-          {isScanning && !foundDevice ? (
+          {hasMultipleDevices ? (
+            <FlatList
+              data={sortedDevices}
+              keyExtractor={(item) => item.id}
+              style={styles.deviceList}
+              scrollEnabled={false}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={styles.deviceRow}
+                  activeOpacity={0.7}
+                  disabled={isConnecting}
+                  onPress={() => handleConnectToId(item.id)}
+                >
+                  <Ionicons name="bluetooth" size={moderateScale(22)} color={theme.colors.primary.main} />
+                  <View style={styles.deviceInfo}>
+                    <Text style={styles.deviceName}>{item.name || "Unnamed Taykie Device"}</Text>
+                    <Text style={styles.deviceRssi}>Signal: {item.rssi ?? "--"} dBm</Text>
+                  </View>
+                  <Ionicons
+                    name="chevron-forward"
+                    size={moderateScale(18)}
+                    color={theme.colors.primary.dark}
+                  />
+                </TouchableOpacity>
+              )}
+            />
+          ) : isBusy ? (
             <ActivityIndicator
               style={{ marginTop: verticalScale(20) }}
               color={theme.colors.primary.main}
@@ -160,34 +255,26 @@ export default function PairDeviceScreen() {
           ) : (
             <Text style={styles.selectedDevice}>{foundDevice?.name || "--"}</Text>
           )}
-          <View style={{ marginTop: verticalScale(30) }}>
-            {!isScanning && !foundDevice ? (
-              <Button
-                title="Try Again"
-                onPress={handleRetryScan}
-                textStyle={{ fontSize: moderateScale(20) }}
-                rightIcon={null}
-              />
-            ) : (
-              <Button
-                title={isConnecting ? "Connecting..." : "Connect"}
-                onPress={handleConnect}
-                disabled={!foundDevice || isConnecting}
-                textStyle={{ fontSize: moderateScale(20) }}
-                rightIcon={null}
-              />
-            )}
-          </View>
-          <View style={styles.manuallyWrapper}>
-            <Text style={styles.manuallyWrapperText}>
-              {t(LocalizedStrings.device.cantFindDevice)}
-            </Text>
-            <Pressable>
-              <Text style={[styles.manuallyWrapperTextBold]}>
-                {t(LocalizedStrings.device.enterManually)}
-              </Text>
-            </Pressable>
-          </View>
+          {!hasMultipleDevices && (
+            <View style={{ marginTop: verticalScale(30) }}>
+              {!isScanning && !foundDevice ? (
+                <Button
+                  title="Try Again"
+                  onPress={handleRetryScan}
+                  textStyle={{ fontSize: moderateScale(20) }}
+                  rightIcon={null}
+                />
+              ) : (
+                <Button
+                  title={isConnecting ? "Connecting..." : "Connect"}
+                  onPress={handleConnect}
+                  disabled={!foundDevice || isConnecting}
+                  textStyle={{ fontSize: moderateScale(20) }}
+                  rightIcon={null}
+                />
+              )}
+            </View>
+          )}
         </ScrollView>
       </SafeAreaView>
     </KeyboardAvoidingView>
@@ -284,22 +371,33 @@ const createStyles = (theme: Theme) =>
       textAlign: "center",
       marginTop: verticalScale(20),
     },
-    manuallyWrapper: {
-      flexDirection: "row",
-      gap: scale(4),
-      justifyContent: "center",
+    deviceList: {
       marginTop: verticalScale(20),
     },
-    manuallyWrapperText: {
-      fontSize: moderateScale(moderateScale(14)),
-      fontWeight: "400" as const,
-      fontFamily: fontFamily.manrope.regular,
-      color: theme.colors.primary.dark,
+    deviceRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      backgroundColor: theme.colors.white,
+      padding: scale(14),
+      borderRadius: moderateScale(12),
+      marginBottom: verticalScale(10),
+      borderWidth: scale(1),
+      borderColor: "rgba(0,0,0,0.06)",
     },
-    manuallyWrapperTextBold: {
-      fontSize: 14,
+    deviceInfo: {
+      flex: 1,
+      marginLeft: scale(12),
+    },
+    deviceName: {
+      fontSize: moderateScale(15),
       fontWeight: "500" as const,
       fontFamily: fontFamily.manrope.medium,
       color: theme.colors.text.primary,
+    },
+    deviceRssi: {
+      fontSize: moderateScale(12),
+      fontFamily: fontFamily.manrope.regular,
+      color: theme.colors.primary.dark,
+      marginTop: verticalScale(2),
     },
   });

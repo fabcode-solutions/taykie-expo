@@ -47,13 +47,15 @@ const TaskItem: React.FC<TaskItemProps> = ({
     }
   };
 
-  const times = time.split(", ");
-  const timesString = times.length > 1 ? times.map((time) => time).join(", ") : time;
   const titleString = Array.isArray(title) ? title.join(", ") : (title ?? "");
 
   function convertToAmPm(time24?: string) {
     if (!time24 || typeof time24 !== "string" || !time24.includes(":")) {
       return "--:--";
+    }
+
+    if (/am|pm/i.test(time24)) {
+      return time24;
     }
 
     let [hours, minutes] = time24.split(":");
@@ -62,10 +64,15 @@ const TaskItem: React.FC<TaskItemProps> = ({
     if (isNaN(h)) return "--:--";
 
     const ampm = h >= 12 ? "PM" : "AM";
-    const formattedHours = h % 12 || 12;
+    const formattedHours = (h % 12 || 12).toString().padStart(2, "0");
 
     return `${formattedHours}:${minutes} ${ampm}`;
   }
+
+  const displayTime = time
+    .split(",")
+    .map((part) => convertToAmPm(part.trim()))
+    .join(", ");
 
   return (
     <Pressable
@@ -83,7 +90,7 @@ const TaskItem: React.FC<TaskItemProps> = ({
           {title}
         </ThemeText>
         <ThemeText variant="manrope.caption" style={styles.taskTime}>
-          {time}
+          {displayTime}
         </ThemeText>
       </View>
 

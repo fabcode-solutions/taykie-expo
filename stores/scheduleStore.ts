@@ -113,15 +113,28 @@ export const useScheduleStore = create<State & Actions>()(
           const newSchedules = result?.data || [];
           const totalPages = result?.meta?.totalPages || 1;
 
-          set((state) => ({
-            userSchedules: reset ? newSchedules : [...state.userSchedules, ...newSchedules],
+          set((state) => {
+            // De-dup by id — a page can overlap with what's already loaded
+            // (e.g. FlatList's onEndReached firing more than once for the
+            // same scroll position before isFetchingNextPage's re-render
+            // lands, or the backend's offset drifting if a schedule is
+            // created between page fetches), otherwise the same schedule id
+            // ends up twice in the list and React warns about duplicate keys.
+            const existingIds = new Set(state.userSchedules.map((s) => s.id));
+            const uniqueNewSchedules = newSchedules.filter((s) => !existingIds.has(s.id));
 
-            page: targetPage + 1,
-            hasMore: targetPage < totalPages,
+            return {
+              userSchedules: reset
+                ? newSchedules
+                : [...state.userSchedules, ...uniqueNewSchedules],
 
-            isLoading: false,
-            isFetchingNextPage: false,
-          }));
+              page: targetPage + 1,
+              hasMore: targetPage < totalPages,
+
+              isLoading: false,
+              isFetchingNextPage: false,
+            };
+          });
         } catch (error) {
           const message = getErrorMessage(error);
 

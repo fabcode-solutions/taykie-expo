@@ -6,6 +6,7 @@ import Svg, { Path } from "react-native-svg";
 import Button from "../button/Button";
 import { t } from "i18next";
 import { LocalizedStrings } from "@/i18n/LocalizedStrings";
+import { verticalScale } from "@/utils/scale";
 export interface AlertModalProps {
   variant?: "success" | "error";
   heading: string;
@@ -30,7 +31,7 @@ const AlertModal = ({
         visible={visible}
         onRequestClose={() => console.log()}
       >
-        <View>
+        <View style={{ gap: verticalScale(5) }}>
           {variant === "success" && (
             <View className="w-[70px] mx-auto mb-2.5 h-[70px] bg-primary/30 flex items-center justify-center  rounded-full">
               <View className="w-[60px] h-[60px] bg-primary  flex items-center justify-center rounded-full">

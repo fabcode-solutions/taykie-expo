@@ -55,6 +55,9 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       "android.permission.ACCESS_COARSE_LOCATION",
       "android.permission.VIBRATE",
       "android.permission.RECORD_AUDIO",
+      "android.permission.FOREGROUND_SERVICE",
+      "android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE",
+      "android.permission.POST_NOTIFICATIONS",
     ],
     adaptiveIcon: {
       foregroundImage: "./assets/images/adaptive-icon.png",
@@ -73,6 +76,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
 
   plugins: [
+    "./plugins/withBleNative",
     "expo-router",
     [
       "expo-splash-screen",

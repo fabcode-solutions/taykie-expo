@@ -42,7 +42,7 @@ let activePreviewVolume: number | undefined;
 // tap's "off" always runs after an earlier tap's "on" has fully landed.
 let previewCommandQueue: Promise<void> = Promise.resolve();
 
-function queuePreviewCommand(fn: () => Promise<void>): Promise<void> {
+function queuePreviewCommand<T>(fn: () => Promise<T>): Promise<T> {
   const run = previewCommandQueue.then(fn);
   previewCommandQueue = run.then(
     () => undefined,
@@ -51,10 +51,174 @@ function queuePreviewCommand(fn: () => Promise<void>): Promise<void> {
   return run;
 }
 
+// Reflects a tone/volume tap's real device-confirmed (or failed) result into
+// store state, then clears it back to null a moment later — unless a newer
+// tap has already replaced this entry with its own, in which case this
+// stale settle shouldn't stomp on it.
+function settleAck(key: "toneAck" | "volumeAck", value: number, acked: boolean) {
+  useBLEStore.setState({ [key]: { value, status: acked ? "confirmed" : "failed" } });
+  setTimeout(() => {
+    if (useBLEStore.getState()[key]?.value === value) {
+      useBLEStore.setState({ [key]: null });
+    }
+  }, 1500);
+}
+
+// bit0=Sunday .. bit6=Saturday, per the protocol's weekday bitmask (see
+// docs/Taykie_BLE_Developer_Reference.md §3.3). Schedule.scheduleDay is a
+// full day name like "Monday" (date-fns `format(date, "EEEE")`, always
+// English regardless of app locale).
+const WEEKDAY_BIT_INDEX: Record<string, number> = {
+  sunday: 0,
+  monday: 1,
+  tuesday: 2,
+  wednesday: 3,
+  thursday: 4,
+  friday: 5,
+  saturday: 6,
+};
+
+// A schedule with multiple times (e.g. "07:30, 20:00") is selectable
+// time-by-time rather than all-or-nothing, so each device slot needs its own
+// selection identity distinct from its sibling times on the same schedule.
+export function scheduleTimeKey(scheduleId: string, time: string): string {
+  return `${scheduleId}::${time}`;
+}
+
+export interface ScheduleSyncResult {
+  slotsUsed: number;
+  syncedScheduleIds: string[];
+  skippedScheduleIds: string[];
+}
+
+// Translates the app's own dosage schedules into the device's onboard F2
+// slot format, so the physical device can fire reminders autonomously
+// (using its own RTC) even with no phone/BLE connection at the time —
+// unlike today's FCM-push-triggers-a-live-F4/F5 mechanism, which only works
+// while actively connected. Only "daily"/"weekly" schedules are eligible —
+// the protocol's weekday bitmask has no day-of-month concept, so "monthly"
+// schedules can never be represented here and are always skipped. Each
+// comma-separated time within a schedule (e.g. "07:30, 20:00" for
+// twice-daily) is selected independently via scheduleTimeKey and needs its
+// own slot, and the device has a hard cap of exactly SCHEDULE_SLOT_COUNT
+// (10) slots total — selection beyond that is skipped rather than silently
+// dropping an arbitrary schedule.
+export function buildScheduleSlotsFromSchedules(
+  schedules: Schedule[],
+  selectedTimeKeys: string[],
+  volumeByte: number,
+  soundType: number,
+  lightType: number,
+): { slots: ScheduleSlot[]; result: ScheduleSyncResult } {
+  const slots: ScheduleSlot[] = [];
+  const syncedScheduleIds: string[] = [];
+  const skippedScheduleIds: string[] = [];
+  const selectedSet = new Set(selectedTimeKeys);
+
+  for (const schedule of schedules) {
+    const id = schedule.scheduleId ?? schedule.id;
+    if (!id) continue;
+
+    const times = (schedule.scheduleTime ?? "")
+      .split(",")
+      .map((t) => t.trim())
+      .filter(Boolean);
+    const selectedTimes = times.filter((time) => selectedSet.has(scheduleTimeKey(id, time)));
+    if (selectedTimes.length === 0) continue; // nothing selected for this schedule at all
+
+    if (schedule.scheduleType === "monthly") {
+      skippedScheduleIds.push(id);
+      continue;
+    }
+
+    const weekdayBitmask =
+      schedule.scheduleType === "daily"
+        ? 0x7f
+        : schedule.scheduleDay && schedule.scheduleDay.toLowerCase() in WEEKDAY_BIT_INDEX
+          ? 1 << WEEKDAY_BIT_INDEX[schedule.scheduleDay.toLowerCase()]
+          : 0;
+    if (!weekdayBitmask) {
+      skippedScheduleIds.push(id);
+      continue;
+    }
+
+    let addedAny = false;
+    for (const time of selectedTimes) {
+      if (slots.length >= SCHEDULE_SLOT_COUNT) break;
+      const [hourStr, minuteStr] = time.split(":");
+      const hour = parseInt(hourStr, 10);
+      const minute = parseInt(minuteStr, 10);
+      if (Number.isNaN(hour) || Number.isNaN(minute)) continue;
+
+      slots.push({
+        enabled: true,
+        weekdayBitmask,
+        hour,
+        minute,
+        soundEnabled: schedule.remindersSound ?? true,
+        lightEnabled: schedule.remindersLed ?? true,
+        volume: volumeByte,
+        soundType,
+        lightType,
+      });
+      addedAny = true;
+    }
+
+    if (addedAny) {
+      syncedScheduleIds.push(id);
+    } else {
+      skippedScheduleIds.push(id);
+    }
+  }
+
+  const slotsUsed = slots.length;
+  while (slots.length < SCHEDULE_SLOT_COUNT) {
+    slots.push({ ...EMPTY_SCHEDULE_SLOT });
+  }
+
+  return { slots, result: { slotsUsed, syncedScheduleIds, skippedScheduleIds } };
+}
+
+function scheduleSlotsEqual(a: ScheduleSlot, b: ScheduleSlot): boolean {
+  return (
+    a.enabled === b.enabled &&
+    a.weekdayBitmask === b.weekdayBitmask &&
+    a.hour === b.hour &&
+    a.minute === b.minute &&
+    a.soundEnabled === b.soundEnabled &&
+    a.lightEnabled === b.lightEnabled &&
+    a.volume === b.volume &&
+    a.soundType === b.soundType &&
+    a.lightType === b.lightType
+  );
+}
+
+// setSchedule()'s own ack has turned out to be unreliable on real hardware —
+// the device has been observed replying with a genuine-looking ChecksumError
+// on every retry attempt while still actually committing the schedule to
+// flash regardless. Trusting that NACK meant reporting "rejected" to the
+// user even when the write fully succeeded. Reading the schedule back via F3
+// and comparing it to what was actually intended is the only way to know
+// the real outcome, so this is used instead of (not in addition to
+// blindly trusting) the ack.
+async function verifyScheduleApplied(intendedSlots: ScheduleSlot[]): Promise<boolean> {
+  await bleService.queryStatus();
+  await bleService.waitForReply(CmdType.QueryStatus);
+  const applied = useBLEStore.getState().schedules;
+  return intendedSlots.every((slot, i) => applied[i] && scheduleSlotsEqual(slot, applied[i]));
+}
+
 // Stops whatever's currently previewing (if anything) before starting the
 // new tone/volume, then arms the auto-off timer — shared by setDeviceVolume
 // and setDeviceTone since they trigger the same F4 SoundControl frame.
-async function runSoundPreview(soundType: number, volumeLevel: number, shouldPlay: boolean) {
+// Returns whether the device confirmed the user's actual selection (not the
+// interrupting "stop the previous preview" call) — lets the caller show a
+// real received/confirmed vs. failed indicator instead of assuming success.
+async function runSoundPreview(
+  soundType: number,
+  volumeLevel: number,
+  shouldPlay: boolean,
+): Promise<boolean> {
   if (previewOffTimer) {
     clearTimeout(previewOffTimer);
     previewOffTimer = null;
@@ -63,12 +227,19 @@ async function runSoundPreview(soundType: number, volumeLevel: number, shouldPla
     // Stop using the CURRENTLY SOUNDING type/volume, not the new
     // selection's — an off frame stamped with the new tone's bytes doesn't
     // match what's actually playing on the device.
+    console.log(
+      `🔊 runSoundPreview: interrupting active preview (type=${activePreviewType}, volume=${activePreviewVolume}) before new one`,
+    );
     await bleService
       .triggerSound(false, activePreviewType ?? soundType, activePreviewVolume ?? volumeLevel)
-      .catch(() => {});
+      .catch(() => false);
     activePreviewOn = false;
   }
-  await bleService.triggerSound(shouldPlay, soundType, volumeLevel);
+  console.log(
+    `🔊 runSoundPreview: sending F4 — shouldPlay=${shouldPlay}, soundType=${soundType}, volumeLevel=${volumeLevel}`,
+  );
+  const acked = await bleService.triggerSound(shouldPlay, soundType, volumeLevel);
+  console.log(`🔊 runSoundPreview: F4 acked=${acked}`);
   if (shouldPlay) {
     activePreviewOn = true;
     activePreviewType = soundType;
@@ -84,6 +255,7 @@ async function runSoundPreview(soundType: number, volumeLevel: number, shouldPla
       });
     }, PREVIEW_DURATION_MS);
   }
+  return acked;
 }
 
 // Tracks a pending auto-reconnect attempt after an unexpected disconnect
@@ -111,6 +283,7 @@ function attemptReconnect(deviceId: string, attempt: number) {
       if (isLastAttempt) {
         reconnectTimer = null;
         useBLEStore.setState({ connectedDevice: null, connectionStatus: "disconnected" });
+        stopBleForegroundService();
         return;
       }
       // connectToDevice's own failure path already set connectionStatus
@@ -128,8 +301,19 @@ import {
   DeviceData,
   ScheduleSlot,
   HistoryRecord,
+  BLE_SCAN_DURATION_MS,
+  DEFAULT_PASSWORD,
+  CmdType,
 } from "../services/ble/BLEService";
-import { DEFAULT_TONE_INDEX, DEFAULT_VOLUME_LEVEL } from "../utils/toneAudio";
+import { startBleForegroundService, stopBleForegroundService } from "../services/ble/bleForegroundService";
+import {
+  DEFAULT_TONE_INDEX,
+  DEFAULT_VOLUME_LEVEL,
+  DEFAULT_LIGHT_TYPE,
+  volumePercentToByte,
+} from "../utils/toneAudio";
+import { SCHEDULE_SLOT_COUNT, EMPTY_SCHEDULE_SLOT } from "../services/ble/TaykieProtocol";
+import type { Schedule } from "../types/schedule.types";
 import {
   pairDevice,
   unpairDevice,
@@ -148,6 +332,34 @@ interface BLEState {
   // Connection state
   connectedDevice: TaykieDevice | null;
   connectionStatus: "connected" | "disconnected" | "connecting";
+  // The BACKEND's own device record id (a UUID) — distinct from
+  // connectedDevice.id, which is the raw BLE peripheral address (a MAC on
+  // Android). Every per-device backend endpoint (ble-state, history sync,
+  // unpair, ...) expects this UUID as `deviceId`, not the BLE address; using
+  // the BLE address there fails backend validation ("deviceId must be a
+  // valid UUID"). Captured from pairDevice()'s response, persisted so a
+  // reconnect isn't stuck without it if a re-pair call happens to fail.
+  pairedDeviceId: string | null;
+  // scheduleTimeKey(scheduleId, time) entries the user has chosen to sync to
+  // the device's onboard F2 slots — see buildScheduleSlotsFromSchedules. A
+  // schedule with multiple times can have only some of them selected.
+  // Persisted so the selection survives app restarts; re-syncable anytime
+  // by changing this and calling syncSchedulesToDevice again (F2 always
+  // rewrites the entire slot table, there's no incremental update).
+  syncedTimeKeys: string[];
+  // The device has no persistent per-record identifier of its own — each F6
+  // history reply just restarts counting its records from 0. The backend
+  // dedupes uploads on (deviceId, sequenceNumber), so reusing 0-based indices
+  // on every sync would make genuinely new events (after a device flash
+  // erase) look like duplicates of the previous sync and get silently
+  // dropped. This offset keeps climbing across syncs so sequenceNumber stays
+  // unique for the life of the device. Persisted so it survives app restarts.
+  historySequenceOffset: number;
+  // The device's own BLE auth password (E0/E1), NOT the user's app account
+  // password — starts at the factory default and only ever changes via
+  // changeDevicePassword. Persisted so a fresh app launch still knows how to
+  // authenticate after a password change; see BLEService.setPassword.
+  devicePassword: string;
 
   // Device data (Updated for Taykie Spec)
   deviceData: Partial<DeviceData> | null;
@@ -160,6 +372,21 @@ interface BLEState {
   // device — the protocol has no "current tone/volume" query.
   toneIndex: number | null;
   volumeLevel: number | null;
+  // Transient, not persisted — reflects whether the device's own reply
+  // confirmed the most recent tap on that specific tone/volume value, so
+  // the UI can show a real received/confirmed/failed state per button
+  // instead of assuming the tap worked the instant it's sent. Cleared back
+  // to null a moment after settling so the indicator doesn't linger.
+  toneAck: { value: number; status: "pending" | "confirmed" | "failed" } | null;
+  volumeAck: { value: number; status: "pending" | "confirmed" | "failed" } | null;
+  // Whether a dosage reminder should also flash the device's LED. Kept
+  // local (like toneIndex/volumeLevel) rather than round-tripped through
+  // the backend's notification-settings model — that field has no
+  // per-notification fallback the way sound has "Mute", so a backend gap
+  // there would silently disable the light with no client-side way to
+  // turn it on. Defaults to on since there's no "Mute" equivalent to fall
+  // back to.
+  lightEnabled: boolean;
   schedules: ScheduleSlot[];
   // Compartment activity from the F6 history query, most recent first. The
   // protocol's history record has no open/closed flag — just a timestamp —
@@ -198,7 +425,10 @@ interface BLEAction {
   dismissAlert: () => Promise<void>;
   setDeviceVolume: (volumeLevel: number) => Promise<void>;
   setDeviceTone: (toneIndex: number) => Promise<void>;
+  setLightEnabled: (enabled: boolean) => void;
   toggleScheduleSlot: (index: number) => Promise<void>;
+  setSyncedTimeKeys: (keys: string[]) => void;
+  syncSchedulesToDevice: (schedules: Schedule[]) => Promise<ScheduleSyncResult>;
   startHistorySync: () => Promise<void>;
   // Lightweight compartment-activity refresh: queries the device directly
   // without requiring a backend sync session, for on-screen display.
@@ -206,6 +436,10 @@ interface BLEAction {
   // Destructive: wipes the device's history. See implementation comment.
   eraseHistory: () => Promise<void>;
   renameDevice: (name: string) => Promise<void>;
+  // Verifies currentPassword against the device (not just our own persisted
+  // copy) before sending the change, so a stale local record can't lock the
+  // user out. Throws with a user-facing message on either failure.
+  changeDevicePassword: (currentPassword: string, newPassword: string) => Promise<void>;
 
   reset: () => void;
 }
@@ -215,6 +449,10 @@ const initialState = {
   scannedDevices: [],
   connectedDevice: null,
   connectionStatus: "disconnected" as const,
+  pairedDeviceId: null,
+  syncedTimeKeys: [],
+  historySequenceOffset: 0,
+  devicePassword: DEFAULT_PASSWORD,
   deviceData: null,
 
   // Taykie specific state
@@ -222,6 +460,9 @@ const initialState = {
   isCharging: false,
   toneIndex: null,
   volumeLevel: null,
+  toneAck: null,
+  volumeAck: null,
+  lightEnabled: true,
   schedules: [],
   historyRecords: [],
   lastSyncedAt: null,
@@ -251,11 +492,31 @@ export const useBLEStore = create<BLEState & BLEAction>()(
   // ----------------------
   initBLE: async () => {
     try {
+      // Seed the service with whatever password this device currently
+      // expects — persisted, since it survives a factory-default 000000
+      // being changed via changeDevicePassword. Every command re-verifies
+      // via this value (see BLEService.ensurePasswordVerified), so this
+      // must happen before any connect/reconnect below.
+      bleService.setPassword(get().devicePassword);
+
       // 1. Check Permissions
       const hasPermissions = await bleService.requestPermissions();
       const isBluetoothEnabled = await bleService.isBluetoothEnabled();
 
       set({ hasPermissions, isBluetoothEnabled });
+
+      // iOS only: the OS silently killed and relaunched the app while a
+      // peripheral was still linked natively — re-run the normal connect
+      // flow against that same peripheral id to re-establish this store's
+      // own state (password verify, status poll, backend pairing sync,
+      // foreground-service-equivalent handling, ...), since a fresh JS
+      // instance otherwise has no idea a connection already exists.
+      bleService.onStateRestored = (restoredDeviceIds) => {
+        const [restoredId] = restoredDeviceIds;
+        if (restoredId && get().connectionStatus !== "connected") {
+          get().connectToDevice(restoredId);
+        }
+      };
 
       // 2. Bind the global status listener from the service.
       // Fires whenever the device replies to a query-status (F3) command.
@@ -277,7 +538,14 @@ export const useBLEStore = create<BLEState & BLEAction>()(
           };
         });
 
-        const currentDeviceId = get().connectedDevice?.id;
+        // The backend's own device id (a UUID) — NOT connectedDevice.id,
+        // which is the raw BLE MAC address and gets rejected by this
+        // endpoint's validation ("deviceId must be a valid UUID"). Not yet
+        // set on a brand-new device's very first status reply (which can
+        // arrive before pairDevice() resolves) — skipping in that case is
+        // correct, not a bug: every later poll cycle (every 15s) will have
+        // it by then.
+        const currentDeviceId = get().pairedDeviceId;
         if (currentDeviceId) {
           // Use the resolved (non-0xFF) reading so the backend never
           // receives the "charging" sentinel value as a battery percentage.
@@ -289,15 +557,22 @@ export const useBLEStore = create<BLEState & BLEAction>()(
               daysBitmask: slot.weekdayBitmask,
               hour: slot.hour,
               minute: slot.minute,
+              soundEnabled: slot.soundEnabled,
+              lightEnabled: slot.lightEnabled,
+              volume: slot.volume,
+              soundType: slot.soundType,
+              lightType: slot.lightType,
             })),
           };
           await updateBLEState(currentDeviceId, requestBody);
         }
       };
 
-      // History records arrive as a single reply to the F6 query — this
-      // protocol has no batching, sequence numbers, or ack/retransmit
-      // handshake, so we upload everything we got and close the session.
+      // History records arrive as a single reply to the F6 query. The
+      // backend's session-start call needs the real record count up front
+      // (totalRecords), which we only learn once this reply arrives — so
+      // the whole session lifecycle (start -> upload -> complete) lives
+      // here rather than around the F6 request itself.
       bleService.onHistoryReceived = async (records) => {
         // Always surface what the device returned, regardless of whether a
         // backend sync session is active — the on-screen activity list
@@ -305,45 +580,87 @@ export const useBLEStore = create<BLEState & BLEAction>()(
         const sorted = [...records].sort((a, b) => b.timestamp.localeCompare(a.timestamp));
         set({ historyRecords: sorted });
 
-        const { connectedDevice, syncSessionId } = get();
-        if (!connectedDevice?.id || !syncSessionId) {
+        // Backend's own device id (UUID) — see the comment on
+        // onStatusUpdated above for why connectedDevice.id (the BLE
+        // address) can't be used for backend calls.
+        const { pairedDeviceId, isSyncingHistory } = get();
+        if (!pairedDeviceId || !isSyncingHistory) {
           // No backend sync in progress (e.g. a lightweight on-screen
           // refresh) — nothing further to do.
           return;
         }
 
+        let sessionId: string | null = null;
         try {
           set({ historyTotal: records.length, historyProgress: 0 });
 
+          const sessionResponse = await startHistorySyncApi(pairedDeviceId, records.length);
+          sessionId =
+            sessionResponse?.sessionId ||
+            sessionResponse?.data?.id ||
+            sessionResponse?.data?.sessionId ||
+            sessionResponse?.id ||
+            null;
+          if (!sessionId) throw new Error("Backend did not return a valid Sync Session ID");
+          set({ syncSessionId: sessionId });
+
           if (records.length > 0) {
-            // NOTE: the device protocol has no per-record sequence number,
-            // so this is a session-local index, not a stable device-side
-            // id — dedup on the backend should key off the timestamp until
-            // the factory clarifies a real identifier.
+            // The device has no per-record sequence number of its own, and
+            // it restarts counting from 0 on every F6 reply — so a running
+            // offset (persisted across app restarts) is what keeps
+            // sequenceNumber unique for this device across multiple syncs,
+            // matching what the backend's dedup index actually needs.
+            const offset = get().historySequenceOffset;
             const mappedRecords = records.map((r, index) => ({
-              sequenceNumber: index,
+              sequenceNumber: offset + index,
               eventAt: r.timestamp,
             }));
 
             await uploadHistoryBatch({
-              deviceId: connectedDevice.id,
-              sessionId: syncSessionId,
+              deviceId: pairedDeviceId,
+              sessionId,
               records: mappedRecords,
             });
 
+            set({ historySequenceOffset: offset + records.length });
             console.log("Backend saved", records.length, "history records");
+
+            // F6 (Query History) is documented as a plain read — it does not
+            // clear anything on its own, only FF (Erase Flash) does. Without
+            // this, every future sync re-reads the same records the device
+            // has already reported and — now that sequenceNumber keeps
+            // climbing across syncs instead of resetting — they'd land as
+            // brand new rows in the backend's permanent history instead of
+            // being deduped, i.e. actual duplicates. Only erase after the
+            // backend has durably stored them; a failed erase here just
+            // means the same records get harmlessly re-synced next time.
+            try {
+              await bleService.eraseHistoryFlash();
+            } catch (eraseError) {
+              console.error(
+                "History synced to backend but failed to erase device flash — records will reappear on the next sync:",
+                eraseError,
+              );
+            }
           }
 
           set({ historyProgress: records.length });
 
           await completeSyncSession({
-            deviceId: connectedDevice.id,
-            sessionId: syncSessionId,
+            deviceId: pairedDeviceId,
+            sessionId,
             status: "completed",
           });
           set({ isSyncingHistory: false, syncSessionId: null });
         } catch (error) {
           console.error("Failed to save history records:", error);
+          if (sessionId) {
+            try {
+              await completeSyncSession({ deviceId: pairedDeviceId, sessionId, status: "failed" });
+            } catch (completeError) {
+              console.error("Failed to mark sync session as failed:", completeError);
+            }
+          }
           set({ isSyncingHistory: false, syncSessionId: null });
         }
       };
@@ -398,6 +715,11 @@ export const useBLEStore = create<BLEState & BLEAction>()(
 
         if (shouldReconnect) {
           attemptReconnect(lostDevice.id, 0);
+        } else {
+          // Intentional disconnect, or an unexpected drop with no device to
+          // retry — nothing more will attempt to reconnect, so the process
+          // no longer needs foreground protection.
+          stopBleForegroundService();
         }
       };
     } catch (error) {
@@ -409,6 +731,15 @@ export const useBLEStore = create<BLEState & BLEAction>()(
   // SCAN
   // ----------------------
   scanDevices: async () => {
+    // More than one mounted screen can call this at once (e.g. the Device
+    // tab's own "scan while disconnected" effect, plus the dedicated
+    // pair-device screen's mount effect) — since scannedDevices is shared
+    // global state, a second caller resetting it to [] would wipe out
+    // whatever the first caller's in-progress scan had already found.
+    // Bailing out here lets the already-running scan keep populating the
+    // one shared list instead of each caller racing to restart it.
+    if (get().isScanning) return;
+
     set({ isScanning: true, scannedDevices: [] });
 
     try {
@@ -430,10 +761,13 @@ export const useBLEStore = create<BLEState & BLEAction>()(
         });
       });
 
-      // Turn off scanner UI after 10 seconds
+      // Matches BLEService's own scan-duration timeout — previously this was
+      // a shorter, independent 10s here vs. the real 15s scan, so the UI
+      // said "not scanning" for 5s while the radio (and any late-arriving
+      // second/third device) was still actually being discovered.
       setTimeout(() => {
         set({ isScanning: false });
-      }, 10000);
+      }, BLE_SCAN_DURATION_MS);
     } catch (error) {
       console.error("Scan error:", error);
       set({ isScanning: false });
@@ -467,6 +801,24 @@ export const useBLEStore = create<BLEState & BLEAction>()(
         },
         connectionStatus: "connected",
       });
+
+      // Android-only: keeps this process alive in the background (even if
+      // the user swipes the app from Recents) for as long as a connection
+      // is active or being retried — see bleForegroundService.ts. No-op on
+      // iOS, where a manual force-quit can't be worked around regardless.
+      startBleForegroundService();
+
+      // Bonding is intentionally NOT requested here anymore — requesting an
+      // OS-level bond on an already-active GATT connection forces a brief
+      // security renegotiation at the radio level, which was confirmed (in
+      // testing) to interrupt an in-flight write and cause a real
+      // "unexpected disconnect", with the bond request itself never
+      // resolving (no BOND_BONDED/BOND_NONE broadcast ever arrived) —
+      // consistent with the firmware not supporting bonding at all. Not
+      // worth the connection-stability cost for a feature that's never once
+      // succeeded. See services/ble/bleBond.ts's requestBond() if this is
+      // worth retrying manually later (e.g. a debug menu action) once the
+      // factory confirms firmware support.
 
       // The device doesn't push updates in real time (compartment events
       // are only logged, not streamed) — poll status + history periodically
@@ -513,7 +865,18 @@ export const useBLEStore = create<BLEState & BLEAction>()(
       // connection state back to "disconnected" — that would desync the UI
       // from the still-active BLE connection and force a needless reconnect.
       try {
-        await pairDevice({ name: device.name || "Taykie Pill Box", blePeripheralId: device.id });
+        const pairResponse = await pairDevice({
+          name: device.name || "Taykie Pill Box",
+          blePeripheralId: device.id,
+        });
+        // This is the backend's own record id (a UUID) — NOT the same
+        // value as device.id (the raw BLE MAC address). Every per-device
+        // backend endpoint (ble-state, history sync, unpair, ...) needs
+        // this one; using the BLE address there gets rejected with
+        // "deviceId must be a valid UUID".
+        if (pairResponse?.data?.id) {
+          set({ pairedDeviceId: pairResponse.data.id });
+        }
       } catch (pairError) {
         console.warn("Backend device pairing failed (BLE connection still active):", pairError);
       }
@@ -543,6 +906,7 @@ export const useBLEStore = create<BLEState & BLEAction>()(
         connectedDevice: null,
         connectionStatus: "disconnected",
       });
+      stopBleForegroundService();
     } catch (error) {
       console.error("Disconnect error:", error);
     }
@@ -550,19 +914,28 @@ export const useBLEStore = create<BLEState & BLEAction>()(
 
   forgetDevice: async () => {
     try {
-      const deviceId = get().connectedDevice?.id;
-      if (deviceId) {
-        if (reconnectTimer) {
-          clearTimeout(reconnectTimer);
-          reconnectTimer = null;
-        }
-        await unpairDevice(deviceId); // Delete from backend
-        await bleService.disconnect(); // Disconnect Bluetooth
-        set({
-          connectedDevice: null,
-          connectionStatus: "disconnected",
-        });
+      if (!get().connectedDevice) return;
+
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
       }
+      // Backend's own device id (UUID) — see onStatusUpdated's comment for
+      // why connectedDevice.id (the BLE address) can't be used here. Still
+      // proceed with the local disconnect below even if this is missing —
+      // the user should be able to forget a device locally regardless of
+      // backend pairing state.
+      const pairedDeviceId = get().pairedDeviceId;
+      if (pairedDeviceId) {
+        await unpairDevice(pairedDeviceId); // Delete from backend
+      }
+      await bleService.disconnect(); // Disconnect Bluetooth
+      set({
+        connectedDevice: null,
+        connectionStatus: "disconnected",
+        pairedDeviceId: null,
+      });
+      stopBleForegroundService();
     } catch (error) {
       console.error("Forget device error:", error);
     }
@@ -595,8 +968,8 @@ export const useBLEStore = create<BLEState & BLEAction>()(
   // BLEService.triggerSound), so without this it would play until something
   // explicitly turns it off.
   setDeviceVolume: async (volumeLevel: number) => {
+    set({ volumeLevel, volumeAck: { value: volumeLevel, status: "pending" } });
     try {
-      set({ volumeLevel });
       // Nullish coalescing, not || — an explicit Mute tone (0) must stay 0,
       // not get silently overridden with a fallback "real" tone the user
       // never picked. Unset (null) still resolves to Mute (see
@@ -606,20 +979,26 @@ export const useBLEStore = create<BLEState & BLEAction>()(
       // explicit Mute on either axis means no sound, regardless of which
       // one the user is currently adjusting.
       const shouldPlay = toneIndex > 0 && volumeLevel > 0;
+      console.log(
+        `🔊 setDeviceVolume(${volumeLevel}) — toneIndex=${toneIndex}, shouldPlay=${shouldPlay}`,
+      );
 
       // Queued (not awaited directly against activePreviewOn here) so a
       // tap that lands while an earlier tap's own preview command is still
       // in flight always sees that command's final state instead of racing
       // it — see runSoundPreview's comment.
-      await queuePreviewCommand(() => runSoundPreview(toneIndex, volumeLevel, shouldPlay));
+      const acked = await queuePreviewCommand(() => runSoundPreview(toneIndex, volumeLevel, shouldPlay));
+      console.log(`🔊 setDeviceVolume(${volumeLevel}) settled — acked=${acked}`);
+      settleAck("volumeAck", volumeLevel, acked);
     } catch (error) {
       console.error("Failed to set volume:", error);
+      settleAck("volumeAck", volumeLevel, false);
     }
   },
 
   setDeviceTone: async (toneIndex: number) => {
+    set({ toneIndex, toneAck: { value: toneIndex, status: "pending" } });
     try {
-      set({ toneIndex });
       // Nullish coalescing, not || — an explicit Mute volume (0) must stay
       // 0, not get silently overridden back up to an audible default. This
       // was the direct cause of sound still playing on a tone change even
@@ -629,11 +1008,15 @@ export const useBLEStore = create<BLEState & BLEAction>()(
       const shouldPlay = toneIndex > 0 && volumeLevel > 0;
 
       // Queued — see setDeviceVolume above for why.
-      await queuePreviewCommand(() => runSoundPreview(toneIndex, volumeLevel, shouldPlay));
+      const acked = await queuePreviewCommand(() => runSoundPreview(toneIndex, volumeLevel, shouldPlay));
+      settleAck("toneAck", toneIndex, acked);
     } catch (error) {
+      settleAck("toneAck", toneIndex, false);
       console.error("Failed to set tone:", error);
     }
   },
+
+  setLightEnabled: (enabled: boolean) => set({ lightEnabled: enabled }),
 
   // F2 replaces the device's *entire* schedule in one frame — there's no
   // per-slot update command — so this flips one slot's enabled bit within
@@ -654,29 +1037,58 @@ export const useBLEStore = create<BLEState & BLEAction>()(
 
     try {
       await bleService.setSchedule(updatedSchedules);
-      await new Promise((resolve) => setTimeout(resolve, 200));
-      await bleService.queryStatus();
+      const applied = await verifyScheduleApplied(updatedSchedules);
+      if (!applied) throw new Error("Device did not accept the schedule update.");
+      set({ schedules: updatedSchedules });
     } catch (error) {
       console.error("Failed to toggle schedule:", error);
       set({ schedules: previousSchedules });
     }
   },
 
+  setSyncedTimeKeys: (keys: string[]) => set({ syncedTimeKeys: keys }),
+
+  // Writes the app's own dosage schedules (filtered to the user's
+  // `syncedTimeKeys` per-time selection) into the device's onboard F2 slots —
+  // see buildScheduleSlotsFromSchedules for the translation rules
+  // (daily/weekly only, up to 10 slots total, current tone/volume/light
+  // settings reused per slot). Callers should surface
+  // `result.skippedScheduleIds` to the user (e.g. a monthly schedule that
+  // can never be represented, or one that didn't fit within the 10-slot cap).
+  syncSchedulesToDevice: async (schedules: Schedule[]) => {
+    const { syncedTimeKeys, volumeLevel, toneIndex } = get();
+    const volumeByte = volumePercentToByte(volumeLevel ?? DEFAULT_VOLUME_LEVEL);
+    const soundType = toneIndex ?? DEFAULT_TONE_INDEX;
+
+    const { slots, result } = buildScheduleSlotsFromSchedules(
+      schedules,
+      syncedTimeKeys,
+      volumeByte,
+      soundType,
+      DEFAULT_LIGHT_TYPE,
+    );
+
+    await bleService.setSchedule(slots);
+    const applied = await verifyScheduleApplied(slots);
+    if (!applied) {
+      throw new Error("Device didn't accept the schedule sync. Please try again.");
+    }
+    set({ schedules: slots });
+    return result;
+  },
+
   startHistorySync: async () => {
     try {
-      const currentDeviceId = get().connectedDevice?.id;
+      // Backend's own device id (UUID) — see onStatusUpdated's comment for
+      // why connectedDevice.id (the BLE address) can't be used here.
+      const currentDeviceId = get().pairedDeviceId;
       if (!currentDeviceId) throw new Error("No active device connected.");
 
+      // The backend session can't be opened yet — it needs the real record
+      // count (totalRecords), which we only learn once the device replies.
+      // Setting isSyncingHistory here is what tells onHistoryReceived (in
+      // initBLE) to open/upload/complete the session once that reply lands.
       set({ isSyncingHistory: true, historyProgress: 0, historyTotal: 0 });
-
-      // Tell backend we are starting a sync to get a session ID
-      const response = await startHistorySyncApi(currentDeviceId);
-      const sessionId =
-        response?.sessionId || response?.data?.id || response?.data?.sessionId || response?.id;
-
-      if (!sessionId) throw new Error("Backend did not return a valid Sync Session ID");
-
-      set({ syncSessionId: sessionId });
 
       // Ask the device for its stored history; the reply is handled by
       // bleService.onHistoryReceived above.
@@ -722,8 +1134,21 @@ export const useBLEStore = create<BLEState & BLEAction>()(
     const trimmed = name.trim();
     if (!trimmed) throw new Error("Device name can't be empty.");
 
-    await pairDevice({ name: trimmed, blePeripheralId: device.id });
-    set({ connectedDevice: { ...device, name: trimmed } });
+    const pairResponse = await pairDevice({ name: trimmed, blePeripheralId: device.id });
+    set({
+      connectedDevice: { ...device, name: trimmed },
+      ...(pairResponse?.data?.id ? { pairedDeviceId: pairResponse.data.id } : {}),
+    });
+  },
+
+  changeDevicePassword: async (currentPassword: string, newPassword: string) => {
+    if (get().connectionStatus !== "connected") {
+      throw new Error("Connect to your Taykie device first.");
+    }
+    const { verified, changed } = await bleService.changePassword(currentPassword, newPassword);
+    if (!verified) throw new Error("Current password is incorrect.");
+    if (!changed) throw new Error("Device rejected the new password. Please try again.");
+    set({ devicePassword: newPassword });
   },
 
   // ----------------------
@@ -749,12 +1174,18 @@ export const useBLEStore = create<BLEState & BLEAction>()(
     {
       name: "ble-store",
       storage: mmkvJSONStateStorage,
-      // Only the user's tone/volume preference survives a restart — every
-      // other field (connection state, battery, schedules, history, ...) is
-      // live device data that would just be stale/wrong if persisted.
+      // Only the user's tone/volume preference (plus the backend device id
+      // — see its own comment above) survives a restart — every other field
+      // (connection state, battery, schedules, history, ...) is live device
+      // data that would just be stale/wrong if persisted.
       partialize: (state) => ({
         toneIndex: state.toneIndex,
         volumeLevel: state.volumeLevel,
+        lightEnabled: state.lightEnabled,
+        pairedDeviceId: state.pairedDeviceId,
+        syncedTimeKeys: state.syncedTimeKeys,
+        historySequenceOffset: state.historySequenceOffset,
+        devicePassword: state.devicePassword,
       }),
     },
   ),

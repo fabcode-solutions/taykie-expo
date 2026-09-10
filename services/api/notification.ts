@@ -2,6 +2,7 @@ import { NotificationSettingsModel, NotificationType } from "@/stores/notificati
 import { apiClient } from "./client";
 import { endpoints } from "./endpoints";
 import { Platform } from "react-native";
+import Constants from "expo-constants";
 
 export interface NotificationRequest {
   fromUserId: string;
@@ -36,7 +37,12 @@ export async function getNotificationSettings(): Promise<any> {
 }
 
 export async function registerFcmToken(fcmToken: string): Promise<any> {
-  return apiClient.post(endpoints.users.fcmToken, { fcmToken, platform: Platform.OS });
+  return apiClient.post(endpoints.users.fcmToken, {
+    fcmToken,
+    platform: Platform.OS,
+    deviceModel: Constants.deviceName ?? undefined,
+    appVersion: Constants.expoConfig?.version ?? undefined,
+  });
 }
 
 export async function createNotification(request: NotificationRequest): Promise<any> {

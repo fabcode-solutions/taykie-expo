@@ -71,6 +71,8 @@ export const LocalizedStrings = {
     save: "common.save",
     delete: "common.delete",
     edit: "common.edit",
+    editTime: "common.editTime",
+    warning: "common.warning",
     loading: "common.loading",
     error: "common.error",
     success: "common.success",
@@ -515,6 +517,7 @@ export const LocalizedStrings = {
       dismiss: "device.actions.dismiss",
       history: "device.actions.history",
       quick_action: "device.actions.quick_action",
+      password: "device.actions.password",
     },
     permissions: {
       title: "device.permissions.title",
@@ -553,8 +556,6 @@ export const LocalizedStrings = {
     changeDevice: "device.changeDevice",
     pairDevice: "device.pairDevice",
     connectViaBluetooth: "device.connectViaBluetooth",
-    cantFindDevice: "device.cantFindDevice",
-    enterManually: "device.enterManually",
     audio_settings: "device.audio_settings",
     volume_level: "device.volume_level",
     alert_tone: "device.alert_tone",
@@ -592,6 +593,9 @@ export const LocalizedStrings = {
     scheduleSuccess: "schedule.scheduleSuccess",
     routine: {
       submit: "schedule.routine.submit",
+      selectTime: "schedule.routine.selectTime",
+      addTime: "schedule.routine.addTime",
+      duplicateTime: "schedule.routine.duplicateTime",
       reminders: {
         title: "schedule.routine.reminders.title",
         push: "schedule.routine.reminders.push",

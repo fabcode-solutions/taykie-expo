@@ -19,13 +19,6 @@ import { LocalizedStrings } from "@/i18n/LocalizedStrings";
 import { AlertPresets } from "@/utils/alert";
 import { useAlert } from "@/provider/AlertProvider";
 
-export const timeMap: Record<string, string> = {
-  morning: "06:00",
-  afternoon: "12:00",
-  evening: "17:00",
-  night: "20:00"
-};
-
 const ScheduleModals = ({
   visible = false,
   showAddButton = true,
@@ -97,7 +90,7 @@ const ScheduleModals = ({
   const handleAddRoutine = useCallback(
     async (
       frequency: FrequencyType,
-      timeOfDay: string | string[],
+      timeOfDay: string,
       selectedDay?: string,
       selectedMonthDay?: number,
       reminders?: { push?: boolean; led?: boolean; sound?: boolean },
@@ -117,9 +110,7 @@ const ScheduleModals = ({
         dosage: `${dosageNumber} ${dosageNumber > 1 ? "tablets" : "tablet"}`,
         strength: `${medication.strength} mg`,
         scheduleDay: weekDays,
-        scheduleTime: Array.isArray(timeOfDay)
-          ? timeOfDay.map((time) => timeMap[time]).join(", ")
-          : timeMap[timeOfDay],
+        scheduleTime: timeOfDay,
         scheduleDayOfMonth: selectedMonthDay,
         remindersPush: reminders?.push ?? false,
         scheduleType: frequency,

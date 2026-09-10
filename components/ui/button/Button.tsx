@@ -31,7 +31,6 @@ const Button = ({
           {btnText}
         </Text>
       )}
-      x
     </TouchableOpacity>
   );
 };

@@ -108,6 +108,21 @@ export default function HomeScreen() {
     });
   }, [todaySchedules, activeSegment]);
 
+  // A schedule with multiple times a day is unwound by the "today" endpoint
+  // into one row per time, all sharing the same scheduleId — so scheduleId
+  // alone isn't a unique key. Keying by an occurrence counter per scheduleId
+  // (scheduleId + "0", "1", "2", ...) stays unique even if two rows for the
+  // same schedule ever share an identical time value.
+  const todayTaskItems = useMemo(() => {
+    const occurrenceCounts: Record<string, number> = {};
+    return (todaySchedules ?? []).map((item) => {
+      const scheduleKey = item.scheduleId ?? item.id ?? "unknown";
+      const occurrenceIndex = occurrenceCounts[scheduleKey] ?? 0;
+      occurrenceCounts[scheduleKey] = occurrenceIndex + 1;
+      return { item, key: `${scheduleKey}${occurrenceIndex}` };
+    });
+  }, [todaySchedules]);
+
   const handleTask = useCallback((task: Schedule) => {
     setTask(task);
   }, []);
@@ -238,14 +253,14 @@ export default function HomeScreen() {
           </View>
           <Tabs onSelect={(e) => setActiveSegment(e as SegmentKey)} segments={segments} />
 
-          {todaySchedules?.length
-            ? todaySchedules.map((item) => (
+          {todayTaskItems.length
+            ? todayTaskItems.map(({ item, key }) => (
                 <TaskItem
-                  key={item.scheduleId ?? item.id}
+                  key={key}
                   id={item.scheduleId ?? item.id ?? ""}
                   status={item.status ?? "Upcoming"}
                   statusLabel={statusLabels[item.status ?? "Upcoming"]}
-                  time={item.time24 ?? ""}
+                  time={item.time ?? item.time24 ?? ""}
                   title={item.name ?? ""}
                   onPress={() => handleTask(item)}
                 />

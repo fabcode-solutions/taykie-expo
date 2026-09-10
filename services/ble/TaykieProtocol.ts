@@ -78,6 +78,20 @@ export interface DeviceTime {
   second: number;
 }
 
+// Modbus CRC-16 (poly 0xA001, init 0xFFFF) — used only for the per-record
+// integrity check in the F6 history reply (§8.2), distinct from the simple
+// additive checksum every frame carries in its trailing byte.
+function crc16Modbus(bytes: number[]): number {
+  let crc = 0xffff;
+  for (const byte of bytes) {
+    crc ^= byte;
+    for (let i = 0; i < 8; i++) {
+      crc = crc & 1 ? (crc >> 1) ^ 0xa001 : crc >> 1;
+    }
+  }
+  return crc;
+}
+
 export class TaykieProtocol {
   // Every frame is [0x5A][cmdType][...data][checksum], where checksum is the
   // low 8 bits of the sum of every preceding byte (header included).
@@ -217,6 +231,18 @@ export class TaykieProtocol {
       // it can be inspected empirically for a possible open/closed flag.
       const reserved = data[i + 5];
       const crc16 = (data[i + 6] << 8) | data[i + 7];
+
+      // This is separate from the frame's own trailing checksum — it's a
+      // per-record integrity check, so a single corrupted record (a stray
+      // bit-flip mid-transfer) doesn't silently enter permanent medication
+      // history under a wrong timestamp.
+      const expectedCrc = crc16Modbus(data.slice(i, i + 6));
+      if (expectedCrc !== crc16) {
+        console.warn(
+          `History record ${i / 8} failed its CRC-16 check (expected 0x${expectedCrc.toString(16)}, got 0x${crc16.toString(16)}) — dropping it.`,
+        );
+        continue;
+      }
 
       records.push({
         timestamp: new Date(year, month - 1, day, hour, minute).toISOString(),

@@ -13,9 +13,8 @@ import AddProduct from "./AddProduct";
 import ScheduleComponent from "./Schedule";
 import { Medication } from "@/types/products.types";
 import { CreateScheduleRequest, Schedule } from "@/types/schedule.types";
-import { getFrequency, getTimeOfDay } from "@/utils/formatter";
+import { getFrequency } from "@/utils/formatter";
 import { generateWeek } from "@/app/(tabs)/schedule";
-import { timeMap } from "./ScheduleModals";
 import { moderateScale, scale, verticalScale } from "@/utils/scale";
 import { LocalizedStrings } from "@/i18n/LocalizedStrings";
 import { t } from "i18next";
@@ -68,9 +67,7 @@ const MedicineTaken = ({ task, onClose, onEditComplete }: MedicineTakenProp) => 
       updatedAt: task.updatedAt,
 
       frequency: getFrequency(task.scheduleDay),
-      timeOfDay: task.scheduleTime
-        ? task.scheduleTime.split(",").map((t) => getTimeOfDay(t.trim()))
-        : [],
+      timeOfDay: task.scheduleTime,
       reminders: {
         push: task.remindersPush,
         led: task.remindersLed,
@@ -115,6 +112,10 @@ const MedicineTaken = ({ task, onClose, onEditComplete }: MedicineTakenProp) => 
     }
   }, []);
 
+  const handleEditTime = useCallback(() => {
+    setRoutineVisible(true);
+  }, []);
+
   const handleAddProduct = useCallback((dosage: string, strength: string) => {
     setMedication((prev) => ({
       ...prev!,
@@ -135,7 +136,7 @@ const MedicineTaken = ({ task, onClose, onEditComplete }: MedicineTakenProp) => 
   const handleAddRoutine = useCallback(
     async (
       frequency: string,
-      timeOfDay: string | string[],
+      timeOfDay: string,
       selectedDay: string,
       selectedMonthDay?: number,
       reminders?: { push?: boolean; led?: boolean; sound?: boolean },
@@ -157,9 +158,7 @@ const MedicineTaken = ({ task, onClose, onEditComplete }: MedicineTakenProp) => 
         scheduleType: frequency,
         scheduleDay: weekDays,
         scheduleDayOfMonth: selectedMonthDay,
-        scheduleTime: Array.isArray(timeOfDay)
-          ? timeOfDay.map((time) => timeMap[time]).join(", ")
-          : timeMap[timeOfDay],
+        scheduleTime: timeOfDay,
         remindersPush: reminders?.push ?? false,
         remindersLed: reminders?.led ?? false,
         remindersSound: reminders?.sound ?? false,
@@ -263,6 +262,7 @@ const MedicineTaken = ({ task, onClose, onEditComplete }: MedicineTakenProp) => 
                 btnText={t(LocalizedStrings.common.edit)}
                 onPress={() => setAddProductVisible(true)}
               />
+              <Button btnText={t(LocalizedStrings.common.editTime)} onPress={handleEditTime} />
             </View>
           )}
 
@@ -349,6 +349,7 @@ const createStyles = (theme: Theme) =>
     },
     contentBtnStyle: {
       flexDirection: "row",
+      flexWrap: "wrap",
       justifyContent: "center",
       gap: scale(10),
       marginTop: verticalScale(28),

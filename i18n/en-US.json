@@ -71,6 +71,8 @@
     "save": "Save",
     "delete": "Delete",
     "edit": "Edit",
+    "editTime": "Edit Time",
+    "warning": "Warning",
     "loading": "Loading...",
     "error": "Error",
     "success": "Success",
@@ -500,7 +502,8 @@
       "rename": "Rename Device",
       "dismiss": "Dismiss Active Alert",
       "history": "Sync History",
-      "quick_action": "Quick Actions"
+      "quick_action": "Quick Actions",
+      "password": "Change Device Password"
     },
     "permissions": {
       "title": "Bluetooth Permissions",
@@ -539,12 +542,10 @@
     "changeDevice": "Change Device",
     "pairDevice": " Pair Your Device",
     "connectViaBluetooth": "   Connect your smart pill dispenser via Bluetooth to get started.",
-    "cantFindDevice": "Can’t find your device?",
-    "enterManually": "Enter device ID manually.",
     "audio_settings": "Audio Settings",
     "volume_level": "Volume Level",
     "alert_tone": "Alert Tone",
-    "active_schedules": "Active Schedules",
+    "active_schedules": "On-Device Reminders",
     "no_schedules_loaded": "No schedules loaded."
   },
   "insights": {
@@ -584,6 +585,9 @@
     "scheduleSuccess": "Schedule Successfully Created!",
     "routine": {
       "submit": "Save Routine",
+      "selectTime": "Select Time",
+      "addTime": "Add another time",
+      "duplicateTime": "This time is already added to this schedule. Please pick a different time.",
       "reminders": {
         "title": "Reminders",
         "push": "Push",
@@ -649,6 +653,7 @@
       "morning": "Morning",
       "evening": "Evening",
       "afternoon": "Afternoon",
+      "night": "Night",
       "daily": "Daily",
       "weekly": "Weekly",
       "monthly": "Monthly"
