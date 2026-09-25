@@ -38,6 +38,9 @@ import {
 } from "@/utils/reminderSound";
 import { useBLEStore } from "@/stores/bleStore";
 import { Platform } from "react-native";
+import { useAuthStore } from "@/stores/authStore";
+import { restoreBLEConnection } from "@/stores/bleStore";
+import { handleLidOpenResponse, registerLidOpenCategory } from "@/services/notifications.service";
 
 Notifications.setNotificationHandler({
   handleNotification: async (notification) => {
@@ -137,6 +140,7 @@ function AppContent() {
 
 function RootLayoutNav() {
   const selectedLanguage = useLanguageStore((s) => s.selectedLanguage);
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   // Language handling
   useEffect(() => {
     const lng = selectedLanguage || "en-US";
@@ -150,15 +154,41 @@ function RootLayoutNav() {
     } catch {}
   }, [selectedLanguage]);
 
+  // Lid-open notification actions; labels follow the app language
+  useEffect(() => {
+    registerLidOpenCategory().catch((error) => console.error("Lid category setup failed:", error));
+  }, [selectedLanguage]);
+
+  // Reconnect to the paired Taykie so lid openings reach the app (also when iOS
+  // relaunches it in the background for a Bluetooth event)
+  useEffect(() => {
+    if (isAuthenticated) restoreBLEConnection().catch(() => {});
+  }, [isAuthenticated]);
+
   useEffect(() => {
     const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
-      const data = response.notification;
+      void handleLidOpenResponse(response).then((handled) => {
+        if (handled) return;
+        const data = response.notification;
 
-      console.log("🔔 Notification clicked:", data);
-      handleNotificationNavigation(data.type as NotificationType);
+        console.log("🔔 Notification clicked:", data);
+        handleNotificationNavigation(data.type as NotificationType);
+      });
     });
 
-    return () => subscription.remove();
+    // App launched by tapping the lid-open notification (or one of its actions)
+    // while it was closed: the response was delivered before this listener existed.
+    // Wait for the router to be ready, like the FCM initial-notification path below.
+    const timer = setTimeout(() => {
+      Notifications.getLastNotificationResponseAsync()
+        .then((response) => (response ? handleLidOpenResponse(response) : false))
+        .catch(() => {});
+    }, 1000);
+
+    return () => {
+      clearTimeout(timer);
+      subscription.remove();
+    };
   }, []);
 
   // Re-creates the Android sound channels whenever the selected tone

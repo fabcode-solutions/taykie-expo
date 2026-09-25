@@ -878,5 +878,27 @@
       },
       "tip": "Gentle tips, a few times a week. Always useful, never noise."
     }
+  },
+  "lidEvent": {
+    "title": "Taykie",
+    "body": "Taykie was opened at {{time}}. What did you do?",
+    "tookDose": "I took a dose",
+    "refilled": "I refilled the box",
+    "dismiss": "Dismiss",
+    "unconfirmedTitle": "Unconfirmed opens",
+    "unconfirmedSubtitle": "Tell us what you did each time your Taykie was opened.",
+    "openedAt": "Opened {{date}} at {{time}}",
+    "opensMerged": "{{count}} opens",
+    "noneToConfirm": "Nothing to confirm",
+    "pickerTitle": "Which dose did you take?",
+    "pickerSubtitle": "Taykie was opened at {{time}}. The closest dose is selected.",
+    "noDoses": "No doses are scheduled for that day.",
+    "alreadyTaken": "Already taken",
+    "confirm": "Confirm",
+    "refillCta": "I refilled the box instead",
+    "resolved": "Saved",
+    "loadFailed": "Could not load this lid event.",
+    "saveFailed": "Could not save your answer. Please try again.",
+    "unconfirmedRow": "Unconfirmed opens"
   }
 }

@@ -339,5 +339,27 @@
     "shortReads": "Lecturas cortas",
     "longReads": "Lecturas largas",
     "archived": "Archivados"
+  },
+  "lidEvent": {
+    "title": "Taykie",
+    "body": "Taykie se abrió a las {{time}}. ¿Qué hiciste?",
+    "tookDose": "Tomé una dosis",
+    "refilled": "Rellené la caja",
+    "dismiss": "Descartar",
+    "unconfirmedTitle": "Aperturas sin confirmar",
+    "unconfirmedSubtitle": "Cuéntanos qué hiciste cada vez que se abrió tu Taykie.",
+    "openedAt": "Abierto el {{date}} a las {{time}}",
+    "opensMerged": "{{count}} aperturas",
+    "noneToConfirm": "Nada que confirmar",
+    "pickerTitle": "¿Qué dosis tomaste?",
+    "pickerSubtitle": "Taykie se abrió a las {{time}}. Se ha seleccionado la dosis más cercana.",
+    "noDoses": "No hay dosis programadas para ese día.",
+    "alreadyTaken": "Ya tomada",
+    "confirm": "Confirmar",
+    "refillCta": "En realidad rellené la caja",
+    "resolved": "Guardado",
+    "loadFailed": "No se pudo cargar esta apertura.",
+    "saveFailed": "No se pudo guardar tu respuesta. Inténtalo de nuevo.",
+    "unconfirmedRow": "Aperturas sin confirmar"
   }
 }

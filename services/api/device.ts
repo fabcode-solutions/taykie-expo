@@ -69,7 +69,7 @@ export interface UpdateHistoryBatchRequest {
 export interface CompleteSyncSessionRequest {
   deviceId: string;
   sessionId: string;
-  status: string;
+  status: "completed" | "failed";
 }
 
 export async function getDevices(): Promise<any> {
@@ -96,9 +96,12 @@ export async function unpairDevice(deviceId: string): Promise<any> {
 const HISTORY_BATCH_SIZE = 20;
 
 export async function startHistorySyncApi(deviceId: string, totalRecords: number): Promise<any> {
-  return apiClient.post(`${endpoints.device.device}/${deviceId}/${endpoints.device.sync_history}/start`, {
-    totalRecords,
-  });
+  return apiClient.post(
+    `${endpoints.device.device}/${deviceId}/${endpoints.device.sync_history}/start`,
+    {
+      totalRecords,
+    },
+  );
 }
 
 export async function uploadHistoryBatch(updateRequest: UpdateHistoryBatchRequest): Promise<any> {
@@ -121,6 +124,73 @@ export async function completeSyncSession(request: CompleteSyncSessionRequest): 
     `${endpoints.device.device}/${request.deviceId}/${endpoints.device.sync_history}/${request.sessionId}/complete`,
     { status: request.status },
   );
+}
+
+// ---------------------------------------------------------------------------
+// Lid-open events
+// ---------------------------------------------------------------------------
+
+export type LidEventStatus = "unconfirmed" | "dose_taken" | "refill";
+
+export interface LidOpenEvent {
+  id: string;
+  deviceId: string;
+  openedAt: string;
+  openCount: number;
+  status: LidEventStatus;
+  source: "live" | "history_sync";
+  resolvedAt: string | null;
+}
+
+export interface LidDoseOption {
+  scheduleId: string;
+  name: string;
+  dosage: string | null;
+  times: string[]; // "HH:MM"
+  isTaken: boolean;
+}
+
+export type ResolveLidEventRequest =
+  | { action: "dose"; scheduleIds: string[] }
+  | { action: "refill" };
+
+export async function recordLidOpens(
+  deviceId: string,
+  openedAt: string[],
+): Promise<{ event: LidOpenEvent; isNew: boolean }[]> {
+  const response = await apiClient.post<{ data: { event: LidOpenEvent; isNew: boolean }[] }>(
+    `${endpoints.device.device}/${deviceId}/lid-events`,
+    { opens: openedAt.map((iso) => ({ openedAt: iso })), source: "live" },
+  );
+  return response.data;
+}
+
+export async function getUnconfirmedLidEvents(): Promise<LidOpenEvent[]> {
+  const response = await apiClient.get<{ data: LidOpenEvent[] }>(
+    `${endpoints.device.device}/lid-events/unconfirmed`,
+  );
+  return response.data;
+}
+
+export async function getLidEventWithDoses(
+  eventId: string,
+  localDate: string,
+): Promise<{ event: LidOpenEvent; doses: LidDoseOption[] }> {
+  const response = await apiClient.get<{ data: { event: LidOpenEvent; doses: LidDoseOption[] } }>(
+    `${endpoints.device.device}/lid-events/${eventId}?localDate=${localDate}`,
+  );
+  return response.data;
+}
+
+export async function resolveLidEvent(
+  eventId: string,
+  request: ResolveLidEventRequest,
+): Promise<LidOpenEvent> {
+  const response = await apiClient.post<{ data: LidOpenEvent }>(
+    `${endpoints.device.device}/lid-events/${eventId}/resolve`,
+    request,
+  );
+  return response.data;
 }
 
 export async function getDeviceHistory(

@@ -1,7 +1,14 @@
 "use client";
 
 import React, { useCallback, useEffect } from "react";
-import { ActivityIndicator, FlatList, ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
+import {
+  ActivityIndicator,
+  FlatList,
+  ScrollView,
+  StyleSheet,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { SafeAreaScreen, ThemeStatusBar, ThemeText, ThemeView } from "@/components";
 import { fontFamily, useTheme } from "@/theme";
@@ -10,7 +17,7 @@ import AppHeader from "@/components/AppHeader";
 import IconSearch from "@/components/icons/IconSearch";
 import IconRefresh from "@/components/icons/IconRefresh";
 import IconRemane from "@/components/icons/IconRemane";
-import { router } from "expo-router";
+import { router, type Href } from "expo-router";
 import {
   useBLEStore,
   useBLEDeviceData,
@@ -43,6 +50,7 @@ interface DeviceAction {
 const ACTIONS: DeviceAction[] = [
   { key: "dismiss", label: "Dismiss Active Alert", icon: "notifications-off" },
   { key: "history", label: "Sync History", icon: "refresh" },
+  { key: "unconfirmed", label: "Unconfirmed opens", icon: "time-outline" },
   { key: "find", label: "Find My Taykie", icon: "search", detail: "v1.4.2" },
   { key: "rename", label: "Rename Device", icon: "pencil" },
   { key: "password", label: "Change Device Password", icon: "lock-closed" },
@@ -156,8 +164,6 @@ export default function DeviceScreen() {
     checkStatus();
   }, [hasPermissions, isBluetoothEnabled, scanDevices]);
 
-  
-
   // The device reports 0xFF instead of a percentage while charging, so that
   // state shows "Charging" as the value itself rather than a number. With
   // no reading at all yet, show a plain "--" (not "--%").
@@ -167,7 +173,7 @@ export default function DeviceScreen() {
       ? `${batteryLevel}%`
       : "--";
   const batteryWidth = batteryLevel !== null ? `${batteryLevel}%` : "0%";
-  console.log("batteryLevel=======",batteryLevel, lastSyncedAt)
+  console.log("batteryLevel=======", batteryLevel, lastSyncedAt);
 
   // Relative time, used for both "last opened" and "last synced".
   const formatRelativeTime = (isoTimestamp: string) => {
@@ -238,10 +244,7 @@ export default function DeviceScreen() {
     [schedules],
   );
   const compartmentGridRows = enabledScheduleSlots.slice(0, COMPARTMENT_ROW_COUNT);
-  const overflowScheduleCount = Math.max(
-    0,
-    enabledScheduleSlots.length - COMPARTMENT_ROW_COUNT,
-  );
+  const overflowScheduleCount = Math.max(0, enabledScheduleSlots.length - COMPARTMENT_ROW_COUNT);
   // Highlight today's compartment: Date.getDay() already uses the same
   // 0=Sunday..6=Saturday convention as the protocol's weekday bitmask, so
   // this maps directly onto the grid's day columns.
@@ -412,9 +415,7 @@ export default function DeviceScreen() {
   ) => {
     if (ack?.value !== value) return null;
     if (ack.status === "pending") {
-      return (
-        <ActivityIndicator size="small" color={tintColor} style={{ marginLeft: scale(6) }} />
-      );
+      return <ActivityIndicator size="small" color={tintColor} style={{ marginLeft: scale(6) }} />;
     }
     return (
       <Ionicons
@@ -536,7 +537,10 @@ export default function DeviceScreen() {
                   {t(LocalizedStrings.device.volume_level)}
                 </ThemeText>
                 <View style={{ flexDirection: "row", alignItems: "center" }}>
-                  <ThemeText variant="manrope.body1Bold" style={{ color: theme.colors.primary.main }}>
+                  <ThemeText
+                    variant="manrope.body1Bold"
+                    style={{ color: theme.colors.primary.main }}
+                  >
                     {displayVolumeLevel === 0 ? "Mute" : `${displayVolumeLevel}%`}
                   </ThemeText>
                   {renderAckIndicator(volumeAck, displayVolumeLevel, theme.colors.primary.main)}
@@ -700,7 +704,8 @@ export default function DeviceScreen() {
               )}
               {overflowScheduleCount > 0 && (
                 <ThemeText variant="manrope.caption" style={themedStyles.compartmentEmptyText}>
-                  +{overflowScheduleCount} more scheduled time(s) beyond your {COMPARTMENT_ROW_COUNT}
+                  +{overflowScheduleCount} more scheduled time(s) beyond your{" "}
+                  {COMPARTMENT_ROW_COUNT}
                   -dose-per-day plan (change this under Settings › Dosage & Compartments).
                 </ThemeText>
               )}
@@ -830,6 +835,13 @@ export default function DeviceScreen() {
                       {action.icon === "pencil" && (
                         <IconRemane stroke={theme.colors.slateCharcoal} />
                       )}
+                      {action.icon === "time-outline" && (
+                        <Ionicons
+                          name="time-outline"
+                          size={moderateScale(16)}
+                          color={theme.colors.slateCharcoal}
+                        />
+                      )}
                       {action.icon === "notifications-off" && (
                         <Ionicons
                           name="notifications-off"
@@ -852,7 +864,9 @@ export default function DeviceScreen() {
                         action.key === "dismiss" && { color: "#FF3B30" },
                       ]}
                     >
-                      {t(`device.actions.${action.key}`)}
+                      {action.key === "unconfirmed"
+                        ? t(LocalizedStrings.lidEvent.unconfirmedRow)
+                        : t(`device.actions.${action.key}`)}
                     </ThemeText>
                   </View>
                   <View style={themedStyles.actionTrailing}>

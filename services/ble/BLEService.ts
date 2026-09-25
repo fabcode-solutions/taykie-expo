@@ -560,8 +560,7 @@ class BLEService {
         CmdType.EraseFlash,
       ].includes(parsed.cmdType);
       const acked =
-        parsed.cmdType !== CmdType.ChecksumError &&
-        (!isSimpleAckReply || parsed.data[0] === 0x01);
+        parsed.cmdType !== CmdType.ChecksumError && (!isSimpleAckReply || parsed.data[0] === 0x01);
       oldest.resolve(acked);
     }
 
@@ -600,7 +599,10 @@ class BLEService {
       case CmdType.TimeCalibration:
       case CmdType.EraseFlash: {
         const success = parsed.data[0] === 0x01;
-        console.log(`Command 0x${parsed.cmdType.toString(16)} ack:`, success ? "success" : "failed");
+        console.log(
+          `Command 0x${parsed.cmdType.toString(16)} ack:`,
+          success ? "success" : "failed",
+        );
         break;
       }
 
@@ -632,7 +634,10 @@ class BLEService {
   }
 
   async verifyPassword(password: string = this.currentPassword) {
-    const frame = TaykieProtocol.buildFrame(CmdType.PasswordVerify, TaykieProtocol.encodePassword(password));
+    const frame = TaykieProtocol.buildFrame(
+      CmdType.PasswordVerify,
+      TaykieProtocol.encodePassword(password),
+    );
     await this.writeCommand(frame, "E0 PasswordVerify");
   }
 
@@ -676,7 +681,10 @@ class BLEService {
 
   async syncTime() {
     await this.ensurePasswordVerified();
-    const frame = TaykieProtocol.buildFrame(CmdType.TimeCalibration, TaykieProtocol.encodeCurrentTime());
+    const frame = TaykieProtocol.buildFrame(
+      CmdType.TimeCalibration,
+      TaykieProtocol.encodeCurrentTime(),
+    );
     await this.writeCommand(frame, "F1 TimeCalibration");
   }
 
@@ -703,7 +711,10 @@ class BLEService {
 
   async setSchedule(slots: ScheduleSlot[]): Promise<boolean> {
     await this.ensurePasswordVerified();
-    const frame = TaykieProtocol.buildFrame(CmdType.SetSchedule, TaykieProtocol.buildSchedulePayload(slots));
+    const frame = TaykieProtocol.buildFrame(
+      CmdType.SetSchedule,
+      TaykieProtocol.buildSchedulePayload(slots),
+    );
 
     for (let attempt = 1; attempt <= BLEService.SET_SCHEDULE_MAX_ATTEMPTS; attempt++) {
       await this.writeCommand(frame, `F2 SetSchedule (attempt ${attempt})`);
