@@ -8,11 +8,12 @@ import {
   ScheduleSlot,
   DeviceStatus,
   HistoryRecord,
+  DeviceTime,
 } from "./TaykieProtocol";
 import { volumePercentToByte } from "../../utils/toneAudio";
 
 export { TAYKIE_UUIDS, CmdType, TaykieProtocol };
-export type { ScheduleSlot, DeviceStatus, HistoryRecord };
+export type { ScheduleSlot, DeviceStatus, HistoryRecord, DeviceTime };
 
 export const DEFAULT_PASSWORD = "000000";
 
@@ -49,6 +50,15 @@ class BLEService {
   public onStatusUpdated?: (status: Partial<DeviceData>) => void;
   public onHistoryReceived?: (records: HistoryRecord[]) => void;
   public onPasswordVerified?: (success: boolean) => void;
+  // Fires on the F1 reply — the device clock sync itself always runs
+  // automatically at connect time, but until this was added its success/
+  // failure was only ever console.log'd, so a silent failure (clock never
+  // actually set) was invisible to the user.
+  public onTimeSynced?: (success: boolean) => void;
+  // Fires on the F7 reply, only when the app explicitly asked for it via
+  // queryTime() — used to let the user verify what time the device itself
+  // currently thinks it is (e.g. to confirm the F1 sync actually took).
+  public onDeviceTimeReceived?: (time: DeviceTime) => void;
   // Fires for BOTH a user-initiated disconnect() and an unexpected link
   // drop (out of range, device powered off, a lid-open triggering a brief
   // power glitch on the radio, etc.) — the store uses this as the single
@@ -597,10 +607,16 @@ class BLEService {
       case CmdType.SetSchedule:
       case CmdType.SoundControl:
       case CmdType.LightControl:
-      case CmdType.TimeCalibration:
       case CmdType.EraseFlash: {
         const success = parsed.data[0] === 0x01;
         console.log(`Command 0x${parsed.cmdType.toString(16)} ack:`, success ? "success" : "failed");
+        break;
+      }
+
+      case CmdType.TimeCalibration: {
+        const success = parsed.data[0] === 0x01;
+        console.log(`Command 0x${parsed.cmdType.toString(16)} ack:`, success ? "success" : "failed");
+        if (this.onTimeSynced) this.onTimeSynced(success);
         break;
       }
 
@@ -617,9 +633,12 @@ class BLEService {
         break;
       }
 
-      case CmdType.QueryTime:
-        console.log("Device time:", TaykieProtocol.parseTime(parsed.data));
+      case CmdType.QueryTime: {
+        const deviceTime = TaykieProtocol.parseTime(parsed.data);
+        console.log("Device time:", deviceTime);
+        if (deviceTime && this.onDeviceTimeReceived) this.onDeviceTimeReceived(deviceTime);
         break;
+      }
     }
   }
 
@@ -680,10 +699,17 @@ class BLEService {
     await this.writeCommand(frame, "F1 TimeCalibration");
   }
 
-  async queryTime() {
+  // Unlike the other query* methods, this one is user-triggered on demand
+  // (not part of the automatic connect handshake), so there's no other
+  // waitForReply already covering it — without one here, a reply that never
+  // completes (e.g. the connection drops mid-reassembly) leaves the caller
+  // with no way to know the check failed, and the stale partial frame just
+  // sits in notifyBuffer until the next reconnect wipes it.
+  async queryTime(): Promise<boolean> {
     await this.ensurePasswordVerified();
     const frame = TaykieProtocol.buildFrame(CmdType.QueryTime);
     await this.writeCommand(frame, "F7 QueryTime");
+    return this.waitForReply(CmdType.QueryTime);
   }
 
   async queryStatus() {

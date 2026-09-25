@@ -8,7 +8,7 @@ import React, { useMemo, useState } from "react";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import IconBackArrow from "@/components/icons/IconBackArrow";
 import { Button } from "@/components/ui/button";
-import { useBLEConnection, useBLEDeviceData, useBLEStore } from "@/stores/bleStore";
+import { useBLEConnection, useBLEDeviceClock, useBLEDeviceData, useBLEStore } from "@/stores/bleStore";
 import { moderateScale, scale, verticalScale } from "@/utils/scale";
 import { LocalizedStrings } from "@/i18n/LocalizedStrings";
 import { AlertPresets } from "@/utils/alert";
@@ -23,11 +23,13 @@ export default function RenameDeviceScreen() {
 
   const { connectedDevice, connectionStatus } = useBLEConnection();
   const { lastSyncedAt } = useBLEDeviceData();
+  const { lastTimeSyncOk, deviceTime, checkDeviceTime } = useBLEDeviceClock();
   const { renameDevice, connectToDevice, disconnectDevice } = useBLEStore();
 
   const [name, setName] = useState(connectedDevice?.name ?? "");
   const [isSaving, setIsSaving] = useState(false);
   const [isToggling, setIsToggling] = useState(false);
+  const [isCheckingTime, setIsCheckingTime] = useState(false);
 
   const handleBack = React.useCallback(() => router.back(), [router]);
 
@@ -70,6 +72,32 @@ export default function RenameDeviceScreen() {
   const handleChangeDevice = () => {
     router.push("/device/pair-device");
   };
+
+  const handleCheckDeviceTime = async () => {
+    if (!isConnected) return;
+    setIsCheckingTime(true);
+    try {
+      const success = await checkDeviceTime();
+      if (!success) {
+        alert.show(
+          AlertPresets.error(
+            t(LocalizedStrings.common.error),
+            "Could not read the device's clock — check the connection and try again.",
+          ),
+        );
+      }
+    } catch (error: any) {
+      alert.show(AlertPresets.error(t(LocalizedStrings.common.error), error.message));
+    } finally {
+      setIsCheckingTime(false);
+    }
+  };
+
+  const deviceTimeText = deviceTime
+    ? `${String(deviceTime.day).padStart(2, "0")}/${String(deviceTime.month).padStart(2, "0")}/${deviceTime.year} ${String(
+        deviceTime.hour,
+      ).padStart(2, "0")}:${String(deviceTime.minute).padStart(2, "0")}:${String(deviceTime.second).padStart(2, "0")}`
+    : "--";
 
   const handleInfo = () => {
     alert.show(
@@ -135,6 +163,34 @@ export default function RenameDeviceScreen() {
           <ThemeText variant="manrope.caption" style={styles.lastSynced}>
             {lastSyncedText}
           </ThemeText>
+        </View>
+
+        <View style={styles.deviceCard}>
+          <View style={styles.clockRow}>
+            <View style={styles.clockLabelGroup}>
+              <ThemeText variant="manrope.body1Bold" style={styles.clockTitle}>
+                Device Clock
+              </ThemeText>
+              <ThemeText variant="manrope.caption" style={styles.statusText}>
+                {deviceTime ? deviceTimeText : "Not checked yet"}
+              </ThemeText>
+              {lastTimeSyncOk === false && (
+                <ThemeText variant="manrope.caption" style={styles.clockWarning}>
+                  Last automatic clock sync failed
+                </ThemeText>
+              )}
+            </View>
+            <TouchableOpacity
+              onPress={handleCheckDeviceTime}
+              disabled={!isConnected || isCheckingTime}
+              style={[styles.checkTimeBtn, !isConnected && styles.checkTimeBtnDisabled]}
+              activeOpacity={0.7}
+            >
+              <ThemeText variant="manrope.caption" style={styles.checkTimeText}>
+                {isCheckingTime ? "Checking..." : "Check Time"}
+              </ThemeText>
+            </TouchableOpacity>
+          </View>
         </View>
 
         <Button
@@ -249,6 +305,36 @@ const createStyles = (theme: Theme) =>
     lastSynced: {
       color: theme.colors.text.secondary,
       marginTop: verticalScale(12),
+    },
+    clockRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: scale(10),
+    },
+    clockLabelGroup: {
+      flex: 1,
+    },
+    clockTitle: {
+      color: theme.colors.text.primary,
+      marginBottom: verticalScale(2),
+    },
+    clockWarning: {
+      color: theme.colors.error.main,
+      marginTop: verticalScale(4),
+    },
+    checkTimeBtn: {
+      paddingHorizontal: scale(14),
+      paddingVertical: verticalScale(8),
+      borderRadius: 999,
+      borderWidth: scale(1),
+      borderColor: theme.colors.border,
+    },
+    checkTimeBtnDisabled: {
+      opacity: 0.5,
+    },
+    checkTimeText: {
+      color: theme.colors.text.primary,
     },
     saveBtn: {
       height: verticalScale(50),

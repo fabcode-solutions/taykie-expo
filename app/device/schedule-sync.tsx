@@ -1,11 +1,11 @@
-import { StyleSheet, TouchableOpacity, View, ScrollView } from "react-native";
+import { ActivityIndicator, StyleSheet, TouchableOpacity, View, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ThemeText } from "@/components";
 import { fontFamily, Theme, useTheme } from "@/theme";
 import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import IconBackArrow from "@/components/icons/IconBackArrow";
-import { Button } from "@/components/ui/button";
 import Skeleton from "@/components/ui/Skeleton";
 import Switch from "@/components/ui/Switch";
 import { moderateScale, scale, verticalScale } from "@/utils/scale";
@@ -16,6 +16,8 @@ import { SCHEDULE_SLOT_COUNT } from "@/services/ble/TaykieProtocol";
 import { AlertPresets } from "@/utils/alert";
 import { useAlert } from "@/provider/AlertProvider";
 import { formatTimeAmPm } from "@/utils/formatter";
+
+type RowSyncState = "idle" | "pending" | "confirmed" | "failed";
 
 function scheduleId(schedule: Schedule): string | null {
   return schedule.scheduleId ?? schedule.id ?? null;
@@ -43,13 +45,43 @@ interface ScheduleCardProps {
   selectable?: boolean;
   isTimeSelected?: (time: string) => boolean;
   onToggleTime?: (time: string) => void;
+  // Reflects the current device-sync state of that exact time's row —
+  // "pending" while the toggle's write is in flight, "confirmed"/"failed"
+  // for a moment once the device replies, "idle" otherwise.
+  getRowSyncState?: (time: string) => RowSyncState;
+}
+
+// Small inline indicator shown in place of the switch's row while a toggle's
+// sync is in flight or just settled — mirrors the tone/volume ack indicator
+// pattern in app/(tabs)/device.tsx (renderAckIndicator).
+function RowSyncIndicator({ theme, state }: { theme: Theme; state: RowSyncState }) {
+  if (state === "pending") {
+    return <ActivityIndicator size="small" color={theme.colors.text.primary} />;
+  }
+  if (state === "confirmed" || state === "failed") {
+    return (
+      <Ionicons
+        name={state === "confirmed" ? "checkmark-circle" : "close-circle"}
+        size={moderateScale(16)}
+        color={state === "confirmed" ? theme.colors.success.main : theme.colors.error.main}
+      />
+    );
+  }
+  return null;
 }
 
 // Renders every comma-separated time on its own row, each with its own
 // switch, instead of collapsing them into one "07:30, 20:00" string toggled
 // all-or-nothing — a twice (or more) daily schedule can have just one of
 // its times synced to the device.
-function ScheduleCard({ theme, schedule, selectable = false, isTimeSelected, onToggleTime }: ScheduleCardProps) {
+function ScheduleCard({
+  theme,
+  schedule,
+  selectable = false,
+  isTimeSelected,
+  onToggleTime,
+  getRowSyncState,
+}: ScheduleCardProps) {
   const styles = useMemo(() => createCardStyles(theme), [theme]);
   const times = scheduleTimes(schedule);
   const frequency = scheduleFrequencyLabel(schedule);
@@ -62,6 +94,8 @@ function ScheduleCard({ theme, schedule, selectable = false, isTimeSelected, onT
       </ThemeText>
       {displayTimes.map((time, index) => {
         const isSelected = selectable ? (isTimeSelected?.(time) ?? false) : false;
+        const rowState = selectable ? (getRowSyncState?.(time) ?? "idle") : "idle";
+        const isBusy = rowState === "pending";
         const timeRow = (
           <ThemeText variant="manrope.body2" style={styles.cardTime}>
             {formatTimeAmPm(time)} · {frequency}
@@ -78,16 +112,20 @@ function ScheduleCard({ theme, schedule, selectable = false, isTimeSelected, onT
           <TouchableOpacity
             key={`${time}-${index}`}
             style={styles.timeRow}
-            onPress={() => onToggleTime?.(time)}
+            onPress={() => !isBusy && onToggleTime?.(time)}
             activeOpacity={0.7}
+            disabled={isBusy}
           >
             {timeRow}
-            <Switch
-              style={styles.switch}
-              trackColors={{ on: theme.colors.text.primary, off: "#B4B4B4" }}
-              onPress={() => onToggleTime?.(time)}
-              value={isSelected}
-            />
+            <View style={styles.rowTrailing}>
+              <RowSyncIndicator theme={theme} state={rowState} />
+              <Switch
+                style={styles.switch}
+                trackColors={{ on: theme.colors.text.primary, off: "#B4B4B4" }}
+                onPress={() => !isBusy && onToggleTime?.(time)}
+                value={isSelected}
+              />
+            </View>
           </TouchableOpacity>
         );
       })}
@@ -124,6 +162,11 @@ const createCardStyles = (theme: Theme) =>
       justifyContent: "space-between",
       paddingVertical: verticalScale(4),
     },
+    rowTrailing: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: scale(8),
+    },
     cardHeading: {
       color: theme.colors.text.primary,
       marginBottom: verticalScale(2),
@@ -145,15 +188,16 @@ export default function ScheduleSyncScreen() {
   const styles = useMemo(() => createStyles(theme), [theme]);
 
   const { connectionStatus } = useBLEConnection();
-  const { syncSchedulesToDevice } = useBLEStore();
+  const { toggleSyncedTime } = useBLEStore();
   const syncedTimeKeys = useBLEStore((s) => s.syncedTimeKeys);
+  const scheduleTimeAck = useBLEStore((s) => s.scheduleTimeAck);
   const { userSchedules, fetchUserSchedules, isLoading, isFetchingNextPage, hasMore } =
     useScheduleStore();
 
-  // Each entry is a scheduleTimeKey(scheduleId, time) — one per individually
-  // selected reminder time, not one per schedule.
-  const [selectedKeys, setSelectedKeys] = useState<string[]>(syncedTimeKeys);
-  const [isSaving, setIsSaving] = useState(false);
+  // The one row currently mid-toggle (its write is in flight) — distinct
+  // from scheduleTimeAck, which only reflects the settled confirmed/failed
+  // state for a moment after the write completes.
+  const [pendingKey, setPendingKey] = useState<string | null>(null);
 
   useEffect(() => {
     fetchUserSchedules(true);
@@ -196,24 +240,32 @@ export default function ScheduleSyncScreen() {
   }, [eligibleSchedules]);
 
   const slotsUsed = useMemo(
-    () => selectedKeys.filter((key) => eligibleTimeKeys.has(key)).length,
-    [selectedKeys, eligibleTimeKeys],
+    () => syncedTimeKeys.filter((key) => eligibleTimeKeys.has(key)).length,
+    [syncedTimeKeys, eligibleTimeKeys],
   );
 
   const handleBack = React.useCallback(() => router.back(), [router]);
 
-  const handleToggleTime = (schedule: Schedule, time: string) => {
+  // Toggling a switch now syncs immediately (rather than staging locally
+  // until a separate "Save"), so each row can show its own loader while the
+  // write is in flight and a real device-confirmed check/error mark once it
+  // settles — see toggleSyncedTime in bleStore.ts.
+  const handleToggleTime = async (schedule: Schedule, time: string) => {
     const id = scheduleId(schedule);
     if (!id) return;
     const key = scheduleTimeKey(id, time);
-    const isSelected = selectedKeys.includes(key);
-    if (isSelected) {
-      setSelectedKeys((prev) => prev.filter((existing) => existing !== key));
+
+    if (connectionStatus !== "connected") {
+      alert.show(
+        AlertPresets.error("Not connected", "Connect to your Taykie device first to sync schedules."),
+      );
       return;
     }
+
+    const isSelected = syncedTimeKeys.includes(key);
     // Block selecting past the device's hard 10-slot cap rather than
     // silently truncating later at sync time.
-    if (slotsUsed + 1 > SCHEDULE_SLOT_COUNT) {
+    if (!isSelected && slotsUsed + 1 > SCHEDULE_SLOT_COUNT) {
       alert.show(
         AlertPresets.error(
           "Slot limit reached",
@@ -222,46 +274,31 @@ export default function ScheduleSyncScreen() {
       );
       return;
     }
-    setSelectedKeys((prev) => [...prev, key]);
+
+    setPendingKey(key);
+    try {
+      await toggleSyncedTime(userSchedules, key);
+    } catch (error: any) {
+      alert.show(
+        AlertPresets.error("Sync failed", error.message ?? "Couldn't sync this change to your device."),
+      );
+    } finally {
+      setPendingKey(null);
+    }
   };
 
-  const handleSave = async () => {
-    if (connectionStatus !== "connected") {
-      alert.show(
-        AlertPresets.error("Not connected", "Connect to your Taykie device first to sync schedules."),
-      );
-      return;
-    }
-    setIsSaving(true);
-    try {
-      useBLEStore.getState().setSyncedTimeKeys(selectedKeys);
-      const result = await syncSchedulesToDevice(userSchedules);
-      if (result.skippedScheduleIds.length > 0) {
-        alert.show(
-          AlertPresets.error(
-            "Some schedules were skipped",
-            `${result.skippedScheduleIds.length} selected schedule(s) couldn't fit or aren't supported on-device. ${result.slotsUsed}/${SCHEDULE_SLOT_COUNT} slots synced.`,
-          ),
-        );
-      } else {
-        alert.show(
-          AlertPresets.success(
-            "Synced",
-            `${result.slotsUsed}/${SCHEDULE_SLOT_COUNT} reminder slots synced to your device.`,
-          ),
-        );
-        router.back();
-      }
-    } catch (error: any) {
-      alert.show(AlertPresets.error("Error", error.message));
-    } finally {
-      setIsSaving(false);
-    }
+  const getRowSyncState = (schedule: Schedule, time: string): "idle" | "pending" | "confirmed" | "failed" => {
+    const id = scheduleId(schedule);
+    if (!id) return "idle";
+    const key = scheduleTimeKey(id, time);
+    if (pendingKey === key) return "pending";
+    if (scheduleTimeAck?.key === key) return scheduleTimeAck.status;
+    return "idle";
   };
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.colors.background.default }]}>
-      <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: verticalScale(100) }}>
+      <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: verticalScale(32) }}>
         <TouchableOpacity onPress={handleBack} style={styles.backButton} activeOpacity={0.7}>
           <View style={styles.backButtonInner}>
             <IconBackArrow />
@@ -305,8 +342,9 @@ export default function ScheduleSyncScreen() {
                     theme={theme}
                     schedule={schedule}
                     selectable
-                    isTimeSelected={(time) => selectedKeys.includes(scheduleTimeKey(id, time))}
+                    isTimeSelected={(time) => syncedTimeKeys.includes(scheduleTimeKey(id, time))}
                     onToggleTime={(time) => handleToggleTime(schedule, time)}
+                    getRowSyncState={(time) => getRowSyncState(schedule, time)}
                   />
                 );
               })}
@@ -329,10 +367,6 @@ export default function ScheduleSyncScreen() {
           </View>
         )}
       </ScrollView>
-
-      <View style={styles.footer}>
-        <Button title="Save" onPress={handleSave} loading={isSaving} fullWidth style={styles.saveBtn} />
-      </View>
     </SafeAreaView>
   );
 }
@@ -383,18 +417,5 @@ const createStyles = (theme: Theme) =>
     emptyText: {
       color: theme.colors.text.secondary,
       marginBottom: verticalScale(8),
-    },
-    footer: {
-      position: "absolute",
-      left: 0,
-      right: 0,
-      bottom: 0,
-      padding: verticalScale(16),
-      backgroundColor: theme.colors.background.default,
-    },
-    saveBtn: {
-      height: verticalScale(56),
-      borderRadius: 999,
-      backgroundColor: theme.colors.primary.main,
     },
   });

@@ -156,8 +156,15 @@ export const Alert: React.FC<AlertProps> = ({
     return typeof color === "string" ? color : color.main;
   }
 
-  const backgroundColor = getMainColor(theme.colors[alertColors.background] as string);
-  const iconColor = getMainColor(theme.colors[alertColors.icon] as string);
+  // The toast card itself stays the app's own neutral paper background (like
+  // every other card in the app) — only a left accent bar + icon carry the
+  // success/error/warning/info color, rather than flooding the whole toast
+  // with a saturated red/green that doesn't match the app's warm, muted
+  // palette (pale yellow, charcoal, taupe, cream).
+  const accentColor = getMainColor(theme.colors[alertColors.icon] as string);
+  const backgroundColor = theme.colors.background.paper;
+  const iconColor = accentColor;
+  const textColor = theme.colors.text.primary;
 
   return (
     <Animated.View
@@ -179,6 +186,7 @@ export const Alert: React.FC<AlertProps> = ({
           elevation={3}
           rounded="md"
         >
+          <View style={[styles.accentBar, { backgroundColor: accentColor }]} />
           {showIcon && (
             <View style={styles.iconContainer}>
               {customIcon ?? (
@@ -196,7 +204,7 @@ export const Alert: React.FC<AlertProps> = ({
               variant="manrope.subtitle"
               style={styles.titleText}
               numberOfLines={1}
-              color={theme.colors.white}
+              color={textColor}
             >
               {title}
             </ThemeText>
@@ -205,7 +213,7 @@ export const Alert: React.FC<AlertProps> = ({
                 variant="manrope.body2"
                 style={styles.messageText}
                 numberOfLines={2}
-                color={theme.colors.white}
+                color={theme.colors.text.secondary}
               >
                 {message}
               </ThemeText>
@@ -220,7 +228,7 @@ export const Alert: React.FC<AlertProps> = ({
               <ThemeText
                 variant="manrope.button"
                 style={styles.actionText}
-                color={theme.colors.white}
+                color={accentColor}
                 uppercase
               >
                 {action.text}
@@ -234,7 +242,7 @@ export const Alert: React.FC<AlertProps> = ({
               onPress={dismissAlert}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
-              <Ionicons name="close-outline" size={moderateScale(20)} color={theme.colors.white} />
+              <Ionicons name="close-outline" size={moderateScale(20)} color={theme.colors.text.secondary} />
             </Pressable>
           )}
         </ThemeView>
@@ -255,9 +263,18 @@ const getStyles = (theme: ReturnType<typeof useTheme>, _type: string): AlertStyl
     contentContainer: {
       flexDirection: "row",
       alignItems: "center",
-      paddingHorizontal: theme.spacing.md,
+      paddingRight: theme.spacing.md,
+      paddingLeft: theme.spacing.md + moderateScale(6),
       paddingVertical: theme.spacing.sm,
       minHeight: verticalScale(ALERT_CONSTANTS.ALERT_HEIGHT),
+      overflow: "hidden",
+    },
+    accentBar: {
+      position: "absolute",
+      left: 0,
+      top: 0,
+      bottom: 0,
+      width: moderateScale(4),
     },
     iconContainer: {
       marginRight: theme.spacing.sm,

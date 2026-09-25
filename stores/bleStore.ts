@@ -64,6 +64,15 @@ function settleAck(key: "toneAck" | "volumeAck", value: number, acked: boolean) 
   }, 1500);
 }
 
+function settleScheduleAck(scheduleKey: string, acked: boolean) {
+  useBLEStore.setState({ scheduleTimeAck: { key: scheduleKey, status: acked ? "confirmed" : "failed" } });
+  setTimeout(() => {
+    if (useBLEStore.getState().scheduleTimeAck?.key === scheduleKey) {
+      useBLEStore.setState({ scheduleTimeAck: null });
+    }
+  }, 1500);
+}
+
 // bit0=Sunday .. bit6=Saturday, per the protocol's weekday bitmask (see
 // docs/Taykie_BLE_Developer_Reference.md §3.3). Schedule.scheduleDay is a
 // full day name like "Monday" (date-fns `format(date, "EEEE")`, always
@@ -301,6 +310,7 @@ import {
   DeviceData,
   ScheduleSlot,
   HistoryRecord,
+  DeviceTime,
   BLE_SCAN_DURATION_MS,
   DEFAULT_PASSWORD,
   CmdType,
@@ -379,6 +389,11 @@ interface BLEState {
   // to null a moment after settling so the indicator doesn't linger.
   toneAck: { value: number; status: "pending" | "confirmed" | "failed" } | null;
   volumeAck: { value: number; status: "pending" | "confirmed" | "failed" } | null;
+  // Same idea as toneAck/volumeAck above, but for the on-device schedule
+  // sync's per-time toggle (see toggleSyncedTime) — keyed by
+  // scheduleTimeKey(scheduleId, time) so only the exact row the user just
+  // tapped shows the pending/confirmed/failed state.
+  scheduleTimeAck: { key: string; status: "pending" | "confirmed" | "failed" } | null;
   // Whether a dosage reminder should also flash the device's LED. Kept
   // local (like toneIndex/volumeLevel) rather than round-tripped through
   // the backend's notification-settings model — that field has no
@@ -396,6 +411,16 @@ interface BLEState {
   // "we actually heard from the device at this time" signal (distinct from
   // the polling interval, which fires whether or not the device answers).
   lastSyncedAt: string | null;
+  // Whether the device confirmed (F1 reply) that its clock was actually set
+  // during the last connect handshake — the sync itself always runs
+  // automatically, but until this was added a silent failure was invisible.
+  lastTimeSyncOk: boolean | null;
+  // The device's own clock, as last reported by an explicit F7 query — null
+  // until the user asks for it via checkDeviceTime(). Distinct from
+  // lastSyncedAt/lastTimeSyncOk, which only say a sync attempt happened, not
+  // what time the device actually ended up with.
+  deviceTime: DeviceTime | null;
+  deviceTimeCheckedAt: string | null;
 
   // Permissions
   hasPermissions: boolean;
@@ -422,6 +447,12 @@ interface BLEAction {
 
   // Taykie Specific Commands
   queryDeviceStatus: () => Promise<void>;
+  // Explicitly asks the device for its current clock (F7) — for display/
+  // diagnostics only, e.g. verifying the automatic F1 sync actually took.
+  // Resolves false if the device never confirmed a reply (timeout / dropped
+  // connection mid-reassembly), so the caller can tell the user rather than
+  // failing silently.
+  checkDeviceTime: () => Promise<boolean>;
   dismissAlert: () => Promise<void>;
   setDeviceVolume: (volumeLevel: number) => Promise<void>;
   setDeviceTone: (toneIndex: number) => Promise<void>;
@@ -429,6 +460,12 @@ interface BLEAction {
   toggleScheduleSlot: (index: number) => Promise<void>;
   setSyncedTimeKeys: (keys: string[]) => void;
   syncSchedulesToDevice: (schedules: Schedule[]) => Promise<ScheduleSyncResult>;
+  // Adds/removes a single time from syncedTimeKeys and immediately re-syncs
+  // the full schedule to the device, reverting the key on failure — lets a
+  // single switch tap show its own pending/confirmed/failed state (via
+  // scheduleTimeAck) rather than only surfacing sync result on a separate
+  // batch "Save".
+  toggleSyncedTime: (schedules: Schedule[], key: string) => Promise<void>;
   startHistorySync: () => Promise<void>;
   // Lightweight compartment-activity refresh: queries the device directly
   // without requiring a backend sync session, for on-screen display.
@@ -462,10 +499,14 @@ const initialState = {
   volumeLevel: null,
   toneAck: null,
   volumeAck: null,
+  scheduleTimeAck: null,
   lightEnabled: true,
   schedules: [],
   historyRecords: [],
   lastSyncedAt: null,
+  lastTimeSyncOk: null,
+  deviceTime: null,
+  deviceTimeCheckedAt: null,
 
   hasPermissions: false,
   isBluetoothEnabled: false,
@@ -566,6 +607,20 @@ export const useBLEStore = create<BLEState & BLEAction>()(
           };
           await updateBLEState(currentDeviceId, requestBody);
         }
+      };
+
+      // Fires on the F1 reply that follows every connect handshake's
+      // automatic clock sync — surfaces a silent failure that was
+      // previously only console.log'd.
+      bleService.onTimeSynced = (success) => {
+        set({ lastTimeSyncOk: success });
+      };
+
+      // Fires only when checkDeviceTime() explicitly asked via F7 — lets
+      // the user (or support) verify what time the device itself currently
+      // has, e.g. to confirm the automatic F1 sync actually took.
+      bleService.onDeviceTimeReceived = (time) => {
+        set({ deviceTime: time, deviceTimeCheckedAt: new Date().toISOString() });
       };
 
       // History records arrive as a single reply to the F6 query. The
@@ -952,6 +1007,15 @@ export const useBLEStore = create<BLEState & BLEAction>()(
     }
   },
 
+  checkDeviceTime: async () => {
+    try {
+      return await bleService.queryTime();
+    } catch (error) {
+      console.error("Failed to query device time:", error);
+      return false;
+    }
+  },
+
   dismissAlert: async () => {
     try {
       await bleService.dismissAlert();
@@ -1047,6 +1111,24 @@ export const useBLEStore = create<BLEState & BLEAction>()(
   },
 
   setSyncedTimeKeys: (keys: string[]) => set({ syncedTimeKeys: keys }),
+
+  toggleSyncedTime: async (schedules: Schedule[], key: string) => {
+    const previousKeys = get().syncedTimeKeys;
+    const isSelected = previousKeys.includes(key);
+    const nextKeys = isSelected ? previousKeys.filter((k) => k !== key) : [...previousKeys, key];
+
+    set({ syncedTimeKeys: nextKeys, scheduleTimeAck: { key, status: "pending" } });
+    try {
+      await get().syncSchedulesToDevice(schedules);
+      settleScheduleAck(key, true);
+    } catch (error) {
+      // Revert to the pre-toggle selection — the device never actually
+      // committed this change, so the UI shouldn't claim it did.
+      set({ syncedTimeKeys: previousKeys });
+      settleScheduleAck(key, false);
+      throw error;
+    }
+  },
 
   // Writes the app's own dosage schedules (filtered to the user's
   // `syncedTimeKeys` per-time selection) into the device's onboard F2 slots —
@@ -1218,6 +1300,15 @@ export function useBLEDeviceData() {
   const lastSyncedAt = useBLEStore((s) => s.lastSyncedAt);
 
   return { batteryLevel, isCharging, toneIndex, volumeLevel, schedules, lastSyncedAt };
+}
+
+export function useBLEDeviceClock() {
+  const lastTimeSyncOk = useBLEStore((s) => s.lastTimeSyncOk);
+  const deviceTime = useBLEStore((s) => s.deviceTime);
+  const deviceTimeCheckedAt = useBLEStore((s) => s.deviceTimeCheckedAt);
+  const checkDeviceTime = useBLEStore((s) => s.checkDeviceTime);
+
+  return { lastTimeSyncOk, deviceTime, deviceTimeCheckedAt, checkDeviceTime };
 }
 
 export function useBLECompartments() {
