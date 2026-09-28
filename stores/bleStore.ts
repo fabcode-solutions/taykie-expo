@@ -319,6 +319,8 @@ import {
 } from "../utils/toneAudio";
 import { SCHEDULE_SLOT_COUNT, EMPTY_SCHEDULE_SLOT } from "../services/ble/TaykieProtocol";
 import type { Schedule } from "../types/schedule.types";
+import * as Localization from "expo-localization";
+import { useScheduleStore } from "./scheduleStore";
 import {
   pairDevice,
   unpairDevice,
@@ -355,6 +357,15 @@ interface BLEState {
   // by changing this and calling syncSchedulesToDevice again (F2 always
   // rewrites the entire slot table, there's no incremental update).
   syncedTimeKeys: string[];
+  // IANA zone (e.g. "Australia/Sydney") the device clock/slots were last
+  // synced against — see resyncTimezoneIfChanged. Persisted so a fresh app
+  // launch after traveling still knows a resync is owed, even before the
+  // next BLE connect.
+  // "<IANA zone>|<UTC offset minutes>" — the offset half is what actually
+  // catches a DST transition (see resyncTimezoneIfChanged): the zone name
+  // alone doesn't change across one ("Australia/Sydney" is the zone whether
+  // or not DST is in effect).
+  lastSyncedTimezone: string | null;
   // The device has no persistent per-record identifier of its own — each F6
   // history reply just restarts counting its records from 0. The backend
   // dedupes uploads on (deviceId, sequenceNumber), so reusing 0-based indices
@@ -437,6 +448,7 @@ interface BLEAction {
   toggleScheduleSlot: (index: number) => Promise<void>;
   setSyncedTimeKeys: (keys: string[]) => void;
   syncSchedulesToDevice: (schedules: Schedule[]) => Promise<ScheduleSyncResult>;
+  resyncTimezoneIfChanged: () => Promise<void>;
   startHistorySync: () => Promise<void>;
   // Lightweight compartment-activity refresh: queries the device directly
   // without requiring a backend sync session, for on-screen display.
@@ -459,6 +471,7 @@ const initialState = {
   connectionStatus: "disconnected" as const,
   pairedDeviceId: null,
   syncedTimeKeys: [],
+  lastSyncedTimezone: null,
   historySequenceOffset: 0,
   devicePassword: DEFAULT_PASSWORD,
   deviceData: null,
@@ -890,6 +903,13 @@ export const useBLEStore = create<BLEState & BLEAction>()(
               // so it can't interleave with a triggerSound/triggerLight call —
               // see the comment on that method for why.
               await bleService.pollStatusAndHistory();
+
+              // Cheap early-return when nothing changed (see
+              // resyncTimezoneIfChanged) — piggybacking on this existing 15s
+              // cycle is what catches a DST transition passing at 2am while
+              // the app stays foregrounded the whole time, since that never
+              // fires an AppState "active" event on its own.
+              void get().resyncTimezoneIfChanged();
             } catch (error) {
               console.warn("Device poll failed:", error);
             } finally {
@@ -917,6 +937,12 @@ export const useBLEStore = create<BLEState & BLEAction>()(
           } catch (pairError) {
             console.warn("Backend device pairing failed (BLE connection still active):", pairError);
           }
+
+          // Covers reconnecting after traveling with the app closed the whole
+          // time — the phone's zone may have changed since the last sync and
+          // this is the first chance to catch it, independent of the
+          // AppState-driven check for a zone change mid-session.
+          void get().resyncTimezoneIfChanged();
         } catch (error: any) {
           console.error("Connection failed:", error);
           set({ connectionStatus: "disconnected" });
@@ -1118,6 +1144,70 @@ export const useBLEStore = create<BLEState & BLEAction>()(
         return result;
       },
 
+      // Brief §Priority 2.4/2.5: reminders must follow the phone's local time
+      // across both an actual timezone change AND a DST transition, and both
+      // the device clock and the on-device reminder slots need resyncing
+      // "whenever the app connects and whenever the phone's timezone changes".
+      // The clock half of "on connect" already happens unconditionally inside
+      // bleService.connectToDevice (F1 TimeCalibration runs on every connect,
+      // encoding the phone's current local time regardless of whether the zone
+      // actually changed) — this covers the other two cases: the on-device
+      // slots also need rewriting after a zone/offset change (their hour/minute
+      // bytes were written for the *old* offset), and that change can happen
+      // while already connected (e.g. the phone's auto-timezone updates
+      // mid-flight, or a DST transition passes at 2am with the app connected
+      // overnight), with no reconnect to hang a resync off. Called on every
+      // connect and from an AppState listener (see app/_layout.tsx) so a
+      // foreground while already connected also catches it.
+      //
+      // IMPORTANT: DST is not a zone change — "Australia/Sydney" is the same
+      // IANA zone whether or not DST is in effect, only its UTC offset shifts
+      // twice a year (Brisbane's "Australia/Brisbane" never observes DST at
+      // all, so it never shifts). Comparing zone names alone would silently
+      // miss every DST transition, which is exactly the case the brief calls
+      // out to test — so the fingerprint below includes the current UTC
+      // offset, not just the zone name.
+      resyncTimezoneIfChanged: async () => {
+        if (get().connectionStatus !== "connected") return;
+
+        let currentFingerprint: string | null = null;
+        try {
+          const zone = Localization.getCalendars()[0]?.timeZone ?? null;
+          if (!zone) return;
+          const offsetMinutes = -new Date().getTimezoneOffset(); // sign-flipped to UTC+N convention
+          currentFingerprint = `${zone}|${offsetMinutes}`;
+        } catch (error) {
+          console.warn("Failed to read device timezone:", error);
+          return;
+        }
+
+        const { lastSyncedTimezone, syncedTimeKeys } = get();
+        if (currentFingerprint === lastSyncedTimezone) return; // nothing to do
+
+        try {
+          // Re-stamp the clock explicitly rather than relying on the last
+          // connect's F1 — this can fire minutes or hours after connecting.
+          await bleService.syncTime();
+
+          if (syncedTimeKeys.length > 0) {
+            // The device's F2 slots store hour/minute only, no zone of their
+            // own — every slot needs rewriting in the new local time, not
+            // just the clock. Re-fetch schedules rather than trusting
+            // whatever's cached in scheduleStore, since this can fire a long
+            // time after that store was last populated.
+            const scheduleStore = useScheduleStore.getState();
+            await scheduleStore.fetchUserSchedules(true);
+            await get().syncSchedulesToDevice(useScheduleStore.getState().userSchedules);
+          }
+
+          set({ lastSyncedTimezone: currentFingerprint });
+        } catch (error) {
+          // Leave lastSyncedTimezone stale so the next connect/foreground
+          // retries rather than silently giving up on a failed resync.
+          console.error("Timezone resync failed:", error);
+        }
+      },
+
       startHistorySync: async () => {
         if (get().isSyncingHistory) return;
         try {
@@ -1226,6 +1316,7 @@ export const useBLEStore = create<BLEState & BLEAction>()(
         lightEnabled: state.lightEnabled,
         pairedDeviceId: state.pairedDeviceId,
         syncedTimeKeys: state.syncedTimeKeys,
+        lastSyncedTimezone: state.lastSyncedTimezone,
         historySequenceOffset: state.historySequenceOffset,
         devicePassword: state.devicePassword,
       }),

@@ -37,7 +37,7 @@ import {
   triggerDeviceSoundForReminder,
 } from "@/utils/reminderSound";
 import { useBLEStore } from "@/stores/bleStore";
-import { Platform } from "react-native";
+import { AppState, Platform } from "react-native";
 import { handleLidOpenResponse, registerLidOpenCategory } from "@/services/notifications.service";
 
 Notifications.setNotificationHandler({
@@ -155,6 +155,22 @@ function RootLayoutNav() {
   useEffect(() => {
     registerLidOpenCategory().catch((error) => console.error("Lid category setup failed:", error));
   }, [selectedLanguage]);
+
+  // Brief §Priority 2.4: resync the device clock/reminder slots whenever the
+  // phone's timezone changes — connectToDevice already covers "on connect";
+  // this covers a zone change while the app stays connected (the OS doesn't
+  // otherwise tell JS a zone changed, so a coming-to-foreground check is what
+  // catches it, e.g. after landing with auto-timezone on). No-ops when the
+  // zone hasn't actually changed or nothing is connected.
+  useEffect(() => {
+    const resync = () => useBLEStore.getState().resyncTimezoneIfChanged();
+    resync(); // covers the app already being foregrounded when this mounts
+
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") resync();
+    });
+    return () => subscription.remove();
+  }, []);
 
   useEffect(() => {
     const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
