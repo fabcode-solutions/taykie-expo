@@ -38,8 +38,6 @@ import {
 } from "@/utils/reminderSound";
 import { useBLEStore } from "@/stores/bleStore";
 import { Platform } from "react-native";
-import { useAuthStore } from "@/stores/authStore";
-import { restoreBLEConnection } from "@/stores/bleStore";
 import { handleLidOpenResponse, registerLidOpenCategory } from "@/services/notifications.service";
 
 Notifications.setNotificationHandler({
@@ -140,7 +138,6 @@ function AppContent() {
 
 function RootLayoutNav() {
   const selectedLanguage = useLanguageStore((s) => s.selectedLanguage);
-  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   // Language handling
   useEffect(() => {
     const lng = selectedLanguage || "en-US";
@@ -158,12 +155,6 @@ function RootLayoutNav() {
   useEffect(() => {
     registerLidOpenCategory().catch((error) => console.error("Lid category setup failed:", error));
   }, [selectedLanguage]);
-
-  // Reconnect to the paired Taykie so lid openings reach the app (also when iOS
-  // relaunches it in the background for a Bluetooth event)
-  useEffect(() => {
-    if (isAuthenticated) restoreBLEConnection().catch(() => {});
-  }, [isAuthenticated]);
 
   useEffect(() => {
     const subscription = Notifications.addNotificationResponseReceivedListener((response) => {

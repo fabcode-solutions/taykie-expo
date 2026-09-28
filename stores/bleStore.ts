@@ -4,6 +4,8 @@ import { mmkvJSONStateStorage } from "./stateStorage";
 // Module-level (not store state) since it's an opaque timer handle, not
 // serializable UI state.
 let devicePollInterval: ReturnType<typeof setInterval> | null = null;
+// True while an F6 reply is being uploaded to the backend (see onHistoryReceived).
+let historyUploadInFlight = false;
 // How long a tone/volume preview plays before auto-stopping. The device
 // never auto-stops F4 on its own, so this is what keeps a settings-screen
 // preview from playing indefinitely.
@@ -325,50 +327,10 @@ import {
   startHistorySyncApi,
   uploadHistoryBatch,
   completeSyncSession,
-  recordLidOpens,
 } from "@/services/api/device";
-import { storage } from "@/stores/stateStorage";
 import { queryClient } from "@/hooks/queries/queryClient";
 import { lidEventKeys } from "@/hooks/queries/lidEvents";
-import { showLidOpenNotification } from "@/services/notifications.service";
-
-// Peripheral the user paired with, kept so the app can reconnect after a
-// restart or a dropped link without going through onboarding again.
-const PAIRED_PERIPHERAL_KEY = "ble.pairedPeripheralId";
-const RECONNECT_BASE_DELAY_MS = 2000;
-const RECONNECT_MAX_DELAY_MS = 30000;
-
-let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-let reconnectAttempt = 0;
-// Resolves to the backend sync session id once the device has reported its record count
-let syncSessionPromise: Promise<string> | null = null;
-
-function clearReconnect() {
-  if (reconnectTimer) clearTimeout(reconnectTimer);
-  reconnectTimer = null;
-  reconnectAttempt = 0;
-}
-
-// Keeps trying to reach the paired peripheral with a capped backoff. On iOS a
-// pending connect survives in the background (bluetooth-central), which is what
-// lets a lid opening reach the app while it is not on screen.
-function scheduleReconnect(peripheralId: string) {
-  if (reconnectTimer) return;
-  const delay = Math.min(RECONNECT_BASE_DELAY_MS * 2 ** reconnectAttempt, RECONNECT_MAX_DELAY_MS);
-  reconnectAttempt += 1;
-  reconnectTimer = setTimeout(async () => {
-    reconnectTimer = null;
-    const { connectionStatus, connectToDevice } = useBLEStore.getState();
-    // The user may have disconnected or forgotten the device meanwhile
-    if (storage.getString(PAIRED_PERIPHERAL_KEY) !== peripheralId) return;
-    if (connectionStatus !== "disconnected") return;
-    try {
-      await connectToDevice(peripheralId);
-    } catch {
-      scheduleReconnect(peripheralId);
-    }
-  }, delay);
-}
+import { notifyNewLidEvents } from "@/services/notifications.service";
 
 interface BLEState {
   // Scanning state
@@ -377,8 +339,6 @@ interface BLEState {
 
   // Connection state
   connectedDevice: TaykieDevice | null;
-  // Backend (uuid) id of the paired device. connectedDevice.id is the BLE peripheral id.
-  backendDeviceId: string | null;
   connectionStatus: "connected" | "disconnected" | "connecting";
   // The BACKEND's own device record id (a UUID) — distinct from
   // connectedDevice.id, which is the raw BLE peripheral address (a MAC on
@@ -467,7 +427,6 @@ interface BLEAction {
   connectToDevice: (deviceId: string) => Promise<void>;
   disconnectDevice: () => Promise<void>;
   forgetDevice: () => Promise<void>; // Added to handle unpairing from backend
-  handleLidOpened: () => Promise<void>;
 
   // Taykie Specific Commands
   queryDeviceStatus: () => Promise<void>;
@@ -497,7 +456,6 @@ const initialState = {
   isScanning: false,
   scannedDevices: [],
   connectedDevice: null,
-  backendDeviceId: null,
   connectionStatus: "disconnected" as const,
   pairedDeviceId: null,
   syncedTimeKeys: [],
@@ -634,11 +592,23 @@ export const useBLEStore = create<BLEState & BLEAction>()(
             // onStatusUpdated above for why connectedDevice.id (the BLE
             // address) can't be used for backend calls.
             const { pairedDeviceId, isSyncingHistory } = get();
-            if (!pairedDeviceId || !isSyncingHistory) {
-              // No backend sync in progress (e.g. a lightweight on-screen
-              // refresh) — nothing further to do.
-              return;
+            if (!pairedDeviceId) return;
+
+            // The periodic poll reads history without a manual sync running.
+            // The device only logs lid opens (it never pushes them), so this
+            // read is the only way the app learns of one: any records here must
+            // go to the backend, which turns them into lid events and triggers
+            // the "What did you do?" notification. Nothing to do when empty.
+            if (!isSyncingHistory) {
+              if (records.length === 0) return;
+              set({ isSyncingHistory: true, historyProgress: 0, historyTotal: 0 });
             }
+
+            // A poll can land while the previous upload is still running
+            // (upload + erase take a few seconds); a second concurrent run
+            // would upload the same unerased records twice.
+            if (historyUploadInFlight) return;
+            historyUploadInFlight = true;
 
             let sessionId: string | null = null;
             try {
@@ -666,11 +636,16 @@ export const useBLEStore = create<BLEState & BLEAction>()(
                   eventAt: r.timestamp,
                 }));
 
-                await uploadHistoryBatch({
+                const uploadResponse = await uploadHistoryBatch({
                   deviceId: pairedDeviceId,
                   sessionId,
                   records: mappedRecords,
                 });
+
+                // Lid opens found in this batch: notify for fresh ones, and refresh
+                // the unconfirmed list (missed opens stay silent, brief P1.7).
+                await notifyNewLidEvents(uploadResponse?.data?.lidEvents ?? []);
+                queryClient.invalidateQueries({ queryKey: lidEventKeys.all });
 
                 set({ historySequenceOffset: offset + records.length });
                 console.log("Backend saved", records.length, "history records");
@@ -701,6 +676,7 @@ export const useBLEStore = create<BLEState & BLEAction>()(
                 sessionId,
                 status: "completed",
               });
+              historyUploadInFlight = false;
               set({ isSyncingHistory: false, syncSessionId: null });
             } catch (error) {
               console.error("Failed to save history records:", error);
@@ -715,6 +691,7 @@ export const useBLEStore = create<BLEState & BLEAction>()(
                   console.error("Failed to mark sync session as failed:", completeError);
                 }
               }
+              historyUploadInFlight = false;
               set({ isSyncingHistory: false, syncSessionId: null });
             }
           };
@@ -841,7 +818,10 @@ export const useBLEStore = create<BLEState & BLEAction>()(
       // CONNECT
       // ----------------------
       connectToDevice: async (deviceId: string) => {
-        clearReconnect();
+        if (reconnectTimer) {
+          clearTimeout(reconnectTimer);
+          reconnectTimer = null;
+        }
         set({ connectionStatus: "connecting" });
         try {
           const device = await bleService.connectToDevice(deviceId);
@@ -856,7 +836,6 @@ export const useBLEStore = create<BLEState & BLEAction>()(
               rssi: 0,
               isConnected: true,
             },
-            backendDeviceId,
             connectionStatus: "connected",
           });
 
@@ -996,30 +975,6 @@ export const useBLEStore = create<BLEState & BLEAction>()(
           stopBleForegroundService();
         } catch (error) {
           console.error("Forget device error:", error);
-        }
-      },
-
-      // ----------------------
-      // LID OPEN (live)
-      // ----------------------
-      // Reports the open to the backend, which merges opens within 2 minutes of an
-      // existing event. Only a genuinely new event raises the "What did you do?"
-      // notification, so repeated openings give one notification.
-      handleLidOpened: async () => {
-        const backendDeviceId = get().backendDeviceId;
-        if (!backendDeviceId) return;
-
-        const openedAt = new Date();
-        try {
-          const results = await recordLidOpens(backendDeviceId, [openedAt.toISOString()]);
-          for (const { event, isNew } of results) {
-            if (isNew) await showLidOpenNotification(event.id, new Date(event.openedAt));
-          }
-          queryClient.invalidateQueries({ queryKey: lidEventKeys.all });
-        } catch (error) {
-          // The open is still stored on the device and comes back through the next
-          // F6 sync as an unconfirmed event, so nothing is lost.
-          console.error("Failed to record lid open:", error);
         }
       },
 

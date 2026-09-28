@@ -4,9 +4,8 @@ import { format } from "date-fns";
 import { router, type Href } from "expo-router";
 import i18n from "@/i18n";
 import { LocalizedStrings } from "@/i18n/LocalizedStrings";
-import { getAndroidChannelId } from "@/hooks/usePushNotifications";
 import { getDateLocale } from "@/utils/date";
-import { resolveLidEvent } from "@/services/api/device";
+import { resolveLidEvent, type LidOpenEvent } from "@/services/api/device";
 import { queryClient } from "@/hooks/queries/queryClient";
 import { lidEventKeys } from "@/hooks/queries/lidEvents";
 
@@ -16,6 +15,7 @@ import { lidEventKeys } from "@/hooks/queries/lidEvents";
 
 export const LID_OPEN_CATEGORY = "LID_OPEN";
 export const LID_OPEN_NOTIFICATION_TYPE = "LidOpen";
+const LID_OPEN_ANDROID_CHANNEL = "lid_open";
 
 export const LID_OPEN_ACTION = {
   TOOK_DOSE: "took_dose",
@@ -41,6 +41,15 @@ export function formatOpenTime(openedAt: Date): string {
  * button labels follow it).
  */
 export async function registerLidOpenCategory(): Promise<void> {
+  if (Platform.OS === "android") {
+    await Notifications.setNotificationChannelAsync(LID_OPEN_ANDROID_CHANNEL, {
+      name: "Lid opened",
+      importance: Notifications.AndroidImportance.MAX,
+      sound: "default",
+      lockscreenVisibility: Notifications.AndroidNotificationVisibility.PRIVATE,
+    });
+  }
+
   // Both answering actions open the app: the answer needs a network call and
   // iOS does not reliably run JS for background-only actions on a killed app.
   // Dismiss does not open the app; the event simply stays unconfirmed.
@@ -81,10 +90,7 @@ export async function showLidOpenNotification(eventId: string, openedAt: Date): 
       categoryIdentifier: LID_OPEN_CATEGORY,
       sound: "default",
     },
-    trigger:
-      Platform.OS === "android"
-        ? { channelId: getAndroidChannelId(LID_OPEN_NOTIFICATION_TYPE) }
-        : null,
+    trigger: Platform.OS === "android" ? { channelId: LID_OPEN_ANDROID_CHANNEL } : null,
   });
 }
 
@@ -143,5 +149,32 @@ export async function handleLidOpenResponse(
     default:
       openPicker();
       return true;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// From the F6 history poll
+// ---------------------------------------------------------------------------
+
+// The device only logs opens (no real-time event), so the app learns of them on
+// its next history read. An open this recent is treated as "just happened" and
+// gets the notification; anything older was missed while the phone was away and
+// only appears in the unconfirmed list, with no late push (brief P1.7).
+export const LID_LIVE_WINDOW_MS = 5 * 60 * 1000;
+
+/** Raises the notification for freshly created lid events that are still recent. */
+export async function notifyNewLidEvents(
+  results: { event: LidOpenEvent; isNew: boolean }[],
+  now: Date = new Date(),
+): Promise<void> {
+  for (const { event, isNew } of results) {
+    if (!isNew) continue;
+    const openedAt = new Date(event.openedAt);
+    if (now.getTime() - openedAt.getTime() > LID_LIVE_WINDOW_MS) continue;
+    try {
+      await showLidOpenNotification(event.id, openedAt);
+    } catch (error) {
+      console.error("Failed to show lid-open notification:", error);
+    }
   }
 }
