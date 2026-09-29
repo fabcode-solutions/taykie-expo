@@ -163,6 +163,10 @@ class BLEService {
           // otherwise this would wipe out bytes another still-pending
           // command's reply needs mid-reassembly.
           if (this.pendingReplies.length === 0) this.notifyBuffer = [];
+          // A timed-out F6 must not leave awaitingHistoryReply stuck true —
+          // every later reply (E0, F1, F3, F5, ...) would otherwise be
+          // misread as history data by the branch above.
+          if (cmdType === CmdType.QueryHistory) this.awaitingHistoryReply = false;
         }
         resolve(false); // Timed out — no confirmation, but proceed rather than hang forever.
       }, timeoutMs);
@@ -479,6 +483,18 @@ class BLEService {
   // whole frame).
   private notifyBuffer: number[] = [];
 
+  // F6's reply does NOT follow the [header][cmdType][data][checksum] shape
+  // every other command uses — confirmed against a real device (erase, one
+  // physical lid-open, re-query): it's [0x5A][record]*N[0xAA], with no
+  // cmdType echo and no per-frame checksum trailer at all. So byte[1] is
+  // either a record's own first byte (which is never 0xf6) or, with zero
+  // records, the 0xAA terminator itself — the old `notifyBuffer[1] ===
+  // CmdType.QueryHistory` check could never be true, which is why every F6
+  // query timed out. This flag is the only reliable way to tell "we're
+  // waiting on an F6 reply" apart from any other reply, since it can't be
+  // determined from the bytes themselves.
+  private awaitingHistoryReply = false;
+
   private handleNotification(error: any, characteristic: Characteristic | null) {
     if (error || !characteristic?.value) return;
 
@@ -498,20 +514,50 @@ class BLEService {
         Buffer.from(this.notifyBuffer).toString("hex"),
       );
       this.notifyBuffer = [];
+      this.awaitingHistoryReply = false;
       return;
     }
 
     if (this.notifyBuffer.length < 2) return; // not even header+cmdType yet
 
+    // F6 reply: [0x5A][record]*N[0xAA] — see awaitingHistoryReply's comment.
+    // Handled entirely separately from the generic frame logic below, since
+    // it doesn't have that logic's [header][cmdType][data][checksum] shape
+    // at all (no cmdType echo to key off, no per-frame checksum).
+    if (this.awaitingHistoryReply) {
+      const last = this.notifyBuffer[this.notifyBuffer.length - 1];
+      const bodyLength = this.notifyBuffer.length - 2; // minus header + terminator
+      const looksComplete = last === 0xaa && bodyLength >= 0 && bodyLength % 8 === 0;
+
+      if (!looksComplete) return; // wait for the next chunk
+
+      const rawHex = Buffer.from(this.notifyBuffer).toString("hex");
+      const recordBytes = this.notifyBuffer.slice(1, -1);
+      console.log(
+        `📜 F6 QueryHistory reply: ${this.notifyBuffer.length} total byte(s), ${recordBytes.length} record byte(s) -> ${recordBytes.length / 8} record(s). raw:`,
+        rawHex,
+      );
+
+      const records = TaykieProtocol.parseHistoryRecords(recordBytes);
+      console.log(
+        `📜 F6 parsed ${records.length} record(s) after CRC check (reserved byte check):`,
+        records.map((r) => ({ timestamp: r.timestamp, reserved: r.reserved })),
+      );
+
+      this.notifyBuffer = [];
+      this.awaitingHistoryReply = false;
+
+      const oldest = this.pendingReplies[0];
+      if (oldest && oldest.cmdType === CmdType.QueryHistory) oldest.resolve(true);
+
+      if (this.onHistoryReceived) this.onHistoryReceived(records);
+      return;
+    }
+
     const cmdType = this.notifyBuffer[1];
     const fixedLength = BLEService.FIXED_REPLY_LENGTHS[cmdType];
-    const isHistoryReply = cmdType === CmdType.QueryHistory;
 
-    const looksComplete = fixedLength
-      ? this.notifyBuffer.length === fixedLength
-      : isHistoryReply
-        ? this.notifyBuffer.length >= 3 && (this.notifyBuffer.length - 3) % 8 === 0
-        : false;
+    const looksComplete = fixedLength ? this.notifyBuffer.length === fixedLength : false;
 
     if (!looksComplete) return; // wait for the next chunk
 
@@ -534,10 +580,6 @@ class BLEService {
     }
 
     if (!parsed.isValid) {
-      // For F6, a "complete-shaped" buffer can still be a coincidental
-      // false positive (~1-in-2048) mid-reassembly — give it one more
-      // chunk before giving up, unless it's already unreasonably large.
-      if (isHistoryReply && frameByteLength < 512) return;
       console.warn(
         `⚠️ Frame checksum mismatch (${frameByteLength} bytes, after: ${this.lastCommandLabel}), raw:`,
         rawHex,
@@ -617,30 +659,9 @@ class BLEService {
         break;
       }
 
-      case CmdType.QueryHistory: {
-        // One unmistakable line per F6 reply, before any parsing/CRC
-        // filtering — this is what actually answers "did the device report
-        // anything at all" (as opposed to the per-record logs below, which
-        // only fire once something has already survived parsing). A payload
-        // shorter than 8 bytes means the device's history buffer was empty
-        // at the moment it was asked, full stop — nothing in the app can
-        // conjure a record out of that.
-        console.log(
-          `📜 F6 QueryHistory reply: ${parsed.data.length} data byte(s) -> ${Math.floor(parsed.data.length / 8)} candidate record(s). raw:`,
-          Buffer.from(parsed.data).toString("hex") || "(empty)",
-        );
-
-        const records = TaykieProtocol.parseHistoryRecords(parsed.data);
-        // Investigating whether the undocumented "reserved" byte is
-        // actually an open/closed flag — log it per record so the pattern
-        // (if any) is visible without guessing.
-        console.log(
-          `📜 F6 parsed ${records.length} record(s) after CRC check (reserved byte check):`,
-          records.map((r) => ({ timestamp: r.timestamp, reserved: r.reserved })),
-        );
-        if (this.onHistoryReceived) this.onHistoryReceived(records);
-        break;
-      }
+      // CmdType.QueryHistory is handled earlier, in the awaitingHistoryReply
+      // branch above — its reply doesn't reach this generic switch at all
+      // (see that branch's comment for why F6 needs separate handling).
 
       case CmdType.QueryTime:
         console.log("Device time:", TaykieProtocol.parseTime(parsed.data));
@@ -923,6 +944,7 @@ class BLEService {
   async queryHistory() {
     await this.ensurePasswordVerified();
     const frame = TaykieProtocol.buildFrame(CmdType.QueryHistory);
+    this.awaitingHistoryReply = true;
     await this.writeCommand(frame, "F6 QueryHistory");
   }
 

@@ -216,7 +216,11 @@ export class TaykieProtocol {
   }
 
   // Parses the F6 history reply: repeating 8-byte records, each
-  // [year, month, day, hour, minute, reserved, crc16High, crc16Low].
+  // [year, month, day, hour, minute, reserved, crc16Low, crc16High].
+  // Confirmed against a real device (erase, one physical lid-open, re-query):
+  // the CRC16 is transmitted low byte first — standard Modbus wire order —
+  // not high byte first as originally assumed; every record was failing its
+  // CRC check and being silently dropped until this was corrected.
   // Note: this spec has no per-record sequence number and no batch-ack
   // command — see BLEService for why ack/pagination is currently disabled.
   static parseHistoryRecords(data: number[]): HistoryRecord[] {
@@ -230,7 +234,7 @@ export class TaykieProtocol {
       // Undocumented as anything but "reserved" — surfaced on the record so
       // it can be inspected empirically for a possible open/closed flag.
       const reserved = data[i + 5];
-      const crc16 = (data[i + 6] << 8) | data[i + 7];
+      const crc16 = (data[i + 7] << 8) | data[i + 6];
 
       // This is separate from the frame's own trailing checksum — it's a
       // per-record integrity check, so a single corrupted record (a stray
