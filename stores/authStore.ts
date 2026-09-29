@@ -37,7 +37,7 @@ import {
   getSuggestionList,
   getPublicProfile,
 } from "@/services/api/auth";
-import { getErrorMessage } from "./postStore";
+import { getErrorMessage, usePostStore } from "./postStore";
 import { useUploadStore } from "./uploadStore";
 import { Images } from "@/assets";
 import { useOnboardingStore } from "./onboardingStore";
@@ -103,6 +103,10 @@ type State = {
   followers: (User & { isFriend: boolean })[];
   suggestionList: any[];
   userStreak: UserStreakData | null;
+  // Cache of preset avatar key (e.g. "cover_3") -> already-uploaded S3 URL for
+  // this user, so re-selecting the same preset doesn't re-upload the bundled
+  // asset on every save.
+  presetAvatarUploads: Record<string, string>;
 };
 
 type Actions = {
@@ -129,7 +133,10 @@ type Actions = {
   ) => Promise<string>;
   fetchUserProfile: () => Promise<void>;
   saveSocialLoggedinData: (data: SocialLoginRequest) => Promise<void>;
-  updateProfile: (request: ProfileUpdateRequest) => Promise<string>;
+  updateProfile: (
+    request: ProfileUpdateRequest,
+    onStageChange?: (stage: "uploading" | "saving") => void,
+  ) => Promise<string>;
   fetchFollowersList: () => Promise<void>;
   fetchFollowingList: () => Promise<void>;
   followUserId: (userId: string) => Promise<string>;
@@ -154,6 +161,7 @@ const initialState: State = {
   suggestionList: [],
   userStreak: null,
   publicProfile: null,
+  presetAvatarUploads: {},
 };
 
 // API base URL now handled by the shared api client + endpoints
@@ -410,21 +418,43 @@ export const useAuthStore = create<State & Actions>()(
           throw Error(message);
         }
       },
-      updateProfile: async (request) => {
+      // onStageChange lets a caller (edit-profile.tsx) show "Uploading
+      // image…" vs "Saving…" instead of one generic spinner for the whole
+      // call — this is the one place that actually knows which of the two
+      // is happening, since both run inside a single await chain here.
+      updateProfile: async (request, onStageChange) => {
         set({ isLoading: true, error: null });
         try {
           let imageUrl = null;
 
           if (request.avatarUrl) {
-            let fileUri = request.avatarUrl;
+            const rawAvatarUrl = request.avatarUrl;
+            const isPresetKey = !rawAvatarUrl.startsWith("file") && !rawAvatarUrl.startsWith("http");
+            const cachedPresetUrl = isPresetKey ? get().presetAvatarUploads[rawAvatarUrl] : undefined;
 
-            // If it's a cover image key, get real URI
-            if (!fileUri.startsWith("file") && !fileUri.startsWith("http")) {
-              fileUri = Asset.fromModule(Images.cover[fileUri as keyof typeof Images.cover]).uri;
+            if (cachedPresetUrl) {
+              // Already uploaded this preset for this user — reuse the URL
+              // instead of re-uploading the same bundled asset again.
+              imageUrl = cachedPresetUrl;
+            } else {
+              onStageChange?.("uploading");
+              let fileUri = rawAvatarUrl;
+
+              // If it's a cover image key, get real URI
+              if (isPresetKey) {
+                fileUri = Asset.fromModule(Images.cover[fileUri as keyof typeof Images.cover]).uri;
+              }
+
+              imageUrl = await useUploadStore.getState().uploadImage(fileUri);
+
+              if (isPresetKey && imageUrl) {
+                set((state) => ({
+                  presetAvatarUploads: { ...state.presetAvatarUploads, [rawAvatarUrl]: imageUrl! },
+                }));
+              }
             }
-
-            imageUrl = await useUploadStore.getState().uploadImage(fileUri);
           }
+          onStageChange?.("saving");
           const response = await updateUserprofile({
             ...request,
             ...(imageUrl && { avatarUrl: imageUrl }),
@@ -435,6 +465,15 @@ export const useAuthStore = create<State & Actions>()(
           });
           await useOnboardingStore.getState().fetchOnboardingStatus();
           await get().fetchUserProfile();
+
+          // Patch already-loaded posts/comments so the user's own avatar
+          // updates on the Community feed immediately, without waiting for
+          // the next full refetch.
+          const currentUser = get().user;
+          if (imageUrl && currentUser?.id) {
+            usePostStore.getState().patchUserAvatarInFeed(currentUser.id, imageUrl);
+          }
+
           return response.message;
         } catch (error) {
           const message = getErrorMessage(error, "Request failed");
@@ -589,6 +628,7 @@ export const useAuthStore = create<State & Actions>()(
         refreshToken: state.refreshToken,
         user: state.user,
         isAuthenticated: state.isAuthenticated,
+        presetAvatarUploads: state.presetAvatarUploads,
       }),
       onRehydrateStorage: () => async (state) => {
         try {

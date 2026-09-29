@@ -14,7 +14,8 @@ import {
 import { useTranslation } from "react-i18next";
 import { fontFamily, Theme, useTheme } from "@/theme";
 import { useRouter } from "expo-router";
-import React, { useCallback, useMemo, useState } from "react";
+import { useNavigation } from "@react-navigation/native";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/stores/authStore";
 import IconCamera from "@/components/icons/IconCamera";
@@ -23,7 +24,6 @@ import ChooseGender from "@/components/profile/ChooseGender";
 import ChooseBirthYear from "@/components/profile/ChooseBirthYear";
 import { moderateScale, scale, verticalScale } from "@/utils/scale";
 import { useForm } from "react-hook-form";
-import { Loader } from "@/components/shared/loader";
 import { ProfileUpdateRequest } from "@/services/api/auth";
 import { getDeviceTimezone } from "@/utils/timezone";
 import { Images } from "@/assets";
@@ -54,7 +54,16 @@ export default function EditProfileScreen() {
   const theme = useTheme();
   const router = useRouter();
   const styles = useMemo(() => createStyles(theme), [theme]);
-  const { user, updateProfile, isLoading } = useAuthStore();
+  const { user, updateProfile } = useAuthStore();
+  const navigation = useNavigation();
+  // Local, not authStore.isLoading — that flag is shared with ~9 unrelated
+  // actions (follow/unfollow, fetchPublicProfile, ...), so it could show a
+  // stale "saving" state here from something that happened on another
+  // screen. Also lets the label reflect which of the two real phases
+  // (uploading the photo vs. saving the form) is actually happening — see
+  // updateProfile's onStageChange in authStore.ts.
+  const [saveStage, setSaveStage] = useState<"idle" | "uploading" | "saving">("idle");
+  const isSaving = saveStage !== "idle";
   const [chooseIsOpen, setChooseIsOpen] = useState(false);
   const [yearIsOpen, setYearIsOpen] = useState(false);
   const [genderIsOpen, setGenderIsOpen] = useState(false);
@@ -188,18 +197,56 @@ export default function EditProfileScreen() {
         ...(deviceTimezone && { timezone: deviceTimezone }),
       };
 
-      const message = await updateProfile(requestBody);
+      const message = await updateProfile(requestBody, setSaveStage);
       Alert.alert(t(LocalizedStrings.common.success), message, [
         { text: t(LocalizedStrings.common.ok), onPress: router.back },
       ]);
     } catch (error) {
       alert.show(AlertPresets.error(t(LocalizedStrings.common.error), error.message));
+    } finally {
+      setSaveStage("idle");
     }
   }, [name, birthYear, gender, country, avatarUrl, updateProfile, user, phone, username]);
 
+  const saveButtonTitle = useMemo(() => {
+    switch (saveStage) {
+      case "uploading":
+        return t(LocalizedStrings.profile.uploading_image);
+      case "saving":
+        return t(LocalizedStrings.profile.saving_changes);
+      default:
+        return t(LocalizedStrings.profile.save_changes);
+    }
+  }, [saveStage, t]);
+
+  // Priority 3-style discard guard: any back navigation while the form has
+  // unsaved edits (a field changed, or a new photo picked/selected but not
+  // yet saved) asks for confirmation instead of silently losing them.
+  // Covers the custom BackButton below AND the iOS swipe-back gesture /
+  // Android hardware back, both of which route through this same
+  // navigation event regardless of how "back" was triggered.
+  useEffect(() => {
+    const unsubscribe = navigation.addListener("beforeRemove", (e) => {
+      if (!isFormDirty) return;
+      e.preventDefault();
+      Alert.alert(
+        t(LocalizedStrings.profile.discard_changes_title),
+        t(LocalizedStrings.profile.discard_changes_message),
+        [
+          { text: t(LocalizedStrings.common.cancel), style: "cancel" },
+          {
+            text: t(LocalizedStrings.profile.discard),
+            style: "destructive",
+            onPress: () => navigation.dispatch(e.data.action),
+          },
+        ],
+      );
+    });
+    return unsubscribe;
+  }, [navigation, isFormDirty, t]);
+
   return (
     <>
-      {isLoading && <Loader />}
       <KeyboardAvoidingView
         style={[styles.safeArea, { backgroundColor: theme.colors.background.default }]}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -347,13 +394,13 @@ export default function EditProfileScreen() {
             </View>
 
             <Button
-              title={t(LocalizedStrings.profile.save_changes)}
+              title={saveButtonTitle}
               onPress={handleSubmit(handleProfileUpdate)}
               style={styles.button}
-              loading={isLoading}
+              loading={isSaving}
               textStyle={styles.btnTextStyle}
               rightIcon={null}
-              disabled={!isFormDirty}
+              disabled={!isFormDirty || isSaving}
             />
           </ScrollView>
           <ChoosePhoto

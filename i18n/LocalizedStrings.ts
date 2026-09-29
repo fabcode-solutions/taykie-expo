@@ -430,6 +430,11 @@ export const LocalizedStrings = {
     editProfile: "profile.editProfile",
     no_change_detected: "profile.no_change_detected",
     save_changes: "profile.save_changes",
+    uploading_image: "profile.uploading_image",
+    saving_changes: "profile.saving_changes",
+    discard_changes_title: "profile.discard_changes_title",
+    discard_changes_message: "profile.discard_changes_message",
+    discard: "profile.discard",
     choose_photo: "profile.choose_photo",
     gender: {
       title: "profile.gender.title",

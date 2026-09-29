@@ -416,6 +416,11 @@
     "editProfile": "Edit Profile",
     "no_change_detected": "No change detected",
     "save_changes": "Save Changes",
+    "uploading_image": "Uploading image…",
+    "saving_changes": "Saving…",
+    "discard_changes_title": "Discard changes?",
+    "discard_changes_message": "You have unsaved changes. Are you sure you want to discard them?",
+    "discard": "Discard",
     "choose_photo": "Choose Photo",
     "gender": {
       "title": "Gender",
