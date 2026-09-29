@@ -39,7 +39,7 @@ import { TONE_OPTIONS, DEFAULT_TONE_INDEX, DEFAULT_VOLUME_LEVEL } from "@/utils/
 import { findTaykieDevice } from "@/utils/reminderSound";
 import { capitalizeText } from "@/utils/formatter";
 
-type DeviceActionKey = "find" | "history" | "rename" | "dismiss" | "password";
+type DeviceActionKey = "find" | "history" | "rename" | "dismiss" | "password" | "unconfirmed";
 interface DeviceAction {
   key: DeviceActionKey;
   label: string;
@@ -140,7 +140,7 @@ export default function DeviceScreen() {
 
       // If permissions are granted but Bluetooth is OFF
       if (hasPermissions && !isBluetoothEnabled) {
-        console.log("🔴 Permissions granted, but Bluetooth is OFF");
+        //  console.log("🔴 Permissions granted, but Bluetooth is OFF");
         alert.show(
           AlertPresets.error(
             t(LocalizedStrings.device.bluetooth.alert),
@@ -152,7 +152,7 @@ export default function DeviceScreen() {
 
       // If both are true, start scanning
       if (hasPermissions && isBluetoothEnabled) {
-        console.log("🟢 All systems go! Starting scan...");
+        // console.log("🟢 All systems go! Starting scan...");
         try {
           await scanDevices();
         } catch (error) {
@@ -173,7 +173,7 @@ export default function DeviceScreen() {
       ? `${batteryLevel}%`
       : "--";
   const batteryWidth = batteryLevel !== null ? `${batteryLevel}%` : "0%";
-  console.log("batteryLevel=======", batteryLevel, lastSyncedAt);
+  // console.log("batteryLevel=======", batteryLevel, lastSyncedAt);
 
   // Relative time, used for both "last opened" and "last synced".
   const formatRelativeTime = (isoTimestamp: string) => {
@@ -391,12 +391,12 @@ export default function DeviceScreen() {
 
   const handleSelectVolume = useCallback(
     (value: number) => {
-      console.log(`🎚️ handleSelectVolume: raw value from slider = ${value}`);
+      // console.log(`🎚️ handleSelectVolume: raw value from slider = ${value}`);
       setPendingVolumeLevel(value);
       if (volumeDebounceRef.current) clearTimeout(volumeDebounceRef.current);
       volumeDebounceRef.current = setTimeout(() => {
         volumeDebounceRef.current = null;
-        console.log(`🎚️ handleSelectVolume: debounce settled, calling setDeviceVolume(${value})`);
+        //   console.log(`🎚️ handleSelectVolume: debounce settled, calling setDeviceVolume(${value})`);
         setDeviceVolume(value);
         setPendingVolumeLevel(null);
       }, TONE_PREVIEW_DEBOUNCE_MS);
@@ -807,6 +807,7 @@ export default function DeviceScreen() {
                   onPress={() => {
                     if (action.key === "history") startHistorySync();
                     else if (action.key === "dismiss") dismissAlert();
+                    else if (action.key === "unconfirmed") router.push("/lid-events" as Href);
                     else if (action.key === "rename") router.push("/device/rename-device");
                     else if (action.key === "find") {
                       findTaykieDevice();

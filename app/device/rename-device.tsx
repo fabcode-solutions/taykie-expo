@@ -4,7 +4,7 @@ import { ThemeText } from "@/components";
 import { useTranslation } from "react-i18next";
 import { fontFamily, Theme, useTheme } from "@/theme";
 import { useRouter } from "expo-router";
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import IconBackArrow from "@/components/icons/IconBackArrow";
 import { Button } from "@/components/ui/button";
@@ -29,9 +29,20 @@ export default function RenameDeviceScreen() {
   const [isSaving, setIsSaving] = useState(false);
   const [isToggling, setIsToggling] = useState(false);
 
+  // The initial useState above only runs once — if this screen is opened
+  // before connectedDevice has loaded (e.g. mid-reconnect), the input would
+  // otherwise stay stuck empty even once the real name arrives. Only syncs
+  // while the user hasn't started typing their own edit, so an in-progress
+  // rename never gets clobbered by a background reconnect/refresh.
+  useEffect(() => {
+    if (connectedDevice?.name && name === "") setName(connectedDevice.name);
+  }, [connectedDevice?.name]);
+
   const handleBack = React.useCallback(() => router.back(), [router]);
 
   const isConnected = connectionStatus === "connected";
+  const trimmedName = name.trim();
+  const isDirty = trimmedName.length > 0 && trimmedName !== (connectedDevice?.name ?? "").trim();
   const lastSyncedText = lastSyncedAt
     ? `Last Synced: ${new Date(lastSyncedAt).toLocaleString(undefined, {
         hour: "numeric",
@@ -118,6 +129,8 @@ export default function RenameDeviceScreen() {
                 placeholder="Device name"
                 style={styles.deviceNameInput}
                 placeholderTextColor={theme.colors.text.secondary}
+                maxLength={255}
+                autoCapitalize="words"
               />
             </View>
             <View style={styles.statusRow}>
@@ -141,6 +154,7 @@ export default function RenameDeviceScreen() {
           title="Save Name"
           onPress={handleSave}
           loading={isSaving}
+          disabled={!isDirty}
           style={styles.saveBtn}
           fullWidth
         />
