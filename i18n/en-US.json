@@ -593,6 +593,11 @@
       "selectTime": "Select Time",
       "addTime": "Add another time",
       "duplicateTime": "This time is already added to this schedule. Please pick a different time.",
+      "saveToDevice": "Save to Taykie device",
+      "saveToDeviceNotConnected": "Connect your Taykie device to enable this",
+      "saveToDeviceSynced": "Saved — this reminder will also ring from your Taykie device.",
+      "saveToDeviceSyncFailed": "Schedule saved, but syncing it to your Taykie device failed. You can retry from Device > On-Device Reminders.",
+      "saveToDeviceSlotsFull": "Schedule saved, but your Taykie device's 10 reminder slots are full — this one wasn't added. Free up a slot from Device > On-Device Reminders.",
       "reminders": {
         "title": "Reminders",
         "push": "Push",

@@ -10,7 +10,7 @@ import { Medication, ProductRequest } from "@/types/products.types";
 import Schedule from "./Schedule";
 import AlertModal from "../ui/Alert/AlertModal";
 import { useProductStore } from "@/stores/productStore";
-import { CreateScheduleRequest, FrequencyType } from "@/types/schedule.types";
+import { CreateScheduleRequest, FrequencyType, Schedule as ScheduleModel } from "@/types/schedule.types";
 import { useScheduleStore } from "@/stores/scheduleStore";
 import { generateWeek } from "@/app/(tabs)/schedule";
 import { moderateScale, scale, verticalScale } from "@/utils/scale";
@@ -18,6 +18,8 @@ import { t } from "i18next";
 import { LocalizedStrings } from "@/i18n/LocalizedStrings";
 import { AlertPresets } from "@/utils/alert";
 import { useAlert } from "@/provider/AlertProvider";
+import { useBLEStore, scheduleTimeKey } from "@/stores/bleStore";
+import { SCHEDULE_SLOT_COUNT } from "@/services/ble/TaykieProtocol";
 
 const ScheduleModals = ({
   visible = false,
@@ -87,6 +89,71 @@ const ScheduleModals = ({
     },
     [setMedication],
   );
+  // "Save to Taykie device" — pushes the just-created schedule's times onto
+  // the device's on-device reminder slots (F2), the same mechanism the
+  // dedicated On-Device Reminders screen (schedule-sync.tsx) uses. The
+  // schedule itself is already saved by the time this runs, so any failure
+  // here is its own separate warning, never a rollback of the schedule save.
+  const syncNewScheduleToDevice = useCallback(
+    async (created: ScheduleModel) => {
+      try {
+        const times = (created.scheduleTime ?? "")
+          .split(",")
+          .map((time) => time.trim())
+          .filter(Boolean);
+        if (times.length === 0) return;
+
+        const scheduleId = created.scheduleId ?? created.id;
+        if (!scheduleId) return;
+        const newKeys = times.map((time) => scheduleTimeKey(scheduleId, time));
+
+        const bleState = useBLEStore.getState();
+        const merged = [...bleState.syncedTimeKeys];
+        let droppedCount = 0;
+        for (const key of newKeys) {
+          if (merged.includes(key)) continue;
+          if (merged.length >= SCHEDULE_SLOT_COUNT) {
+            droppedCount += 1;
+            continue;
+          }
+          merged.push(key);
+        }
+        bleState.setSyncedTimeKeys(merged);
+
+        // F2 always rewrites the device's entire slot table, so this needs
+        // every schedule, not just the new one — refetch rather than trust
+        // whatever's cached, since the new schedule may not be in it yet.
+        await useScheduleStore.getState().fetchUserSchedules(true);
+        const allSchedules = useScheduleStore.getState().userSchedules;
+        const result = await bleState.syncSchedulesToDevice(allSchedules);
+
+        if (droppedCount > 0 || result.skippedScheduleIds.includes(scheduleId)) {
+          alert.show(
+            AlertPresets.warning(
+              t(LocalizedStrings.common.warning),
+              t(LocalizedStrings.schedule.routine.saveToDeviceSlotsFull),
+            ),
+          );
+        } else {
+          alert.show(
+            AlertPresets.success(
+              t(LocalizedStrings.common.success),
+              t(LocalizedStrings.schedule.routine.saveToDeviceSynced),
+            ),
+          );
+        }
+      } catch (error) {
+        alert.show(
+          AlertPresets.error(
+            t(LocalizedStrings.common.error),
+            t(LocalizedStrings.schedule.routine.saveToDeviceSyncFailed),
+          ),
+        );
+      }
+    },
+    [alert, t],
+  );
+
   const handleAddRoutine = useCallback(
     async (
       frequency: FrequencyType,
@@ -94,6 +161,7 @@ const ScheduleModals = ({
       selectedDay?: string,
       selectedMonthDay?: number,
       reminders?: { push?: boolean; led?: boolean; sound?: boolean },
+      saveToDevice?: boolean,
     ) => {
       let weekDays = selectedDay;
       if (frequency === "daily") {
@@ -140,7 +208,7 @@ const ScheduleModals = ({
           const id = await createProduct(request);
           payload = { ...payload, productId: id };
         }
-        await createSchedule(payload);
+        const created = await createSchedule(payload);
         setAddProductVisible(false);
         setRoutineVisible(false);
         // Same reasoning as handleSelect/handleAddProduct above — don't
@@ -150,11 +218,19 @@ const ScheduleModals = ({
           setShowSuccess(true);
           setTimeout(() => setShowSuccess(false), 3000);
         }, 300);
+
+        // "Save to Taykie device" — the schedule itself is already saved at
+        // this point regardless of what happens below, so a sync failure
+        // here is surfaced as its own warning rather than rolling anything
+        // back or blocking the success flow above.
+        if (saveToDevice && created) {
+          await syncNewScheduleToDevice(created);
+        }
       } catch (error) {
         alert.show(AlertPresets.error(t(LocalizedStrings.common.error), error.message));
       }
     },
-    [medication],
+    [medication, syncNewScheduleToDevice],
   );
 
   return (

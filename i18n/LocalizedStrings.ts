@@ -601,6 +601,11 @@ export const LocalizedStrings = {
       selectTime: "schedule.routine.selectTime",
       addTime: "schedule.routine.addTime",
       duplicateTime: "schedule.routine.duplicateTime",
+      saveToDevice: "schedule.routine.saveToDevice",
+      saveToDeviceNotConnected: "schedule.routine.saveToDeviceNotConnected",
+      saveToDeviceSynced: "schedule.routine.saveToDeviceSynced",
+      saveToDeviceSyncFailed: "schedule.routine.saveToDeviceSyncFailed",
+      saveToDeviceSlotsFull: "schedule.routine.saveToDeviceSlotsFull",
       reminders: {
         title: "schedule.routine.reminders.title",
         push: "schedule.routine.reminders.push",

@@ -35,7 +35,7 @@ type State = {
 };
 
 type Actions = {
-  createSchedule: (requestBody: CreateScheduleRequest) => Promise<void>;
+  createSchedule: (requestBody: CreateScheduleRequest) => Promise<Schedule>;
   fetchUserSchedules: (reset?: boolean) => Promise<void>;
   fetchTodaySchedules: (period?:string) => Promise<void>;
   deleteSchedule: (scheduleId: string) => Promise<string>;
@@ -76,10 +76,15 @@ export const useScheduleStore = create<State & Actions>()(
       createSchedule: async (requestBody) => {
         set({ isLoading: true, error: null });
         try {
-          await createSchedule(requestBody);
+          // Returned (not discarded) so a caller can sync just-created
+          // schedule onto the device's on-device reminder slots — see
+          // ScheduleModals.tsx's "Save to Taykie device" toggle — without
+          // needing to guess which of the refetched schedules is the new one.
+          const response = await createSchedule(requestBody);
           await get().fetchSchedules(true);
           await get().fetchUpcomingReminder();
           set({ isLoading: false });
+          return response.data as Schedule;
         } catch (error) {
           const message = getErrorMessage(error);
           set({

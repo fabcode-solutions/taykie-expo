@@ -25,6 +25,7 @@ import { FrequencyType } from "@/types/schedule.types";
 import { getTimeOfDay } from "@/utils/formatter";
 import { useAlert } from "@/provider/AlertProvider";
 import { AlertPresets } from "@/utils/alert";
+import { useBLEConnection } from "@/stores/bleStore";
 interface ScheduleProps {
   item: Medication | null;
   onAddRoutine?: (
@@ -33,6 +34,7 @@ interface ScheduleProps {
     selectedDay?: string,
     seletedMonthDay?: number,
     reminders?: { push?: boolean; led?: boolean; sound?: boolean },
+    saveToDevice?: boolean,
   ) => void;
 }
 
@@ -96,6 +98,7 @@ const Schedule = ({ item, onAddRoutine }: ScheduleProps) => {
 
   const selectedDayName = format(weekDays[selectedDayIndex].date, "EEEE");
   const { isLoading } = useScheduleStore();
+  const { connectionStatus } = useBLEConnection();
   const toggleReminder = useCallback((key: keyof typeof reminders) => {
     setReminders((prev) => ({ ...prev, [key]: !prev[key] }));
   }, []);
@@ -112,6 +115,21 @@ const Schedule = ({ item, onAddRoutine }: ScheduleProps) => {
   );
   const [times, setTimes] = React.useState<Date[]>(() => parseScheduleTimes(item?.timeOfDay));
   const [activePickerIndex, setActivePickerIndex] = React.useState<number | null>(null);
+
+  // The device's F2 slots have no day-of-month concept, so a monthly
+  // schedule can never be represented on it (same constraint as the
+  // dedicated On-Device Reminders screen) — and obviously nothing can be
+  // pushed over Bluetooth without a live connection.
+  const isDeviceConnected = connectionStatus === "connected";
+  const canSaveToDevice = isDeviceConnected && activeFrequency !== "monthly";
+  const [saveToDevice, setSaveToDevice] = React.useState(false);
+
+  // Don't leave a stale "on" toggle silently ignored — if the user had it on
+  // and then switched to Monthly (or the device disconnected), turn it back
+  // off so the toggle's own state always matches what will actually happen.
+  React.useEffect(() => {
+    if (!canSaveToDevice) setSaveToDevice(false);
+  }, [canSaveToDevice]);
 
   const getTimeOfDayInfo = useCallback(
     (time: Date) => {
@@ -171,7 +189,14 @@ const Schedule = ({ item, onAddRoutine }: ScheduleProps) => {
           ? String(selectedMonthDay)
           : undefined;
     const scheduleTime = timeKeys.join(", ");
-    onAddRoutine?.(activeFrequency, scheduleTime, selectedDay, selectedMonthDay, reminders);
+    onAddRoutine?.(
+      activeFrequency,
+      scheduleTime,
+      selectedDay,
+      selectedMonthDay,
+      reminders,
+      canSaveToDevice && saveToDevice,
+    );
   }, [
     activeFrequency,
     times,
@@ -180,6 +205,8 @@ const Schedule = ({ item, onAddRoutine }: ScheduleProps) => {
     onAddRoutine,
     reminders,
     warnDuplicateTime,
+    canSaveToDevice,
+    saveToDevice,
   ]);
 
   return (
@@ -341,8 +368,60 @@ const Schedule = ({ item, onAddRoutine }: ScheduleProps) => {
                 );
               })}
             </ScrollView>
+            <View style={themedStyles.monthlyNote}>
+              <Ionicons
+                name="information-circle-outline"
+                size={moderateScale(16)}
+                color={theme.colors.text.secondary}
+              />
+              <Text style={themedStyles.monthlyNoteText}>
+                {t(LocalizedStrings.schedule.routine.monthlyDeviceNote)}
+              </Text>
+            </View>
           </View>
         )}
+
+        <TouchableOpacity
+          style={themedStyles.deviceSyncRow}
+          activeOpacity={canSaveToDevice ? 0.85 : 1}
+          disabled={!canSaveToDevice}
+          onPress={() => setSaveToDevice((prev) => !prev)}
+          accessibilityRole="switch"
+          accessibilityState={{ checked: saveToDevice, disabled: !canSaveToDevice }}
+        >
+          <View style={themedStyles.deviceSyncLabelBlock}>
+            <ThemeText
+              variant="manrope.body1Bold"
+              style={[themedStyles.deviceSyncLabel, !canSaveToDevice && themedStyles.dimmedText]}
+            >
+              {t(LocalizedStrings.schedule.routine.saveToDevice)}
+            </ThemeText>
+            {/* The monthly case already has its own note above (monthlyNote) —
+                this one only needs to cover "eligible frequency, just not
+                connected right now". */}
+            {!isDeviceConnected && activeFrequency !== "monthly" && (
+              <ThemeText variant="manrope.caption" style={themedStyles.deviceSyncNote}>
+                {t(LocalizedStrings.schedule.routine.saveToDeviceNotConnected)}
+              </ThemeText>
+            )}
+          </View>
+          <View
+            style={[
+              themedStyles.reminderToggle,
+              saveToDevice && canSaveToDevice && themedStyles.reminderToggleActive,
+            ]}
+          >
+            {saveToDevice && canSaveToDevice && (
+              <Ionicons
+                name="checkmark"
+                size={moderateScale(18)}
+                color={theme.colors.text.primary}
+                style={themedStyles.reminderToggleIcon}
+              />
+            )}
+          </View>
+        </TouchableOpacity>
+
         <ThemeText variant="manrope.body1Bold" style={themedStyles.modalSectionLabel}>
           {t(LocalizedStrings.schedule.routine.reminders.title)}
         </ThemeText>
@@ -505,6 +584,9 @@ const createStyles = (theme: Theme) =>
       borderWidth: scale(1),
       borderColor: "rgba(0,0,0,0.08)",
     },
+    // Pre-existing gap: referenced by both this toggle and the original
+    // push/led/sound row below, but was never actually defined.
+    reminderToggleIcon: {},
     reminderToggleActive: {
       backgroundColor: theme.colors.primary.main,
       borderColor: theme.colors.primary.main,
@@ -520,6 +602,46 @@ const createStyles = (theme: Theme) =>
     },
     dateRowWrapper: {
       marginBottom: theme.spacing.lg,
+    },
+    monthlyNote: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      gap: theme.spacing.xs,
+      marginTop: theme.spacing.smd,
+    },
+    monthlyNoteText: {
+      flex: 1,
+      color: theme.colors.text.secondary,
+      fontFamily: fontFamily.manrope.regular,
+      fontSize: moderateScale(12),
+    },
+    deviceSyncRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: theme.spacing.smd,
+      paddingVertical: theme.spacing.smd,
+      marginBottom: theme.spacing.mlg,
+      borderRadius: theme.spacing.smd,
+      borderWidth: scale(1),
+      borderColor: "rgba(0,0,0,0.08)",
+      paddingHorizontal: theme.spacing.md,
+      backgroundColor: theme.colors.background.default,
+    },
+    deviceSyncLabelBlock: {
+      flex: 1,
+      gap: verticalScale(2),
+    },
+    deviceSyncLabel: {
+      color: theme.colors.text.primary,
+    },
+    deviceSyncNote: {
+      color: theme.colors.text.secondary,
+      fontFamily: fontFamily.manrope.regular,
+      fontSize: moderateScale(11),
+    },
+    dimmedText: {
+      opacity: 0.5,
     },
     dateRow: {
       paddingRight: theme.spacing.md,
