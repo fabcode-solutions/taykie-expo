@@ -103,7 +103,17 @@ const BlurModal: React.FC<BlurModalProps> = memo(
                 </TouchableOpacity>
               </View>
             )}
-            {children}
+            {/* The card itself has a maxHeight — content taller than that
+                needs its own scroll, separate from the outer ScrollView
+                (which only exists for keyboard avoidance). Skipped when the
+                child owns its own (virtualized) scrolling. */}
+            {disableInnerScroll ? (
+              children
+            ) : (
+              <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+                {children}
+              </ScrollView>
+            )}
           </View>
         </TouchableWithoutFeedback>
       </View>
@@ -121,7 +131,7 @@ const BlurModal: React.FC<BlurModalProps> = memo(
         <BlurView intensity={intensity} tint={tint} style={styles.blurContainer}>
           <TouchableWithoutFeedback onPress={onRequestClose}>
             <KeyboardAvoidingView
-              behavior={Platform.OS === "ios" ? "padding" : undefined}
+              behavior={Platform.OS === "ios" ? "padding" : "height"}
               style={{ width: "100%" }}
             >
               {disableInnerScroll ? (

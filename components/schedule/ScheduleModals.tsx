@@ -20,6 +20,8 @@ import { AlertPresets } from "@/utils/alert";
 import { useAlert } from "@/provider/AlertProvider";
 import { useBLEStore, scheduleTimeKey } from "@/stores/bleStore";
 import { SCHEDULE_SLOT_COUNT } from "@/services/ble/TaykieProtocol";
+import { searchSupplements } from "@/services/openFoodFacts.service";
+import { createSupplementEvent } from "@/hooks/queries/supplements";
 
 const ScheduleModals = ({
   visible = false,
@@ -44,6 +46,32 @@ const ScheduleModals = ({
   useEffect(() => {
     setSearchVisible(visible);
   }, [visible]);
+
+  // Layer 1 (live Open Food Facts search) + reuse of the user's own
+  // previously-added products, merged into one result list. Layer 2 (a
+  // seed-list fallback) has no real data yet — the 600-item file is
+  // supposed to come from James — so it's not wired in here. Layer 3 (the
+  // "Add '[search text]' as a custom supplement" fallback) doesn't need
+  // anything here — SearchModal already shows it whenever this resolves to
+  // an empty list.
+  const handleSearch = useCallback(
+    async (query: string): Promise<SearchItem[]> => {
+      const lower = query.toLowerCase();
+      const localMatches: SearchItem[] = products
+        .filter((p) => p.name.toLowerCase().includes(lower))
+        .map((p) => ({ ...p, source: "local" as const }));
+
+      let apiMatches: SearchItem[] = [];
+      try {
+        apiMatches = await searchSupplements(query);
+      } catch (error) {
+        console.error("Open Food Facts search failed:", error);
+      }
+
+      return [...localMatches, ...apiMatches];
+    },
+    [products],
+  );
 
   const handleSelect = (item: SearchItem | null) => {
     if (item) {
@@ -196,7 +224,13 @@ const ScheduleModals = ({
       }
 
       try {
-        if (selectedItem === null) {
+        // A custom-created item (selectedItem === null) or an OFF search
+        // result (source: "api") never has a row in our own products table
+        // yet — its id is either nothing or an OFF barcode — so both need a
+        // product created before they can be referenced as a scheduleId FK.
+        // An item picked from the user's own product list already has one.
+        const needsNewProduct = selectedItem === null || medication.source === "api";
+        if (needsNewProduct) {
           const { name, type, description } = medication;
 
           const request: ProductRequest = {
@@ -218,6 +252,21 @@ const ScheduleModals = ({
           setShowSuccess(true);
           setTimeout(() => setShowSuccess(false), 3000);
         }, 300);
+
+        // Mandatory usage-capture event (Supplement Search brief, Section
+        // 5) — records what the user actually added and where it came
+        // from. Never blocks or rolls back the schedule save on failure.
+        createSupplementEvent({
+          action: "added",
+          productName: medication.name,
+          brand: medication.brand,
+          category: medication.category,
+          doseQuantity: medication.dosage,
+          source: medication.source === "api" ? "api" : "user_created",
+          offId: medication.offId,
+        }).catch((captureError) => {
+          console.error("Failed to record supplement usage event:", captureError);
+        });
 
         // "Save to Taykie device" — the schedule itself is already saved at
         // this point regardless of what happens below, so a sync failure
@@ -248,6 +297,7 @@ const ScheduleModals = ({
         <SearchModal
           items={products}
           onSelect={handleSelect}
+          onSearch={handleSearch}
           placeholder={`${t(LocalizedStrings.schedule.placeHolders.search)}...`}
         />
       </BlurModal>

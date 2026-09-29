@@ -141,7 +141,7 @@ const AddProduct: React.FC<AddProductProps> = ({
     <View style={themedStyles.container}>
       {/* Product Name Header (Optional) */}
       <ThemeText variant="gs.h2" style={themedStyles.productName}>
-        {item?.productName}
+        {item?.name}
       </ThemeText>
 
       {/* Counter Fields Row */}

@@ -17,15 +17,7 @@ import { moderateScale, scale, verticalScale } from "@/utils/scale";
 import { LocalizedStrings } from "@/i18n/LocalizedStrings";
 import EmptyView from "../ui/empty-view";
 import { Button } from "../ui/button";
-
-interface SearchItem {
-  id: string;
-  name: string;
-  type?: string;
-  description?: string;
-  strength?: string | null;
-  dosage?: string | null;
-}
+import { SearchItem } from "@/types/search.types";
 
 interface SearchModalProps {
   onSelect?: (item: SearchItem | null) => void;

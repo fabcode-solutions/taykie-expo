@@ -105,4 +105,8 @@ export const endpoints = {
     pair_device: "/device/pair",
     sync_history: "history/sync",
   },
+
+  supplements: {
+    events: "/supplements/events",
+  },
 };
