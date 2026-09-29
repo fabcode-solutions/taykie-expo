@@ -93,7 +93,10 @@ export default function RenameDeviceScreen() {
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.colors.background.default }]}>
-      <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: verticalScale(80) }}>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={{ paddingBottom: verticalScale(80) }}
+      >
         <TouchableOpacity onPress={handleBack} style={styles.backButton} activeOpacity={0.7}>
           <View style={styles.backButtonInner}>
             <IconBackArrow />
@@ -129,7 +132,6 @@ export default function RenameDeviceScreen() {
                 placeholder="Device name"
                 style={styles.deviceNameInput}
                 placeholderTextColor={theme.colors.text.secondary}
-                maxLength={255}
                 autoCapitalize="words"
               />
             </View>
@@ -150,15 +152,28 @@ export default function RenameDeviceScreen() {
           </ThemeText>
         </View>
 
-        <Button
-          title="Save Name"
-          onPress={handleSave}
-          loading={isSaving}
-          disabled={!isDirty}
-          style={styles.saveBtn}
-          fullWidth
-        />
+        <View style={styles.infoNote}>
+          <Ionicons
+            name="information-circle-outline"
+            size={moderateScale(16)}
+            color={theme.colors.text.secondary}
+            style={styles.infoNoteIcon}
+          />
+          <ThemeText variant="manrope.caption" style={styles.infoNoteText}>
+            In-app only — this doesn&apos;t change anything on the physical device.
+          </ThemeText>
+        </View>
 
+        <View>
+          <Button
+            title="Save Name"
+            onPress={handleSave}
+            loading={isSaving}
+            disabled={!isDirty}
+            style={styles.saveBtn}
+            fullWidth
+          />
+        </View>
         <Button
           title={isConnected ? "Disconnect" : "Connect"}
           onPress={handleToggleConnection}
@@ -263,6 +278,19 @@ const createStyles = (theme: Theme) =>
     lastSynced: {
       color: theme.colors.text.secondary,
       marginTop: verticalScale(12),
+    },
+    infoNote: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      gap: scale(6),
+      marginBottom: verticalScale(20),
+    },
+    infoNoteIcon: {
+      marginTop: verticalScale(1),
+    },
+    infoNoteText: {
+      flex: 1,
+      color: theme.colors.text.secondary,
     },
     saveBtn: {
       height: verticalScale(50),
