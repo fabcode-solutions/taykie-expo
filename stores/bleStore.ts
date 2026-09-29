@@ -264,37 +264,39 @@ async function runSoundPreview(
 // (see bleService.onDeviceDisconnected below) so a second unexpected drop —
 // or a manual reconnect — cancels any earlier attempt still in flight.
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-// Backoff between auto-reconnect attempts after an unexpected drop (e.g. a
+// Interval between auto-reconnect attempts after an unexpected drop (e.g. a
 // lid-open triggering a brief power glitch on the BLE radio — see the F6/E0
-// disconnect investigation). Short and few: this is for a brief physical
-// glitch self-healing, not for chasing a device that's genuinely out of
-// range or powered off.
-const RECONNECT_DELAYS_MS = [1000, 3000, 6000];
+// disconnect investigation). Per explicit request, this now retries
+// indefinitely rather than giving up after a few tries — keeps checking
+// every ~7s (within the requested 5-10s range) until it reconnects or the
+// user disconnects/forgets the device intentionally (that path never calls
+// this at all — see onDeviceDisconnected's shouldReconnect check below).
+const RECONNECT_INTERVAL_MS = 7000;
 
-function attemptReconnect(deviceId: string, attempt: number) {
+// How often the periodic status+history poll runs while connected. Lowered
+// from 15s to 2s per explicit request, to cut lid-open detection latency —
+// the isPolling guard below still prevents a cycle from overlapping the
+// previous one if a round trip ever takes longer than this. Trade-off worth
+// knowing: this multiplies BLE traffic roughly 7x (every command re-verifies
+// the password first — see ensurePasswordVerified — so each cycle is E0+F3
+// then E0+F6, not just F3+F6), which means more radio/battery use on both
+// the phone and the device for faster detection.
+const DEVICE_POLL_INTERVAL_MS = 2000;
+
+function attemptReconnect(deviceId: string) {
   reconnectTimer = setTimeout(async () => {
     try {
       await useBLEStore.getState().connectToDevice(deviceId);
       reconnectTimer = null;
     } catch (error) {
-      const isLastAttempt = attempt + 1 >= RECONNECT_DELAYS_MS.length;
-      console.warn(
-        `Auto-reconnect attempt ${attempt + 1}/${RECONNECT_DELAYS_MS.length} failed:`,
-        error,
-      );
-      if (isLastAttempt) {
-        reconnectTimer = null;
-        useBLEStore.setState({ connectedDevice: null, connectionStatus: "disconnected" });
-        stopBleForegroundService();
-        return;
-      }
+      console.warn(`Auto-reconnect failed, retrying in ${RECONNECT_INTERVAL_MS}ms:`, error);
       // connectToDevice's own failure path already set connectionStatus
       // back to "disconnected" — restore "connecting" so the UI doesn't
       // flicker between attempts.
       useBLEStore.setState({ connectionStatus: "connecting" });
-      attemptReconnect(deviceId, attempt + 1);
+      attemptReconnect(deviceId);
     }
-  }, RECONNECT_DELAYS_MS[attempt]);
+  }, RECONNECT_INTERVAL_MS);
 }
 
 import {
@@ -564,8 +566,8 @@ export const useBLEStore = create<BLEState & BLEAction>()(
             // endpoint's validation ("deviceId must be a valid UUID"). Not yet
             // set on a brand-new device's very first status reply (which can
             // arrive before pairDevice() resolves) — skipping in that case is
-            // correct, not a bug: every later poll cycle (every 15s) will have
-            // it by then.
+            // correct, not a bug: every later poll cycle (every
+            // DEVICE_POLL_INTERVAL_MS) will have it by then.
             const currentDeviceId = get().pairedDeviceId;
             if (currentDeviceId) {
               // Use the resolved (non-0xFF) reading so the backend never
@@ -738,8 +740,9 @@ export const useBLEStore = create<BLEState & BLEAction>()(
 
             set({
               // Keep the device id/name around while we're about to retry so
-              // the UI can still say which device it's reconnecting to; a
-              // failed final attempt (or an intentional disconnect) clears it.
+              // the UI can still say which device it's reconnecting to —
+              // retrying never gives up on its own now, so this only clears
+              // on an intentional disconnect/forget.
               connectedDevice: shouldReconnect ? lostDevice : null,
               connectionStatus: shouldReconnect ? "connecting" : "disconnected",
               deviceData: null,
@@ -760,7 +763,7 @@ export const useBLEStore = create<BLEState & BLEAction>()(
             });
 
             if (shouldReconnect) {
-              attemptReconnect(lostDevice.id, 0);
+              attemptReconnect(lostDevice.id);
             } else {
               // Intentional disconnect, or an unexpected drop with no device to
               // retry — nothing more will attempt to reconnect, so the process
@@ -885,8 +888,8 @@ export const useBLEStore = create<BLEState & BLEAction>()(
             // pollStatusAndHistory now shares triggerSound's withCommandLock, so
             // starting it here would just queue behind the lock rather than
             // interleave, but a poll already ahead in that queue still delays a
-            // user's tap by a full ~multi-second round trip. Deferring one 15s
-            // cycle is free; a laggy tone switch is not.
+            // user's tap by a full ~multi-second round trip. Deferring one
+            // poll cycle is free; a laggy tone switch is not.
             if (activePreviewOn) return;
             isPolling = true;
             try {
@@ -907,7 +910,7 @@ export const useBLEStore = create<BLEState & BLEAction>()(
               await bleService.pollStatusAndHistory();
 
               // Cheap early-return when nothing changed (see
-              // resyncTimezoneIfChanged) — piggybacking on this existing 15s
+              // resyncTimezoneIfChanged) — piggybacking on this existing poll
               // cycle is what catches a DST transition passing at 2am while
               // the app stays foregrounded the whole time, since that never
               // fires an AppState "active" event on its own.
@@ -917,7 +920,7 @@ export const useBLEStore = create<BLEState & BLEAction>()(
             } finally {
               isPolling = false;
             }
-          }, 15000);
+          }, DEVICE_POLL_INTERVAL_MS);
 
           // Backend pairing is best-effort: the BLE link is already live at this
           // point, so a failure here (network, backend) must not roll back the
