@@ -18,6 +18,7 @@ import Tabs from "@/components/shared/tabs/Tabs";
 import AppHeader from "@/components/AppHeader";
 import ScheduleModals from "@/components/schedule/ScheduleModals";
 import TaskItem from "@/components/schedule/TaskItem";
+import { TaskListSkeleton } from "@/components/schedule/TaskItemSkeleton";
 import { useTranslation } from "react-i18next";
 import InfoModal from "@/components/InfoModal";
 import MedicineTaken from "@/components/schedule/MedicineTaken";
@@ -63,7 +64,7 @@ export default function HomeScreen() {
   const [logVisible, setLogVisible] = useState(false);
   const [activeSegment, setActiveSegment] = React.useState<SegmentKey>("morning");
   const themedStyles = React.useMemo(() => createStyles(theme), [theme]);
-  const { fetchPublicProducts, isLoading: loadingProducts } = useProductStore();
+  const { fetchPublicProducts } = useProductStore();
   const {
     fetchTodaySchedules,
     fetchUpcomingReminder,
@@ -98,7 +99,7 @@ export default function HomeScreen() {
 
   useEffect(() => {
     fetchTodaySchedules(activeSegment);
-  }, [activeSegment]);
+  }, [activeSegment, fetchTodaySchedules]);
   const filterSchedules = useMemo(() => {
     if (!todaySchedules?.length) return [];
 
@@ -131,6 +132,12 @@ export default function HomeScreen() {
     setTask(null);
   }, []);
 
+  // Full refresh, incl. today's schedules — used after editing a schedule
+  // (onEditComplete below), where the edit may move it in/out of the active
+  // segment. NOT used for the mount effect further down: that would fetch
+  // today's schedules a second time on top of the effect right above this
+  // one, which already covers both the initial mount and every later
+  // segment-tab switch on its own.
   const loadData = useCallback(async () => {
     await Promise.allSettled([
       fetchUpcomingReminder(),
@@ -146,18 +153,32 @@ export default function HomeScreen() {
     activeSegment,
   ]);
 
-  const initialDataFetch = useCallback(async () => {
-    try {
-      await fetchNotifications(true);
-      await loadData();
-    } catch (error) {
-      alert.show(AlertPresets.error(t(LocalizedStrings.common.error), error.message));
-    }
-  }, [fetchNotifications, loadData, t]);
-
+  // Segment-independent: the notification badge, the single upcoming-reminder
+  // banner, the product catalog, and the streak card — none of these depend
+  // on which of Morning/Afternoon/Evening/Night is selected, so this must
+  // stay separate from `loadData` above (which does need activeSegment, for
+  // the after-edit refresh). Sharing one combined effect keyed on
+  // activeSegment used to mean every segment-tab tap re-fetched all of this
+  // again on top of today's schedules — four extra network calls per tap.
   useEffect(() => {
-    initialDataFetch();
-  }, [initialDataFetch]);
+    let cancelled = false;
+    (async () => {
+      try {
+        await fetchNotifications(true);
+        await Promise.allSettled([fetchUpcomingReminder(), fetchPublicProducts(), fetchUserStreak()]);
+      } catch (error: any) {
+        if (!cancelled) {
+          alert.show(AlertPresets.error(t(LocalizedStrings.common.error), error?.message));
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // Mount-only, deliberately: see the comment above. activeSegment changes
+    // are handled entirely by the fetchTodaySchedules effect further up.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleMarkMedicineAsTaken = useCallback(async () => {
     try {
@@ -199,12 +220,7 @@ export default function HomeScreen() {
   const hasStreak = Boolean(userStreak && (userStreak?.currentStreak ?? 0) > 0);
 
   return (
-    <SafeAreaScreen
-      withBackground={false}
-      style={themedStyles.screen}
-      edges={["top"]}
-      showLoader={isLoading || loadingProducts}
-    >
+    <SafeAreaScreen withBackground={false} style={themedStyles.screen} edges={["top"]}>
       <ThemeStatusBar style={theme.mode === "dark" ? "light" : "dark"} />
       {/* Reverted from FlatList back to ScrollView + .map(): this screen's
           list is short (a handful of daily tasks), and FlatList here was
@@ -253,19 +269,29 @@ export default function HomeScreen() {
           </View>
           <Tabs onSelect={(e) => setActiveSegment(e as SegmentKey)} segments={segments} />
 
-          {todayTaskItems.length
-            ? todayTaskItems.map(({ item, key }) => (
-                <TaskItem
-                  key={key}
-                  id={item.scheduleId ?? item.id ?? ""}
-                  status={item.status ?? "Upcoming"}
-                  statusLabel={statusLabels[item.status ?? "Upcoming"]}
-                  time={item.time ?? item.time24 ?? ""}
-                  title={item.name ?? ""}
-                  onPress={() => handleTask(item)}
-                />
-              ))
-            : renderEmptyComponent()}
+          {isLoading && todayTaskItems.length === 0 ? (
+            // Cold load only (first mount, or a segment switch that left no
+            // cached tasks) — a skeleton row set in place of the previous
+            // full-screen loader, which used to hide the header, the Today
+            // card and the segment tabs behind a backdrop on every load and
+            // on every scheduleStore action anywhere in the app (mark taken,
+            // snooze, edit, delete — all shared this same isLoading flag).
+            <TaskListSkeleton />
+          ) : todayTaskItems.length ? (
+            todayTaskItems.map(({ item, key }) => (
+              <TaskItem
+                key={key}
+                id={item.scheduleId ?? item.id ?? ""}
+                status={item.status ?? "Upcoming"}
+                statusLabel={statusLabels[item.status ?? "Upcoming"]}
+                time={item.time ?? item.time24 ?? ""}
+                title={item.name ?? ""}
+                onPress={() => handleTask(item)}
+              />
+            ))
+          ) : (
+            renderEmptyComponent()
+          )}
 
           {/* Stable wrapper: always mounted so the card's child list doesn't
               gain/lose a node when the reminder appears or disappears.

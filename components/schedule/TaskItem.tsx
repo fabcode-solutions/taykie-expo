@@ -22,8 +22,10 @@ interface TaskItemProps {
 
 /**
  * Renders a single task row with title, time, and status icon.
+ * Memoized — it's rendered in a list on the Home screen, re-created on every
+ * tab/segment switch; see index.tsx for the matching stable onPress.
  */
-const TaskItem: React.FC<TaskItemProps> = ({
+const TaskItem: React.FC<TaskItemProps> = React.memo(({
   title,
   time,
   status,
@@ -103,7 +105,8 @@ const TaskItem: React.FC<TaskItemProps> = ({
       </View>
     </Pressable>
   );
-};
+});
+TaskItem.displayName = "TaskItem";
 
 export default TaskItem;
 
