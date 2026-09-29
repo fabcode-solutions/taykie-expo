@@ -618,12 +618,24 @@ class BLEService {
       }
 
       case CmdType.QueryHistory: {
+        // One unmistakable line per F6 reply, before any parsing/CRC
+        // filtering — this is what actually answers "did the device report
+        // anything at all" (as opposed to the per-record logs below, which
+        // only fire once something has already survived parsing). A payload
+        // shorter than 8 bytes means the device's history buffer was empty
+        // at the moment it was asked, full stop — nothing in the app can
+        // conjure a record out of that.
+        console.log(
+          `📜 F6 QueryHistory reply: ${parsed.data.length} data byte(s) -> ${Math.floor(parsed.data.length / 8)} candidate record(s). raw:`,
+          Buffer.from(parsed.data).toString("hex") || "(empty)",
+        );
+
         const records = TaykieProtocol.parseHistoryRecords(parsed.data);
         // Investigating whether the undocumented "reserved" byte is
         // actually an open/closed flag — log it per record so the pattern
         // (if any) is visible without guessing.
         console.log(
-          "History records (reserved byte check):",
+          `📜 F6 parsed ${records.length} record(s) after CRC check (reserved byte check):`,
           records.map((r) => ({ timestamp: r.timestamp, reserved: r.reserved })),
         );
         if (this.onHistoryReceived) this.onHistoryReceived(records);
