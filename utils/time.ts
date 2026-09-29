@@ -43,7 +43,7 @@ export const formatFullDate = (dateString: string): string => {
   });
 };
 
-export const formatTime = (date: Date, hour12: boolean = false): string => {
+export const formatTime = (date: Date, hour12: boolean = true): string => {
   return date.toLocaleTimeString("en-US", {
     hour: "numeric",
     minute: "2-digit",

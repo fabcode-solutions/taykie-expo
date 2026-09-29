@@ -342,14 +342,13 @@ export const useOnboardingStore = create<State & Actions>()(
         try {
           const response = await getOnboardingStatus();
           const data: OnboardingDataResponse = response.data;
-          // Save API response into store
-
-          if (data.isOnboardingComplete) {
-            set({
-              ...mapResponseToState(data),
-            });
-          }
-          set({ isLoading: false });
+          // Save API response into store, including a false completion
+          // status — otherwise a stale `true` persisted from a previous
+          // account on this device would never get cleared for a fresh one.
+          set({
+            ...mapResponseToState(data),
+            isLoading: false,
+          });
         } catch (error) {
           const message = getErrorMessage(error, "Fetch Onboarding failed");
           set({ isLoading: false, error: message });

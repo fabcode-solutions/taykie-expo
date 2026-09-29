@@ -30,6 +30,7 @@ import {
   useNotificationStore,
 } from "@/stores/notificationStore";
 import { InAppBanner } from "@/components/inAppBanner";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { LidOpenPrompt } from "@/components/LidOpenPrompt";
 import { setupNotificationChannels } from "@/hooks/usePushNotifications";
 import {
@@ -271,11 +272,17 @@ function RootLayoutNav() {
               <ThemeProvider>
                 <AlertProvider>
                   <ThemeStatusBar />
-                  <Stack {...STACK_CONFIG}>
-                    {STACK_CONFIG.screens.map((screen) => (
-                      <Stack.Screen key={screen.name} name={screen.name} options={screen.options} />
-                    ))}
-                  </Stack>
+                  <ErrorBoundary name="RootStack">
+                    <Stack {...STACK_CONFIG}>
+                      {STACK_CONFIG.screens.map((screen) => (
+                        <Stack.Screen
+                          key={screen.name}
+                          name={screen.name}
+                          options={screen.options}
+                        />
+                      ))}
+                    </Stack>
+                  </ErrorBoundary>
                   <InAppBanner />
                   <LidOpenPrompt />
                 </AlertProvider>

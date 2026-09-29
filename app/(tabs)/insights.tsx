@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { RefreshControl, ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
 import { SafeAreaScreen, ThemeStatusBar, ThemeText, ThemeView } from "@/components";
 import { fontFamily, useTheme } from "@/theme";
 import type { Theme } from "@/theme";
@@ -116,15 +116,6 @@ export default function InsightsScreen() {
     return Math.round(avg);
   }, [adherencePoints]);
 
-  const adherenceLevel = useMemo(() => {
-    if (overallAdherenceRate >= 80) return "high";
-    if (overallAdherenceRate >= 50) return "medium";
-    return "low";
-  }, [overallAdherenceRate]);
-
-  const adherenceLineColor =
-    adherenceLevel === "high" ? "#19A98C" : adherenceLevel === "medium" ? "#FFB020" : "#E25B45";
-
   // ─── Fetch logic ─────────────────────────────────────────────────────────────
 
   const fetchInsights = useCallback(async () => {
@@ -165,6 +156,20 @@ export default function InsightsScreen() {
     setStartDate(start || null);
     setEndDate(end || null);
   }, []);
+
+  // Human-readable label for whatever period the currently displayed data covers —
+  // an explicit custom range/date takes priority over the day/week/month segment.
+  const periodLabel = useMemo(() => {
+    if (startDate && endDate && startDate !== endDate) {
+      return t(LocalizedStrings.insights.viewing.range, { start: startDate, end: endDate });
+    }
+    if (startDate) {
+      return t(LocalizedStrings.insights.viewing.date, { date: startDate });
+    }
+    if (segment === "day") return t(LocalizedStrings.insights.viewing.today);
+    if (segment === "week") return t(LocalizedStrings.insights.viewing.thisWeek);
+    return t(LocalizedStrings.insights.viewing.thisMonth);
+  }, [startDate, endDate, segment, t]);
 
   // ─── Export ────────────────────────────────────────────────────────────────
 
@@ -212,7 +217,7 @@ export default function InsightsScreen() {
         ),
       );
     } catch (err: any) {
-      alert.show(AlertPresets.error(t(LocalizedStrings.common.error), error.message));
+      alert.show(AlertPresets.error(t(LocalizedStrings.common.error), err.message));
     }
   };
 
@@ -264,7 +269,7 @@ export default function InsightsScreen() {
         ),
       );
     } catch (err: any) {
-      alert.show(AlertPresets.error(t(LocalizedStrings.common.error), error.message));
+      alert.show(AlertPresets.error(t(LocalizedStrings.common.error), err.message));
     }
   };
 
@@ -285,18 +290,16 @@ export default function InsightsScreen() {
       >
         <AppHeader />
 
-        {/* Calendar date picker trigger */}
+        {/* Calendar date picker trigger — shows which period the data below covers */}
         <View style={themedStyles.calanderButtonStyle}>
           <TouchableOpacity
             style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
             onPress={handleOpen}
           >
+            <ThemeText variant="manrope.caption" style={themedStyles.periodLabel}>
+              {periodLabel}
+            </ThemeText>
             <IconCalander />
-            {(startDate ?? endDate) && (
-              <Text style={{ color: theme.colors.text.secondary, fontSize: moderateScale(12) }}>
-                {startDate} {endDate && `- ${endDate}`}
-              </Text>
-            )}
           </TouchableOpacity>
         </View>
 
@@ -449,7 +452,7 @@ export default function InsightsScreen() {
               </View>
             </View>
 
-            <View style={themedStyles.lineChart}>
+            <View style={themedStyles.adherenceChart}>
               <View style={themedStyles.lineChartAxis}>
                 <ThemeText variant="manrope.caption" style={themedStyles.axisLabel}>
                   100%
@@ -461,27 +464,39 @@ export default function InsightsScreen() {
                   0%
                 </ThemeText>
               </View>
-              <View style={themedStyles.lineChartPlot}>
-                <View
-                  style={[
-                    themedStyles.line,
-                    { backgroundColor: adherenceLevel === "high" ? "#19A98C" : "#E0E0E0" },
-                  ]}
-                />
-                <View
-                  style={[
-                    themedStyles.line,
-                    { backgroundColor: adherenceLevel === "medium" ? "#FFB020" : "#E0E0E0" },
-                  ]}
-                />
-                <View
-                  style={[
-                    themedStyles.line,
-                    { backgroundColor: adherenceLevel === "low" ? "#E25B45" : "#E0E0E0" },
-                  ]}
-                />
-              </View>
+              {adherencePoints.length > 0 ? (
+                <View style={themedStyles.adherenceBars}>
+                  {adherencePoints.map((point, index) => {
+                    const rate = point.takenRate ?? 0;
+                    const barColor = rate >= 80 ? "#19A98C" : rate >= 50 ? "#FFB020" : "#E25B45";
+                    return (
+                      <View key={point.label + index} style={themedStyles.adherenceBarCol}>
+                        <View style={themedStyles.adherenceBarTrack}>
+                          <View
+                            style={[
+                              themedStyles.adherenceBarFill,
+                              { height: `${Math.max(rate, 4)}%`, backgroundColor: barColor },
+                            ]}
+                          />
+                        </View>
+                        <ThemeText variant="manrope.caption" style={themedStyles.adherenceBarLabel}>
+                          {point.label}
+                        </ThemeText>
+                      </View>
+                    );
+                  })}
+                </View>
+              ) : (
+                <View style={themedStyles.emptyChart}>
+                  <ThemeText variant="manrope.caption" style={themedStyles.axisLabel}>
+                    {t(LocalizedStrings.insights.no_data)}
+                  </ThemeText>
+                </View>
+              )}
             </View>
+            <ThemeText variant="manrope.caption" style={themedStyles.adherenceSummaryLabel}>
+              {overallAdherenceRate}% {t(LocalizedStrings.insights.adherenceOverTime)}
+            </ThemeText>
           </ThemeView>
         </View>
 
@@ -576,6 +591,10 @@ const createStyles = (theme: Theme) =>
     calanderButtonStyle: {
       justifyContent: "flex-end",
       flexDirection: "row",
+    },
+    periodLabel: {
+      color: theme.colors.text.secondary,
+      fontSize: moderateScale(12),
     },
     mostMissedLabel: {
       color: theme.colors.text.secondary,

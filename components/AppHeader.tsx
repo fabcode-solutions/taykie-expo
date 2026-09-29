@@ -1,5 +1,5 @@
 import React from "react";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { useTheme, type Theme } from "@/theme";
 import { ThemeText } from "@/components";
@@ -53,9 +53,13 @@ const AppHeader = ({ showGreeting = false }: { showGreeting?: boolean }) => {
           ) : null}
         </TouchableOpacity>
         <TouchableOpacity onPress={handleProfile} style={themedStyles.avatarWrapper}>
-          <ThemeText variant="manrope.body1Bold" style={themedStyles.avatarInitial} uppercase>
-            {avatarInitial}
-          </ThemeText>
+          {user?.avatarUrl ? (
+            <Image source={{ uri: user.avatarUrl }} style={themedStyles.avatarImage} />
+          ) : (
+            <ThemeText variant="manrope.body1Bold" style={themedStyles.avatarInitial} uppercase>
+              {avatarInitial}
+            </ThemeText>
+          )}
         </TouchableOpacity>
       </View>
     </View>
@@ -98,6 +102,11 @@ const createStyles = (theme: Theme) =>
       justifyContent: "center",
       alignItems: "center",
       elevation: 0,
+      overflow: "hidden",
+    },
+    avatarImage: {
+      width: "100%",
+      height: "100%",
     },
     avatarInitial: {
       color: theme.colors.text.primary,

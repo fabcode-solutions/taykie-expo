@@ -14,12 +14,9 @@ import { router } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { RefreshControl, FlatList, StyleSheet, TouchableOpacity, View } from "react-native";
 import { t } from "i18next";
-import Tabs from "@/components/shared/tabs/Tabs";
 import { LocalizedStrings } from "@/i18n/LocalizedStrings";
 import { AlertPresets } from "@/utils/alert";
 import { useAlert } from "@/provider/AlertProvider";
-import { CommunityFilter } from "@/types/posts.types";
-import { FILTERS } from "../(tabs)/community";
 
 const PostList = () => {
   const theme = useTheme();
@@ -43,31 +40,17 @@ const PostList = () => {
 
   const { sendNotification } = useNotificationStore();
 
-  const [activeFilter, setActiveFilter] = useState<CommunityFilter>("new");
-
-  const filters = useMemo(
-    () =>
-      FILTERS.map((item) => ({
-        key: item?.key,
-        label: t(`community.filters.${item?.key}`),
-      })),
-    [t],
-  );
-
   useEffect(() => {
     fetchPosts(true);
-  }, [activeFilter]);
+  }, []);
 
-  const fetchPosts = useCallback(
-    async (isRefresh: boolean) => {
-      try {
-        await fetchUserPosts(activeFilter, isRefresh);
-      } catch (error) {
-        alert.show(AlertPresets.error(t(LocalizedStrings.common.error), error.message));
-      }
-    },
-    [activeFilter],
-  );
+  const fetchPosts = useCallback(async (isRefresh: boolean) => {
+    try {
+      await fetchUserPosts("mine", isRefresh);
+    } catch (error) {
+      alert.show(AlertPresets.error(t(LocalizedStrings.common.error), error.message));
+    }
+  }, []);
 
   const handleLoadMore = useCallback(async () => {
     if (!isLoading && hasMore && !isFetchingMore && userPosts.length > 0) {
@@ -184,12 +167,6 @@ const PostList = () => {
       <ThemeText variant="manrope.h2" style={styles.header}>
         {t(LocalizedStrings.community.post.myPosts)}
       </ThemeText>
-
-      <Tabs
-        variant="no-bg"
-        onSelect={(e) => setActiveFilter(e as CommunityFilter)}
-        segments={filters}
-      />
 
       <FlatList
         data={userPosts}

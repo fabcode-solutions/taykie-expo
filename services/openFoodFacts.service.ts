@@ -5,6 +5,15 @@ import { SearchItem } from "@/types/search.types";
 // 1: live API search).
 const OFF_SEARCH_URL = "https://world.openfoodfacts.org/cgi/search.pl";
 const OFF_TIMEOUT_MS = 8000;
+// OFF throttles/503s requests with no identifying User-Agent — required by
+// their API usage guidelines, and also just makes 503s far less frequent.
+const OFF_USER_AGENT = "Taykie/1.0 (React Native; supplement search)";
+// 503s from OFF are usually a momentary blip, not a real outage — one retry
+// clears the overwhelming majority of them without the user noticing.
+const OFF_MAX_ATTEMPTS = 2;
+const OFF_RETRY_DELAY_MS = 500;
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 interface OFFProduct {
   code?: string;
@@ -36,40 +45,61 @@ export async function searchSupplements(query: string, limit = 20): Promise<Sear
     fields: "code,product_name,generic_name,brands,categories,quantity",
   });
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), OFF_TIMEOUT_MS);
+  const url = `${OFF_SEARCH_URL}?${params.toString()}`;
 
-  try {
-    const response = await fetch(`${OFF_SEARCH_URL}?${params.toString()}`, {
-      signal: controller.signal,
-    });
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= OFF_MAX_ATTEMPTS; attempt++) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), OFF_TIMEOUT_MS);
 
-    if (!response.ok) {
-      throw new Error(`Open Food Facts search failed with status ${response.status}`);
-    }
-
-    const data: OFFSearchResponse = await response.json();
-
-    return (data.products ?? [])
-      .filter((product) => product.code && (product.product_name || product.generic_name))
-      .map((product): SearchItem => {
-        const name = (product.product_name || product.generic_name)!.trim();
-        // OFF often lists several brands comma-separated — the first is the
-        // one shown on the pack front, which is what a user recognizes.
-        const brand = product.brands?.split(",")[0]?.trim();
-
-        return {
-          id: `off:${product.code}`,
-          name,
-          description: brand,
-          brand,
-          category: product.categories?.split(",")[0]?.trim(),
-          doseQuantity: product.quantity?.trim(),
-          source: "api",
-          offId: product.code,
-        };
+    try {
+      const response = await fetch(url, {
+        signal: controller.signal,
+        headers: { "User-Agent": OFF_USER_AGENT },
       });
-  } finally {
-    clearTimeout(timeout);
+
+      if (!response.ok) {
+        // 5xx is almost always transient on OFF's end — worth a retry.
+        // Anything else (4xx) won't improve by retrying.
+        if (response.status >= 500 && attempt < OFF_MAX_ATTEMPTS) {
+          lastError = new Error(`Open Food Facts search failed with status ${response.status}`);
+          await sleep(OFF_RETRY_DELAY_MS);
+          continue;
+        }
+        throw new Error(`Open Food Facts search failed with status ${response.status}`);
+      }
+
+      const data: OFFSearchResponse = await response.json();
+
+      return (data.products ?? [])
+        .filter((product) => product.code && (product.product_name || product.generic_name))
+        .map((product): SearchItem => {
+          const name = (product.product_name || product.generic_name)!.trim();
+          // OFF often lists several brands comma-separated — the first is
+          // the one shown on the pack front, which is what a user recognizes.
+          const brand = product.brands?.split(",")[0]?.trim();
+
+          return {
+            id: `off:${product.code}`,
+            name,
+            description: brand,
+            brand,
+            category: product.categories?.split(",")[0]?.trim(),
+            doseQuantity: product.quantity?.trim(),
+            source: "api",
+            offId: product.code,
+          };
+        });
+    } catch (error) {
+      lastError = error;
+      if (attempt < OFF_MAX_ATTEMPTS) {
+        await sleep(OFF_RETRY_DELAY_MS);
+        continue;
+      }
+    } finally {
+      clearTimeout(timeout);
+    }
   }
+
+  throw lastError;
 }

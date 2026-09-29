@@ -193,7 +193,11 @@ export default function DeviceScreen() {
     const date = new Date(isoTimestamp);
     if (Number.isNaN(date.getTime())) return "--";
     const isToday = date.toDateString() === new Date().toDateString();
-    const time = date.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+    const time = date.toLocaleTimeString(undefined, {
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    });
     return isToday ? `Today, ${time}` : `${date.toLocaleDateString()}, ${time}`;
   };
   const displayLastSync = lastSyncedAt ? formatSyncTime(lastSyncedAt) : "--";
@@ -285,6 +289,7 @@ export default function DeviceScreen() {
       day: "numeric",
       hour: "numeric",
       minute: "2-digit",
+      hour12: true,
     });
   };
 

@@ -130,7 +130,7 @@ export default function RefillReminder() {
           {t(LocalizedStrings.onboarding.supplements.refill_taykie.description)}
         </ThemeText>
       </View>
-      r{/* Day of week multi-select */}
+      {/* Day of week multi-select */}
       <ThemeText
         variant="manrope.body2Bold"
         style={[styles.sectionLabel, { color: theme.colors.text.primary }]}

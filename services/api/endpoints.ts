@@ -29,7 +29,7 @@ export const endpoints = {
     search: "/users/search",
     profile: "/users/profile",
     account: "/users/account",
-    insights: "/insights",
+    insights: "/users/insights",
     settings: "/users/settings",
     fcmToken: "/users/fcm-token",
     export: "/users/export",

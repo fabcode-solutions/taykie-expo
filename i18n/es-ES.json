@@ -75,6 +75,7 @@
     "warning": "Advertencia",
     "loading": "Cargando...",
     "error": "Error",
+    "retry": "Reintentar",
     "success": "Éxito",
     "logout": "Cerrar sesión",
     "submit": "Enviar",
@@ -588,6 +589,7 @@
       "selectTime": "Seleccionar hora",
       "addTime": "Añadir otra hora",
       "duplicateTime": "Esta hora ya se ha añadido a este horario. Elige una hora diferente.",
+      "monthlyDeviceNote": "Los horarios mensuales solo están disponibles en la app y no se sincronizarán con tu dispositivo Taykie.",
       "reminders": {
         "title": "Recordatorios",
         "push": "Push",

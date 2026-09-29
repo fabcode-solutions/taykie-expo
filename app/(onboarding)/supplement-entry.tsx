@@ -249,27 +249,32 @@ export default function SupplementEntry() {
             {slot.items.map((item, ii) => (
               <View key={ii} style={styles.itemRow}>
                 <View style={styles.itemFields}>
-                  <TextInput
+                  <TouchableOpacity
+                    activeOpacity={0.7}
                     onPress={() => {
                       setActiveIndex(si);
                       setSearchVisible(true);
                     }}
-                    editable={false}
-                    value={item.name}
-                    onChangeText={(val) => updateItem(si, ii, "name", val)}
-                    placeholder={t(LocalizedStrings.onboarding.supplements.name)}
-                    placeholderTextColor={theme.colors.text.hint}
-                    style={[
-                      styles.input,
-                      {
-                        backgroundColor: theme.colors.inputBackground,
-                        borderColor: theme.colors.border,
-                        color: theme.colors.text.primary,
-                      },
-                    ]}
-                    maxLength={60}
+                    accessibilityRole="button"
                     accessibilityLabel={`Supplement name for slot ${si + 1}, item ${ii + 1}`}
-                  />
+                  >
+                    <TextInput
+                      editable={false}
+                      pointerEvents="none"
+                      value={item.name}
+                      placeholder={t(LocalizedStrings.onboarding.supplements.name)}
+                      placeholderTextColor={theme.colors.text.hint}
+                      style={[
+                        styles.input,
+                        {
+                          backgroundColor: theme.colors.inputBackground,
+                          borderColor: theme.colors.border,
+                          color: theme.colors.text.primary,
+                        },
+                      ]}
+                      maxLength={60}
+                    />
+                  </TouchableOpacity>
 
                   <TextInput
                     value={item.dose}

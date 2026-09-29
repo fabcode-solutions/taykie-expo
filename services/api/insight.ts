@@ -9,7 +9,7 @@ export enum InsightPeriod {
 }
 
 export async function getUserInsights(period: InsightPeriod): Promise<any> {
-  return apiClient.get(`${endpoints.users.insights}?view=${period}`);
+  return apiClient.get(`${endpoints.users.insights}?period=${period}`);
 }
 
 export async function getDataToExport(): Promise<any> {

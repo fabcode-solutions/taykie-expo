@@ -82,6 +82,13 @@ type Actions = {
   submitPostReport: (postId: string, request: ReportRequest) => Promise<string>;
   fetchPostsByUserId: (userId: string, isRefresh?: boolean) => Promise<void>;
   searchInBookmarkedPosts: (searchText: string, isRefresh?: boolean) => Promise<void>;
+  // Patches the embedded user.avatarUrl snapshot on every already-loaded
+  // post/comment/reply authored by `userId` in local state. Called right
+  // after the current user updates their profile picture, so their own
+  // posts/comments reflect the new avatar immediately instead of only after
+  // the next full feed refetch (posts/comments carry a snapshot of the
+  // author at fetch time, not a live reference).
+  patchUserAvatarInFeed: (userId: string, avatarUrl: string) => void;
   clearError: () => void;
 };
 
@@ -151,12 +158,13 @@ export const usePostStore = create<State & Actions>()((set, get) => ({
 
     if (isLoading || (!isRefresh && !hasMore)) return;
 
+    set({ error: null });
     if (!silent) set({ isLoading: true });
 
     try {
       const pageToFetch = isRefresh ? 1 : currentPage + 1;
       const response = await getUserPosts(filter, pageToFetch);
-      const newPosts = response?.data ?? [];
+      const newPosts = (response?.data ?? []).filter((post: CommunityPost) => post?.id);
 
       set((state) => {
         const combined = isRefresh ? newPosts : [...state.userPosts, ...newPosts];
@@ -188,7 +196,7 @@ export const usePostStore = create<State & Actions>()((set, get) => ({
       const pageToFetch = isRefresh ? 1 : currentPage + 1;
       // Ensure getBookmarkedPost accepts pageToFetch!
       const response = await getBookmarkedPost(pageToFetch, 10);
-      const newPosts = response?.data ?? [];
+      const newPosts = (response?.data ?? []).filter((post: CommunityPost) => post?.id);
 
       set((state) => {
         const combined = isRefresh ? newPosts : [...state.bookmarkedPost, ...newPosts];
@@ -464,7 +472,7 @@ export const usePostStore = create<State & Actions>()((set, get) => ({
     try {
       const response = await searchPosts(searchText, filter, pageToFetch);
 
-      const newPosts = response?.data ?? [];
+      const newPosts = (response?.data ?? []).filter((post: CommunityPost) => post?.id);
       const totalFromApi = response?.meta?.total ?? 0;
 
       const updatedPosts = isRefresh ? newPosts : [...userPosts, ...newPosts];
@@ -504,7 +512,7 @@ export const usePostStore = create<State & Actions>()((set, get) => ({
     try {
       const pageToFetch = isRefresh ? 1 : currentPage + 1;
       const response = await getPostsByUserId(userId, pageToFetch);
-      const newPosts = response?.data ?? [];
+      const newPosts = (response?.data ?? []).filter((post: CommunityPost) => post?.id);
 
       set((state) => {
         const combined = isRefresh ? newPosts : [...state.otherUserPosts, ...newPosts];
@@ -533,7 +541,7 @@ export const usePostStore = create<State & Actions>()((set, get) => ({
     try {
       const response = await searchBookmarkedPosts(searchText, pageToFetch);
 
-      const newPosts = response?.data ?? [];
+      const newPosts = (response?.data ?? []).filter((post: CommunityPost) => post?.id);
       const totalFromApi = response?.meta?.total ?? 0;
 
       const updatedPosts = isRefresh ? newPosts : [...bookmarkedPost, ...newPosts];
@@ -550,6 +558,22 @@ export const usePostStore = create<State & Actions>()((set, get) => ({
       throw Error(message);
     }
   },
+  patchUserAvatarInFeed: (userId, avatarUrl) => {
+    const patchPost = (p: CommunityPost) =>
+      p.userId === userId ? { ...p, user: { ...p.user, avatarUrl } } : p;
+    const patchComment = (c: CommentResponse) =>
+      c.userId === userId ? { ...c, user: c.user ? { ...c.user, avatarUrl } : c.user } : c;
+
+    set((state) => ({
+      userPosts: state.userPosts.map(patchPost),
+      otherUserPosts: state.otherUserPosts.map(patchPost),
+      bookmarkedPost: state.bookmarkedPost.map(patchPost),
+      post: state.post ? patchPost(state.post) : state.post,
+      postComments: state.postComments.map(patchComment),
+      postReplies: state.postReplies.map(patchComment),
+    }));
+  },
+
   clearError: () => set({ error: null }),
 
   reset: () => set(initialState),

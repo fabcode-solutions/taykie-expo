@@ -75,6 +75,7 @@
     "warning": "Warning",
     "loading": "Loading...",
     "error": "Error",
+    "retry": "Retry",
     "success": "Success",
     "logout": "Logout",
     "submit": "Submit",
@@ -576,7 +577,14 @@
       "week": "Week",
       "month": "Month"
     },
-    "no_data": "No data to export"
+    "no_data": "No data to export",
+    "viewing": {
+      "today": "Today",
+      "thisWeek": "This week",
+      "thisMonth": "This month",
+      "date": "{{date}}",
+      "range": "{{start}} - {{end}}"
+    }
   },
   "schedule": {
     "create": "Create a Schedule",
@@ -593,6 +601,7 @@
       "selectTime": "Select Time",
       "addTime": "Add another time",
       "duplicateTime": "This time is already added to this schedule. Please pick a different time.",
+      "monthlyDeviceNote": "Monthly schedules are only available in the app and won't sync to your Taykie device.",
       "saveToDevice": "Save to Taykie device",
       "saveToDeviceNotConnected": "Connect your Taykie device to enable this",
       "saveToDeviceSynced": "Saved — this reminder will also ring from your Taykie device.",
@@ -740,6 +749,11 @@
     "no_product_found": "No product found",
     "required": "Product name is required",
     "add_name": "Add Product Name",
+    "addProduct": "Add Product",
+    "createProduct": "Create Product",
+    "deleteConfirmTitle": "Delete Product",
+    "deleteConfirmMessage": "Are you sure you want to delete this product? This cannot be undone.",
+    "deleteSuccess": "Product deleted successfully",
     "no_data": {
       "title": "No results to show",
       "description": "We couldn’t find what you’re looking for. Give it another try!",
@@ -769,7 +783,7 @@
         "3": "Three times daily"
       },
       "your_setup": "YOUR SETUP",
-      "take_me_to_dashboard": "Take me to my dashboard",
+      "take_me_to_dashboard": "Continue",
       "summary": {
         "dose": "Dose Frequency",
         "reminder": "First Reminder",

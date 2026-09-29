@@ -1,5 +1,5 @@
 import { GroupResponse } from "./groups.types";
-export type CommunityFilter = "popular" | "new" | "following";
+export type CommunityFilter = "popular" | "new" | "following" | "mine";
 
 export interface CreatePostRequest {
   type?: PostType;

@@ -50,11 +50,22 @@ export class ApiClient {
     let attempt = 0;
     let lastError: any;
 
-    // 🔍 LOG REQUEST DETAILS
-    console.log(`🌐 [API Request] ${method} -> ${url}`, {
-      headers: options.headers,
-      body: options.body ? JSON.parse(typeof options.body === "string" ? options.body : "{}") : undefined,
-    });
+    // 🔍 LOG REQUEST DETAILS (best-effort — a non-JSON body, e.g. the
+    // form-urlencoded auth requests, must never break the actual request)
+    if (__DEV__) {
+      let loggedBody: unknown;
+      if (typeof options.body === "string") {
+        try {
+          loggedBody = JSON.parse(options.body);
+        } catch {
+          loggedBody = options.body;
+        }
+      }
+      console.log(`🌐 [API Request] ${method} -> ${url}`, {
+        headers: options.headers,
+        body: loggedBody,
+      });
+    }
 
     while (attempt <= retries) {
       try {
@@ -70,14 +81,14 @@ export class ApiClient {
 
         const contentType = res.headers.get("content-type") || "";
         const isJson = contentType.includes("application/json");
-        
+
         // Clone response text to log it without consuming it
         const resText = await res.text();
         const data = isJson && resText ? JSON.parse(resText) : resText;
 
         // 📥 LOG RESPONSE DETAILS
         if (res.ok) {
-          console.log(`✅ [API Response Success ${res.status}] <- ${url}`, JSON.stringify(data));
+          // console.log(`✅ [API Response Success ${res.status}] <- ${url}`, JSON.stringify(data));
         } else {
           console.log(`❌ [API Response Error ${res.status}] <- ${url}`, JSON.stringify(data));
         }
@@ -163,7 +174,7 @@ export class ApiClient {
   // Form helpers
   postFormUrlEncoded<T = unknown>(path: string, params: Record<string, string>): Promise<T> {
     const url = path.startsWith("http") ? path : `${API_BASE_URL}${path}`;
-    
+
     // ✅ Manual URLSearchParams encoding for Hermes compatibility
     const body = Object.entries(params)
       .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)

@@ -13,7 +13,7 @@ import AddProduct from "./AddProduct";
 import ScheduleComponent from "./Schedule";
 import { Medication } from "@/types/products.types";
 import { CreateScheduleRequest, Schedule } from "@/types/schedule.types";
-import { getFrequency } from "@/utils/formatter";
+import { formatTimeAmPm, getFrequency } from "@/utils/formatter";
 import { generateWeek } from "@/app/(tabs)/schedule";
 import { moderateScale, scale, verticalScale } from "@/utils/scale";
 import { LocalizedStrings } from "@/i18n/LocalizedStrings";
@@ -185,6 +185,15 @@ const MedicineTaken = ({ task, onClose, onEditComplete }: MedicineTakenProp) => 
     [medication, resolvedTaskId],
   );
 
+  const scheduleTimeDisplay = useMemo(() => {
+    return (task.scheduleTime ?? "")
+      .split(",")
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .map(formatTimeAmPm)
+      .join(", ");
+  }, [task.scheduleTime]);
+
   const scheduleFor = useMemo(() => {
     switch (task?.scheduleType) {
       case "daily":
@@ -195,6 +204,7 @@ const MedicineTaken = ({ task, onClose, onEditComplete }: MedicineTakenProp) => 
         return t(LocalizedStrings.schedule.everyMonth);
     }
   }, [task?.scheduleType, task.scheduleDay]);
+
   return (
     <View style={{ gap: verticalScale(20) }}>
       <View style={themedStyles.headerStyle}>
@@ -242,7 +252,7 @@ const MedicineTaken = ({ task, onClose, onEditComplete }: MedicineTakenProp) => 
           {task.status !== "taken" && (
             <Text style={themedStyles.contentTextStyle}>
               {t(LocalizedStrings.home.extras.scheduledFor)} {scheduleFor}{" "}
-              {t(LocalizedStrings.home.extras.at)} {task.scheduleTime}
+              {t(LocalizedStrings.home.extras.at)} {scheduleTimeDisplay}
             </Text>
           )}
 

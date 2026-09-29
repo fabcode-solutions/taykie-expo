@@ -351,6 +351,7 @@ export default function PairDevice() {
       showBack
       showSkip
       onSkip={handleSkip}
+      scrollable={false}
     >
       <View style={styles.heading}>
         <ThemeText variant="gs.h2" style={styles.title}>

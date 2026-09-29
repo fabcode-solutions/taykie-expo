@@ -174,7 +174,7 @@ export default function ProfileScreen() {
 
   const loadData = useCallback(async () => {
     try {
-      if (activeSegment === "posts") await fetchUserPosts();
+      if (activeSegment === "posts") await fetchUserPosts("mine");
       else if (activeSegment === "groups") await fetchUserGroups();
       else if (activeSegment === "saved") await fetchBookmarkedPosts();
     } catch (error) {

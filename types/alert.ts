@@ -24,6 +24,7 @@ export interface AlertConfig {
 export interface AlertStyles {
   container: ViewStyle;
   contentContainer: ViewStyle;
+  accentBar: ViewStyle;
   iconContainer: ViewStyle;
   textContainer: ViewStyle;
   titleText: TextStyle;

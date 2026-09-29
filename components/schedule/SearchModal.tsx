@@ -164,25 +164,33 @@ export default function SearchModal({
         returnKeyType="search"
       />
 
-      <FlatList
-        data={searchResults}
-        style={{ maxHeight: verticalScale(300) }}
-        keyExtractor={keyExtractor}
-        renderItem={renderItem}
-        contentContainerStyle={themedStyles.listContent}
-        showsVerticalScrollIndicator={false}
-        ListEmptyComponent={
-          <EmptyView
-            showButton
-            buttonTitle={t(LocalizedStrings.product.no_data.buttonTitle)}
-            title={t(LocalizedStrings.product.no_data.title)}
-            message={t(LocalizedStrings.product.no_data.description)}
-            onPressButton={() => handleSelectItem(null)}
-          />
-        }
-        keyboardShouldPersistTaps="handled"
-      />
-      {searchResults.length > 0 ? (
+      {error ? <Text style={themedStyles.errorText}>{error}</Text> : null}
+
+      {isLoading ? (
+        <View style={themedStyles.loadingContainer}>
+          <ActivityIndicator size="small" color={theme.colors.primary.main} />
+        </View>
+      ) : (
+        <FlatList
+          data={searchResults}
+          style={{ maxHeight: verticalScale(300) }}
+          keyExtractor={keyExtractor}
+          renderItem={renderItem}
+          contentContainerStyle={themedStyles.listContent}
+          showsVerticalScrollIndicator={false}
+          ListEmptyComponent={
+            <EmptyView
+              showButton
+              buttonTitle={t(LocalizedStrings.product.no_data.buttonTitle)}
+              title={t(LocalizedStrings.product.no_data.title)}
+              message={t(LocalizedStrings.product.no_data.description)}
+              onPressButton={() => handleSelectItem(null)}
+            />
+          }
+          keyboardShouldPersistTaps="handled"
+        />
+      )}
+      {!isLoading && searchResults.length > 0 ? (
         <Button
           size="small"
           fullWidth={false}
@@ -249,8 +257,12 @@ const createStyles = (theme: Theme) =>
     },
     errorText: {
       color: theme.colors.error.main,
-      textAlign: "center",
-      marginTop: theme.spacing.lg,
+      fontSize: moderateScale(12),
+      marginBottom: theme.spacing.sm,
+    },
+    loadingContainer: {
+      paddingVertical: verticalScale(32),
+      alignItems: "center",
     },
     button: {
       alignSelf: "center",

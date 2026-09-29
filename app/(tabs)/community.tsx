@@ -1,5 +1,5 @@
 "use client";
- 
+
 import React, { useCallback, useEffect } from "react";
 import { FlatList, RefreshControl, StyleSheet, View } from "react-native";
 import { SafeAreaScreen, ThemeInput, ThemeStatusBar } from "@/components";
@@ -13,7 +13,6 @@ import SocialPost from "@/components/social/SocialPost";
 import { usePostStore } from "@/stores/postStore";
 import EmptyView from "@/components/ui/empty-view";
 import PostCard from "@/components/social/PostCard";
-import { PostFeedSkeleton } from "@/components/social/PostCardSkeleton";
 import { verticalScale } from "@/utils/scale";
 import { LocalizedStrings } from "@/i18n/LocalizedStrings";
 import { useNotificationStore } from "@/stores/notificationStore";
@@ -24,7 +23,7 @@ import { Loader } from "@/components/shared/loader";
 import { useAlert } from "@/provider/AlertProvider";
 import { AlertPresets } from "@/utils/alert";
 import { CommunityFilter } from "@/types/posts.types";
- 
+
 export const FILTERS = [
   {
     key: "new",
@@ -39,7 +38,7 @@ export const FILTERS = [
     label: "Following",
   },
 ];
- 
+
 export default function CommunityScreen() {
   const theme = useTheme();
   const alert = useAlert();
@@ -64,7 +63,7 @@ export default function CommunityScreen() {
   const { sendNotification } = useNotificationStore();
   const [activeFilter, setActiveFilter] = React.useState<CommunityFilter>("new");
   const themedStyles = React.useMemo(() => createStyles(theme), [theme]);
- 
+
   const filters = React.useMemo(
     () =>
       FILTERS.map((item) => ({
@@ -73,7 +72,7 @@ export default function CommunityScreen() {
       })),
     [t],
   );
- 
+
   const loadData = useCallback(
     async (isRefresh: boolean) => {
       try {
@@ -88,7 +87,7 @@ export default function CommunityScreen() {
     },
     [activeFilter, searchText, searchUserPosts, fetchUserPosts, t], // Dependencies are now stable actions
   );
- 
+
   useEffect(() => {
     // If searching, use debounce
     if (searchText.trim().length > 0) {
@@ -97,21 +96,21 @@ export default function CommunityScreen() {
       }, 500);
       return () => clearTimeout(delayDebounceFn);
     }
- 
+
     // If not searching, just load based on filter
     loadData(true);
- 
+
     // CRITICAL: We only want this to run when the filter or text changes.
     // Do NOT put loadData in here if it changes on every render.
   }, [activeFilter, searchText]);
- 
+
   // 3. Handle Pull-to-Refresh
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
     await loadData(true);
     setIsRefreshing(false);
   }, [loadData]);
- 
+
   const handleLoadMore = useCallback(async () => {
     if (!isLoading && hasMore && !isFetchingMore && userPosts.length > 0) {
       setIsFetchingMore(true);
@@ -119,7 +118,7 @@ export default function CommunityScreen() {
       setIsFetchingMore(false);
     }
   }, [isLoading, hasMore, isFetchingMore, userPosts, loadData]);
- 
+
   const handleApiLike = useCallback(
     async (postId: string, isLiked: boolean, userId: string) => {
       try {
@@ -148,7 +147,7 @@ export default function CommunityScreen() {
     },
     [likePost, unLikePost, sendNotification, user?.id, user?.firstName, t],
   );
- 
+
   const handleApiComment = useCallback(
     async (postId: string) => {
       try {
@@ -160,7 +159,7 @@ export default function CommunityScreen() {
     },
     [fetchPostComments, t],
   );
- 
+
   const handleApiShare = useCallback(
     async (postId: string, isBookmarked: boolean) => {
       try {
@@ -175,7 +174,7 @@ export default function CommunityScreen() {
     },
     [bookmarkPost, unBookmarkPost, t],
   );
- 
+
   const handleApiPollSubmit = useCallback(
     async (postId: string, optionId: string) => {
       console.log("API: Submit poll:", postId, "option:", optionId);
@@ -187,11 +186,11 @@ export default function CommunityScreen() {
     },
     [voteOnPollPost, t],
   );
- 
+
   const handleMenuPress = useCallback((postId: string) => {
     console.log("Menu pressed for post:", postId);
   }, []);
- 
+
   const handleAuthorPress = useCallback((authorId: string) => {
     console.log("Navigate to author profile:", authorId);
     router.push({
@@ -201,7 +200,7 @@ export default function CommunityScreen() {
       },
     });
   }, []);
- 
+
   // Optimized: Extracted renderItem
   const renderPostItem = useCallback(
     ({ item }: { item: any }) => (
@@ -227,7 +226,7 @@ export default function CommunityScreen() {
       handleAuthorPress,
     ],
   );
- 
+
   const renderFooterComponent = useCallback(() => {
     if (isFetchingMore) return <Loader fullScreen={false} size="small" />;
     if (!hasMore && userPosts.length > 0) {
@@ -235,7 +234,7 @@ export default function CommunityScreen() {
     }
     return <View />;
   }, [isFetchingMore, hasMore, userPosts.length]);
- 
+
   const renderEmptyComponent = useCallback(() => {
     return (
       <EmptyView
@@ -246,7 +245,7 @@ export default function CommunityScreen() {
       />
     );
   }, [t]);
- 
+
   const keyExtractor = useCallback(
     (item: any, index: number) => item?.id?.toString() || `fallback-${index}`,
     [],
@@ -257,12 +256,13 @@ export default function CommunityScreen() {
       style={[themedStyles.screen, themedStyles.contentContainer]}
       edges={["top"]}
     >
+      {isLoading && <Loader />}
       <>
         <ThemeStatusBar style={theme.mode === "dark" ? "light" : "dark"} />
- 
+
         <View style={{ paddingTop: theme.spacing.lg, paddingHorizontal: theme.spacing.lg }}>
           <AppHeader />
- 
+
           <ThemeInput
             value={searchText}
             placeholder={t(LocalizedStrings.schedule.placeHolders.search)}
@@ -277,37 +277,27 @@ export default function CommunityScreen() {
             segments={filters}
           />
         </View>
- 
-        {isLoading && userPosts.length === 0 ? (
-          // Cold load (first mount, or a filter/search switch that left no
-          // cached posts to show) — a skeleton feed in place of the FlatList,
-          // instead of a full-screen loader that used to hide the header,
-          // search box and filter tabs behind a backdrop for every load.
-          <View style={{ paddingHorizontal: theme.spacing.lg }}>
-            <PostFeedSkeleton />
-          </View>
-        ) : (
-          <FlatList
-            data={userPosts}
-            extraData={userPosts}
-            keyExtractor={keyExtractor}
-            showsVerticalScrollIndicator={false}
-            renderItem={renderPostItem}
-            onEndReached={handleLoadMore}
-            onEndReachedThreshold={0.5}
-            contentContainerStyle={{ flexGrow: 1 }}
-            refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />}
-            ListFooterComponent={renderFooterComponent}
-            ListEmptyComponent={renderEmptyComponent}
-          />
-        )}
- 
+
+        <FlatList
+          data={userPosts}
+          extraData={userPosts}
+          keyExtractor={keyExtractor}
+          showsVerticalScrollIndicator={false}
+          renderItem={renderPostItem}
+          onEndReached={handleLoadMore}
+          onEndReachedThreshold={0.5}
+          contentContainerStyle={{ flexGrow: 1 }}
+          refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />}
+          ListFooterComponent={renderFooterComponent}
+          ListEmptyComponent={renderEmptyComponent}
+        />
+
         <SocialPost />
       </>
     </SafeAreaScreen>
   );
 }
- 
+
 const createStyles = (theme: Theme) =>
   StyleSheet.create({
     screen: {

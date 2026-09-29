@@ -21,7 +21,7 @@ import { Button } from "../ui/button";
 import { useAuthStore } from "@/stores/authStore";
 export interface PostCardProps {
   post: CommunityPost;
-  onApiLike?: (postId: string, isLiked: boolean) => void;
+  onApiLike?: (postId: string, isLiked: boolean, authorId?: string) => void;
   onApiComment?: (postId: string) => void;
   onApiShare?: (postId: string, isBookmarked: boolean) => void;
   onApiPollSubmit?: (postId: string, optionId: string) => void;
@@ -90,8 +90,8 @@ export const PostCard = memo<PostCardProps>(
     }, [initialPost, user?.id, votedOption]); // Added votedOption to dependencies
 
     const handleLike = useCallback(() => {
-      onApiLike?.(post?.id, post?.isLiked ?? false);
-    }, [post?.id, post?.isLiked, onApiLike]);
+      onApiLike?.(post?.id, post?.isLiked ?? false, post?.userId);
+    }, [post?.id, post?.isLiked, post?.userId, onApiLike]);
 
     const handleComment = useCallback(() => {
       onApiComment?.(post?.id);

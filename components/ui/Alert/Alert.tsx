@@ -152,12 +152,15 @@ export const Alert: React.FC<AlertProps> = ({
   // Get styles based on theme and alert type
   const styles = getStyles(theme, type);
   const alertColors = ALERT_COLORS[type];
-  function getMainColor(color: string | { main: string }): string {
-    return typeof color === "string" ? color : color.main;
-  }
-
-  const backgroundColor = getMainColor(theme.colors[alertColors.background] as string);
-  const iconColor = getMainColor(theme.colors[alertColors.icon] as string);
+  const accentPalette = theme.colors[alertColors.accent] as {
+    main: string;
+    light: string;
+  };
+  const accentColor = accentPalette.main;
+  const accentTint = accentPalette.light;
+  const cardBackground = theme.colors.background.elevated;
+  const titleColor = theme.colors.text.primary;
+  const messageColor = theme.colors.text.secondary;
 
   return (
     <Animated.View
@@ -175,17 +178,19 @@ export const Alert: React.FC<AlertProps> = ({
     >
       <Pressable onPress={handlePress} style={{ flex: 1 }}>
         <ThemeView
-          style={[styles.contentContainer, { backgroundColor }]}
+          style={[styles.contentContainer, { backgroundColor: cardBackground }]}
           elevation={3}
           rounded="md"
         >
+          <View style={[styles.accentBar, { backgroundColor: accentColor }]} />
+
           {showIcon && (
-            <View style={styles.iconContainer}>
+            <View style={[styles.iconContainer, { backgroundColor: accentTint }]}>
               {customIcon ?? (
                 <Ionicons
                   name={ALERT_ICONS[type] as keyof typeof Ionicons.glyphMap}
-                  size={moderateScale(24)}
-                  color={iconColor}
+                  size={moderateScale(20)}
+                  color={accentColor}
                 />
               )}
             </View>
@@ -196,7 +201,7 @@ export const Alert: React.FC<AlertProps> = ({
               variant="manrope.subtitle"
               style={styles.titleText}
               numberOfLines={1}
-              color={theme.colors.white}
+              color={titleColor}
             >
               {title}
             </ThemeText>
@@ -205,7 +210,7 @@ export const Alert: React.FC<AlertProps> = ({
                 variant="manrope.body2"
                 style={styles.messageText}
                 numberOfLines={2}
-                color={theme.colors.white}
+                color={messageColor}
               >
                 {message}
               </ThemeText>
@@ -220,7 +225,7 @@ export const Alert: React.FC<AlertProps> = ({
               <ThemeText
                 variant="manrope.button"
                 style={styles.actionText}
-                color={theme.colors.white}
+                color={accentColor}
                 uppercase
               >
                 {action.text}
@@ -234,7 +239,11 @@ export const Alert: React.FC<AlertProps> = ({
               onPress={dismissAlert}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
-              <Ionicons name="close-outline" size={moderateScale(20)} color={theme.colors.white} />
+              <Ionicons
+                name="close-outline"
+                size={moderateScale(20)}
+                color={theme.colors.text.secondary}
+              />
             </Pressable>
           )}
         </ThemeView>
@@ -255,11 +264,25 @@ const getStyles = (theme: ReturnType<typeof useTheme>, _type: string): AlertStyl
     contentContainer: {
       flexDirection: "row",
       alignItems: "center",
-      paddingHorizontal: theme.spacing.md,
+      paddingLeft: theme.spacing.md + moderateScale(4),
+      paddingRight: theme.spacing.md,
       paddingVertical: theme.spacing.sm,
       minHeight: verticalScale(ALERT_CONSTANTS.ALERT_HEIGHT),
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      overflow: "hidden",
+    },
+    accentBar: {
+      position: "absolute",
+      left: 0,
+      top: 0,
+      bottom: 0,
+      width: moderateScale(4),
     },
     iconContainer: {
+      width: moderateScale(36),
+      height: moderateScale(36),
+      borderRadius: moderateScale(18),
       marginRight: theme.spacing.sm,
       justifyContent: "center",
       alignItems: "center",
@@ -274,7 +297,6 @@ const getStyles = (theme: ReturnType<typeof useTheme>, _type: string): AlertStyl
     },
     messageText: {
       marginTop: theme.spacing.xxs,
-      opacity: 0.9,
     },
     actionButton: {
       marginLeft: theme.spacing.sm,

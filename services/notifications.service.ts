@@ -29,10 +29,9 @@ export interface LidOpenNotificationData {
   openedAt: string; // ISO
 }
 
-/** "8:04am" for English, 24h for Spanish. */
+/** "8:04am" — always 12-hour AM/PM, regardless of locale. */
 export function formatOpenTime(openedAt: Date): string {
-  const isSpanish = String(i18n.language).toLowerCase().startsWith("es");
-  return format(openedAt, isSpanish ? "HH:mm" : "h:mmaaa", { locale: getDateLocale() });
+  return format(openedAt, "h:mmaaa", { locale: getDateLocale() });
 }
 
 /**

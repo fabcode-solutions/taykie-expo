@@ -284,7 +284,7 @@ export default function HomeScreen() {
                 id={item.scheduleId ?? item.id ?? ""}
                 status={item.status ?? "Upcoming"}
                 statusLabel={statusLabels[item.status ?? "Upcoming"]}
-                time={item.time ?? item.time24 ?? ""}
+                time={item.time ?? item.time24 ?? item.scheduleTime ?? ""}
                 title={item.name ?? ""}
                 onPress={() => handleTask(item)}
               />

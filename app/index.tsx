@@ -15,7 +15,7 @@ export default function Index() {
 
   // Authenticated but onboarding not finished → resume onboarding
   if (isAuthenticated && !isOnboardingComplete) {
-    return <Redirect href="/(auth)/welcome-screen" />;
+    return <Redirect href="/(onboarding)/country-language" />;
   }
 
   // Not authenticated → start onboarding flow

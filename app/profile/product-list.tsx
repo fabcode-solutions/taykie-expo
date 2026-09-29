@@ -23,15 +23,25 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 
 const ProductList = () => {
   const theme = useTheme();
   const alert = useAlert();
   const [editVisible, setEditVisible] = useState(false);
+  const [addVisible, setAddVisible] = useState(false);
   const [selectedProduct, setSelectedproduct] = useState<Medication | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const styles = useMemo(() => createStyles(theme), [theme]);
-  const { fetchUserProducts, userProducts, updateProduct, isLoading, hasMore } = useProductStore();
+  const {
+    fetchUserProducts,
+    userProducts,
+    createProduct,
+    updateProduct,
+    deleteProductById,
+    isLoading,
+    hasMore,
+  } = useProductStore();
 
   useEffect(() => {
     fetchProducts();
@@ -79,6 +89,44 @@ const ProductList = () => {
     [selectedProduct, t],
   );
 
+  const handleCreateProduct = useCallback(async (product: ProductDetails) => {
+    try {
+      const request: ProductRequest = {
+        name: product.productName,
+        dosage: `${product.dosageCount} ${Number(product.dosageCount) > 1 ? "Tablets" : "Tablet"}`,
+        strength: `${product.strength} mg`,
+        ...(product.description && { description: product.description }),
+        ...(product.type && { type: product.type }),
+      };
+      await createProduct(request);
+      setAddVisible(false);
+    } catch (error) {
+      alert.show(AlertPresets.error(t(LocalizedStrings.common.error), error.message));
+    }
+  }, []);
+
+  const handleDeleteProduct = useCallback((product: Medication) => {
+    Alert.alert(
+      t(LocalizedStrings.product.deleteConfirmTitle),
+      t(LocalizedStrings.product.deleteConfirmMessage),
+      [
+        { text: t(LocalizedStrings.common.cancel), style: "cancel" },
+        {
+          text: t(LocalizedStrings.common.delete),
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await deleteProductById(product.id);
+              await fetchProducts(true);
+            } catch (error) {
+              alert.show(AlertPresets.error(t(LocalizedStrings.common.error), error.message));
+            }
+          },
+        },
+      ],
+    );
+  }, []);
+
   const handleLoadMore = useCallback(() => {
     if (isLoading || !hasMore) return;
     fetchProducts(false);
@@ -91,11 +139,20 @@ const ProductList = () => {
 
   return (
     <SafeAreaScreen style={styles.safeArea}>
-      <View>
+      <View style={[styles.row, styles.headerRow]}>
         <TouchableOpacity onPress={handleBack} style={styles.backButton} activeOpacity={0.7}>
           <View style={styles.backButtonInner}>
             <IconBackArrow />
           </View>
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => setAddVisible(true)}
+          style={styles.addButton}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel={t(LocalizedStrings.product.addProduct)}
+        >
+          <Ionicons name="add" size={moderateScale(20)} color={theme.colors.white} />
         </TouchableOpacity>
       </View>
 
@@ -115,6 +172,7 @@ const ProductList = () => {
               setSelectedproduct(item);
               setEditVisible(true);
             }}
+            onDelete={() => handleDeleteProduct(item)}
           />
         )}
         contentContainerStyle={{ gap: verticalScale(16) }}
@@ -137,22 +195,43 @@ const ProductList = () => {
           onAddProduct={(product) => handleUpdateProduct(product)}
         />
       </BlurModal>
+
+      <BlurModal
+        heading={t(LocalizedStrings.product.addProduct)}
+        visible={addVisible}
+        onRequestClose={() => setAddVisible(false)}
+      >
+        {isLoading && <Loader />}
+        <AddProduct item={null} onAddProduct={(product) => handleCreateProduct(product)} />
+      </BlurModal>
     </SafeAreaScreen>
   );
 };
-const ProductItem = memo(({ name, onEdit }: { name: string; onEdit: () => void }) => {
-  const theme = useTheme();
-  const styles = useMemo(() => createStyles(theme), [theme]);
+const ProductItem = memo(
+  ({ name, onEdit, onDelete }: { name: string; onEdit: () => void; onDelete: () => void }) => {
+    const theme = useTheme();
+    const styles = useMemo(() => createStyles(theme), [theme]);
 
-  return (
-    <View style={[styles.container, styles.row, styles.border]}>
-      <ThemeText variant="manrope.body2Bold">{name}</ThemeText>
-      <TouchableOpacity style={styles.editButton} onPress={onEdit}>
-        <Text style={styles.editButtonText}>{t(LocalizedStrings.common.edit)}</Text>
-      </TouchableOpacity>
-    </View>
-  );
-});
+    return (
+      <View style={[styles.container, styles.row, styles.border]}>
+        <ThemeText variant="manrope.body2Bold">{name}</ThemeText>
+        <View style={[styles.row, { gap: verticalScale(8) }]}>
+          <TouchableOpacity style={styles.editButton} onPress={onEdit}>
+            <Text style={styles.editButtonText}>{t(LocalizedStrings.common.edit)}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.deleteButton}
+            onPress={onDelete}
+            accessibilityRole="button"
+            accessibilityLabel={t(LocalizedStrings.common.delete)}
+          >
+            <Ionicons name="trash-outline" size={moderateScale(14)} color={theme.colors.white} />
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  },
+);
 
 ProductItem.displayName = "ProductItem";
 
@@ -201,6 +280,17 @@ const createStyles = (theme: Theme) =>
       justifyContent: "center",
       alignItems: "center",
     },
+    headerRow: {
+      justifyContent: "space-between",
+    },
+    addButton: {
+      aspectRatio: 1,
+      height: verticalScale(40),
+      borderRadius: moderateScale(10),
+      backgroundColor: theme.colors.primary.main,
+      justifyContent: "center",
+      alignItems: "center",
+    },
     editButtonText: {
       color: theme.colors.white,
       fontSize: moderateScale(12),
@@ -212,6 +302,14 @@ const createStyles = (theme: Theme) =>
       paddingVertical: verticalScale(4),
       paddingHorizontal: scale(8),
       borderRadius: moderateScale(5),
+    },
+    deleteButton: {
+      backgroundColor: theme.colors.error.main,
+      paddingVertical: verticalScale(4),
+      paddingHorizontal: scale(8),
+      borderRadius: moderateScale(5),
+      justifyContent: "center",
+      alignItems: "center",
     },
   });
 export default ProductList;

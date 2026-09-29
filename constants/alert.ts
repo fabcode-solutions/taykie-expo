@@ -17,33 +17,13 @@ export const ALERT_ICONS: Record<AlertType, string> = {
   info: "information-circle-outline",
 };
 
-// Color mappings for each alert type
-export const ALERT_COLORS: Record<
-  AlertType,
-  {
-    background: keyof ColorPalette;
-    text: keyof ColorPalette["text"];
-    icon: keyof ColorPalette;
-  }
-> = {
-  success: {
-    background: "success",
-    text: "primary",
-    icon: "success",
-  },
-  error: {
-    background: "error",
-    text: "primary",
-    icon: "error",
-  },
-  warning: {
-    background: "warning",
-    text: "primary",
-    icon: "warning",
-  },
-  info: {
-    background: "info",
-    text: "primary",
-    icon: "info",
-  },
+// Each alert type maps to one brand feedback color, used as the icon badge
+// tint + accent stripe on an otherwise neutral card (matches the app's
+// light-card-with-colored-accent look used elsewhere, e.g. insights metric
+// cards) instead of a full saturated-color toast.
+export const ALERT_COLORS: Record<AlertType, { accent: keyof ColorPalette }> = {
+  success: { accent: "success" },
+  error: { accent: "error" },
+  warning: { accent: "warning" },
+  info: { accent: "info" },
 };
