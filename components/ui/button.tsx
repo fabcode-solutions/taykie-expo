@@ -101,7 +101,7 @@ export const Button = ({
               ? theme.colors.primary.dark
               : variant === "secondary"
                 ? theme.colors.warning.contrast
-                : theme.colors.primary.main
+                : theme.colors.primary.dark
           }
         />
       ) : (
@@ -149,7 +149,10 @@ const makeStyles = (theme: Theme) =>
     outlineButton: {
       backgroundColor: "transparent",
       borderWidth: scale(1),
-      borderColor: theme.colors.primary.main,
+      // Was primary.main (a pale yellow, #FFFA9C) — effectively invisible as
+      // a border on the app's light background. primary.dark is a readable
+      // dark gray, still distinct from the primary button's near-black text.
+      borderColor: theme.colors.primary.dark,
     },
     textButton: {
       backgroundColor: "transparent",
@@ -184,14 +187,16 @@ const makeStyles = (theme: Theme) =>
       fontWeight: "500",
       fontFamily: theme.typography.gs.title.fontFamily,
     },
+    // Both of these were primary.main (pale yellow) — same visibility bug as
+    // outlineButton's border above; see its comment.
     outlineButtonText: {
-      color: theme.colors.primary.main,
+      color: theme.colors.primary.dark,
       fontSize: moderateScale(18),
       fontWeight: "500",
       fontFamily: theme.typography.gs.title.fontFamily,
     },
     textButtonText: {
-      color: theme.colors.primary.main,
+      color: theme.colors.primary.dark,
       fontSize: moderateScale(18),
       fontWeight: "500",
       fontFamily: theme.typography.gs.title.fontFamily,
