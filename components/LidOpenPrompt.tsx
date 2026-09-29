@@ -52,28 +52,50 @@ export function LidOpenPrompt() {
     [activeEvent],
   );
 
+  // Hides the drawer immediately, regardless of which action was tapped —
+  // the query-driven `activeEvent` above would otherwise only disappear
+  // once the resulting mutation/refetch round-trips (a visible delay for
+  // Refilled, and not at all for Took Dose, which doesn't resolve anything
+  // by itself). Local-only, same as handleClose: the event stays
+  // unconfirmed server-side until actually resolved, and reappears later if
+  // it still is.
+  const hideLocally = useCallback((eventId: string) => {
+    setDismissedIds((prev) => new Set(prev).add(eventId));
+  }, []);
+
   const handleClose = useCallback(() => {
     if (!activeEvent) return;
-    setDismissedIds((prev) => new Set(prev).add(activeEvent.id));
-  }, [activeEvent]);
+    hideLocally(activeEvent.id);
+  }, [activeEvent, hideLocally]);
 
   const handleTookDose = useCallback(() => {
     if (!activeEvent) return;
     const eventId = activeEvent.id;
-    router.push({
-      pathname: "/lid-events/[eventId]",
-      params: { eventId, openedAt: activeEvent.openedAt },
-    } as Href);
-  }, [activeEvent]);
+    const openedAtParam = activeEvent.openedAt;
+    hideLocally(eventId);
+    // This BottomDrawer wraps RN's own <Modal> (see BottomDrawer.tsx) —
+    // closing it and pushing a new screen in the same commit is the known
+    // trigger for the Yoga/Fabric shadow-tree crash documented elsewhere in
+    // this app (ScheduleModals.tsx, MedicineTaken.tsx); same fix, same
+    // reasoning: let the close finish first.
+    setTimeout(() => {
+      router.push({
+        pathname: "/lid-events/[eventId]",
+        params: { eventId, openedAt: openedAtParam },
+      } as Href);
+    }, 300);
+  }, [activeEvent, hideLocally]);
 
   const handleRefilled = useCallback(async () => {
     if (!activeEvent) return;
+    const eventId = activeEvent.id;
+    hideLocally(eventId);
     try {
-      await resolveMutation.mutateAsync({ eventId: activeEvent.id, request: { action: "refill" } });
+      await resolveMutation.mutateAsync({ eventId, request: { action: "refill" } });
     } catch (error: any) {
       alert.show(AlertPresets.error(t(LocalizedStrings.common.error), error?.message));
     }
-  }, [activeEvent, resolveMutation, alert, t]);
+  }, [activeEvent, hideLocally, resolveMutation, alert, t]);
 
   return (
     <BottomDrawer
