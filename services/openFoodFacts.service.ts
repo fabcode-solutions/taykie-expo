@@ -3,11 +3,13 @@ import { SearchItem } from "@/types/search.types";
 // Open Food Facts public search API — no API key required. Restricted to
 // the dietary-supplements category per the supplement search brief (Layer
 // 1: live API search).
-const OFF_SEARCH_URL = "https://world.openfoodfacts.org/cgi/search.pl";
+//
+// Uses the v2 REST search endpoint rather than the legacy cgi/search.pl —
+// the legacy one has been increasingly 503-ing under OFF's own bot
+// protection regardless of headers (RN's fetch on Android also can't
+// reliably override User-Agent, so that alone doesn't fix it there).
+const OFF_SEARCH_URL = "https://world.openfoodfacts.org/api/v2/search";
 const OFF_TIMEOUT_MS = 8000;
-// OFF throttles/503s requests with no identifying User-Agent — required by
-// their API usage guidelines, and also just makes 503s far less frequent.
-const OFF_USER_AGENT = "Taykie/1.0 (React Native; supplement search)";
 // 503s from OFF are usually a momentary blip, not a real outage — one retry
 // clears the overwhelming majority of them without the user noticing.
 const OFF_MAX_ATTEMPTS = 2;
@@ -37,10 +39,7 @@ interface OFFSearchResponse {
 export async function searchSupplements(query: string, limit = 20): Promise<SearchItem[]> {
   const params = new URLSearchParams({
     search_terms: query,
-    tagtype_0: "categories",
-    tag_contains_0: "contains",
-    tag_0: "dietary-supplements",
-    json: "1",
+    categories_tags: "en:dietary-supplements",
     page_size: String(limit),
     fields: "code,product_name,generic_name,brands,categories,quantity",
   });
@@ -53,10 +52,7 @@ export async function searchSupplements(query: string, limit = 20): Promise<Sear
     const timeout = setTimeout(() => controller.abort(), OFF_TIMEOUT_MS);
 
     try {
-      const response = await fetch(url, {
-        signal: controller.signal,
-        headers: { "User-Agent": OFF_USER_AGENT },
-      });
+      const response = await fetch(url, { signal: controller.signal });
 
       if (!response.ok) {
         // 5xx is almost always transient on OFF's end — worth a retry.

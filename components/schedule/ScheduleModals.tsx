@@ -261,7 +261,10 @@ const ScheduleModals = ({
           productName: medication.name,
           brand: medication.brand,
           category: medication.category,
-          doseQuantity: medication.dosage,
+          // medication.dosage is typed as a string, but AddProduct's
+          // dosageCount counter actually feeds it in as a number — the
+          // backend column is varchar, so this must be a string on the wire.
+          doseQuantity: medication.dosage != null ? String(medication.dosage) : undefined,
           source: medication.source === "api" ? "api" : "user_created",
           offId: medication.offId,
         }).catch((captureError) => {

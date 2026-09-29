@@ -169,6 +169,9 @@ export default function SearchModal({
       {isLoading ? (
         <View style={themedStyles.loadingContainer}>
           <ActivityIndicator size="small" color={theme.colors.primary.main} />
+          <Text style={themedStyles.loadingText}>
+            {t(LocalizedStrings.schedule.placeHolders.search)}...
+          </Text>
         </View>
       ) : (
         <FlatList
@@ -263,6 +266,11 @@ const createStyles = (theme: Theme) =>
     loadingContainer: {
       paddingVertical: verticalScale(32),
       alignItems: "center",
+      gap: theme.spacing.xs,
+    },
+    loadingText: {
+      color: theme.colors.text.secondary,
+      fontSize: moderateScale(12),
     },
     button: {
       alignSelf: "center",
