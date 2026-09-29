@@ -239,6 +239,7 @@ const ScheduleModals = ({
         heading={t(LocalizedStrings.schedule.placeHolders.search)}
         visible={searchVisible}
         contentStyle={{ gap: verticalScale(20) }}
+        disableInnerScroll
         onRequestClose={() => {
           setSearchVisible(false);
           onClose?.();
