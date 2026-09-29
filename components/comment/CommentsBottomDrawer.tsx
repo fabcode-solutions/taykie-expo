@@ -50,7 +50,7 @@ const CommentsBottomDrawerComponent: React.FC<CommentsBottomDrawerProps> = ({
     fetchCommentReplies,
     addCommentToPost,
     replyToCommmentWithId,
-    isLoading: loadingComments,
+    isLoadingComments: loadingComments,
   } = usePostStore();
 
   const user = useAuthStore((s) => s.user);

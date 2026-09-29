@@ -7,7 +7,15 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   version: "1.0.0",
   orientation: "default",
   scheme: "taykie",
-  userInterfaceStyle: "automatic",
+  // Locked per brief §Priority 3 ("Dark mode... close to unusable on iOS;
+  // date pickers cannot be used at all") until a proper dark theme ships.
+  // "automatic" let iOS render native chrome — status bar, keyboard, and
+  // DateTimePicker's native spinner in particular — in dark styling while
+  // the app's own screens stayed light-themed (the JS theme was never
+  // actually wired to dark, see theme/ThemeProvider.tsx), producing that
+  // mismatch. This is a native config value read at build time: an OTA
+  // update will NOT apply it, a new build is required.
+  userInterfaceStyle: "light",
   newArchEnabled: true,
   assetBundlePatterns: ["**/*"],
 

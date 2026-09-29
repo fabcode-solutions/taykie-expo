@@ -360,6 +360,17 @@ class BLEService {
     }
 
     console.log("✅ Successfully connected to Taykie device and listening for updates!");
+
+    // Silences anything left ringing from before this connection dropped —
+    // see recoverPendingAlerts's own comment. Best-effort: a failure here
+    // must not fail the connection itself (the device did connect), so it's
+    // logged, not thrown.
+    try {
+      await this.recoverPendingAlerts();
+    } catch (e) {
+      console.warn("recoverPendingAlerts failed after connect:", e);
+    }
+
     return device;
   }
 
@@ -736,6 +747,15 @@ class BLEService {
   // reminder firing autonomously on the device while disconnected — that
   // duration is entirely firmware-controlled and out of the app's reach.
   private static readonly TRIGGER_SAFETY_TIMEOUT_MS = 60000;
+  // True from a successful "on" write until a successful "off" write — see
+  // triggerSound/triggerLight. If the off write itself fails (typically
+  // because the link dropped mid-ring, the exact case brief §Priority 3
+  // "reminder auto-stop" calls out), the flag is left true rather than
+  // cleared, so recoverPendingAlerts() below can pick it back up as soon as
+  // the device reconnects instead of the ring depending on a retry that was
+  // never scheduled.
+  private soundActive = false;
+  private lightActive = false;
   private soundOffTimer: ReturnType<typeof setTimeout> | null = null;
   private lightOffTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -790,6 +810,12 @@ class BLEService {
       return acked;
     });
 
+    // Only reached once the write itself succeeded — if the device dropped
+    // mid-write, withCommandLock rejected above and soundActive is left as
+    // it was (true, if this was an attempt to turn a still-ringing sound
+    // off), which is exactly the state recoverPendingAlerts() needs.
+    this.soundActive = onOff;
+
     if (this.soundOffTimer) {
       clearTimeout(this.soundOffTimer);
       this.soundOffTimer = null;
@@ -797,7 +823,7 @@ class BLEService {
     if (onOff) {
       this.soundOffTimer = setTimeout(() => {
         this.triggerSound(false, soundType, volumeLevel).catch((e) =>
-          console.warn("Failed to auto-stop sound after safety timeout:", e),
+          console.warn("Failed to auto-stop sound after safety timeout (will retry on reconnect if the link is down):", e),
         );
       }, BLEService.TRIGGER_SAFETY_TIMEOUT_MS);
     }
@@ -819,6 +845,10 @@ class BLEService {
       return this.waitForReply(CmdType.LightControl);
     });
 
+    // See the matching comment in triggerSound — only reached on a
+    // successful write.
+    this.lightActive = onOff;
+
     if (this.lightOffTimer) {
       clearTimeout(this.lightOffTimer);
       this.lightOffTimer = null;
@@ -826,11 +856,49 @@ class BLEService {
     if (onOff) {
       this.lightOffTimer = setTimeout(() => {
         this.triggerLight(false, lightType).catch((e) =>
-          console.warn("Failed to auto-stop light after safety timeout:", e),
+          console.warn("Failed to auto-stop light after safety timeout (will retry on reconnect if the link is down):", e),
         );
       }, BLEService.TRIGGER_SAFETY_TIMEOUT_MS);
     }
     return acked;
+  }
+
+  // brief §Priority 3 "reminder auto-stop": "Confirm what happens if a
+  // reminder fires and the connection drops. A reminder must never ring
+  // indefinitely." The device has no auto-stop of its own (see triggerSound/
+  // triggerLight above) and a disconnect cancels the safety timer outright
+  // (nothing to write to), so without this, a reminder that starts sounding
+  // and then loses the connection mid-ring stays on until the user happens
+  // to open the app and tap "Dismiss Active Alert" — which could be a long
+  // time, or never. Called on every successful connect (see
+  // connectToDevice): bounds the worst case to "however long until the
+  // phone reconnects" instead of depending on the user noticing. It does
+  // NOT cover a reminder scheduled to fire autonomously on the device (F2
+  // slots) while the phone was never connected in the first place — that
+  // duration is entirely firmware-controlled; see the open factory question
+  // in the status report ("do scheduled reminders stop automatically, and
+  // after how long?").
+  async recoverPendingAlerts(): Promise<void> {
+    if (!this.soundActive && !this.lightActive) return;
+
+    console.warn(
+      `Recovering an alert left on across a disconnect (sound=${this.soundActive}, light=${this.lightActive}) — silencing now.`,
+    );
+
+    if (this.soundActive) {
+      try {
+        await this.triggerSound(false, 0x00, 0x00);
+      } catch (e) {
+        console.warn("Failed to recover a pending sound alert on connect:", e);
+      }
+    }
+    if (this.lightActive) {
+      try {
+        await this.triggerLight(false, 0x00);
+      } catch (e) {
+        console.warn("Failed to recover a pending light alert on connect:", e);
+      }
+    }
   }
 
   // There's no explicit "dismiss" command in the protocol — the documented

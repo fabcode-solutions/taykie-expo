@@ -1,6 +1,5 @@
 import { useContext } from "react";
 import { ThemeContext } from "./ThemeProvider";
-import { useThemeStore } from "@/stores/themeStore";
 import { ColorPalette } from "./tokens/colors";
 
 // Hook to access the entire theme
@@ -58,10 +57,8 @@ export const useShadows = () => {
 
 // Standalone hook to get current active theme mode without using context
 // Useful for components that just need to know the theme but don't need other theme properties
-export const useActiveThemeMode = (): "light" | "dark" => {
-  const { mode, systemPrefersDark } = useThemeStore();
-  return mode === "system" ? (systemPrefersDark ? "light" : "light") : mode;
-};
+// Locked to light per brief §Priority 3 — see theme/ThemeProvider.tsx.
+export const useActiveThemeMode = (): "light" | "dark" => "light";
 
 // Props type for useThemeColor
 export type UseThemeColorProps = { light?: string; dark?: string };

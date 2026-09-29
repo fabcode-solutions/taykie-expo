@@ -36,7 +36,16 @@ type State = {
   post: CommunityPost | null;
   postComments: CommentResponse[];
   bookmarkedPost: CommunityPost[];
+  // Feed-level loads only (fetchUserPosts/searchUserPosts) — community.tsx
+  // shows a full-screen loader on this, so per-post actions (like, bookmark,
+  // comments, poll vote) must never touch it; see isLoadingComments below.
   isLoading: boolean;
+  // Comments-drawer loads only (fetchPostComments/replyToCommmentWithId/
+  // fetchCommentReplies) — was sharing `isLoading` with the feed, so opening
+  // a comment thread (or the drawer fetching replies) blanked the entire
+  // Community screen behind it with a full-screen backdrop, and liking a
+  // post while the drawer was open showed a spinner in the drawer too.
+  isLoadingComments: boolean;
   error: string | null;
   currentPage: number;
   hasMore: boolean;
@@ -46,7 +55,11 @@ type State = {
 
 type Actions = {
   createPost: (requestBody: CreatePostRequest) => Promise<string>;
-  fetchUserPosts: (filter?: CommunityFilter, isRefresh?: boolean) => Promise<void>;
+  fetchUserPosts: (
+    filter?: CommunityFilter,
+    isRefresh?: boolean,
+    silent?: boolean,
+  ) => Promise<void>;
   fetchBookmarkedPosts: (isRefresh?: boolean) => Promise<void>;
   fetchPostById: (postId: string) => Promise<void>;
   deletePost: (scheduleId: string) => Promise<void>;
@@ -78,6 +91,7 @@ const initialState: State = {
   postComments: [],
   post: null,
   isLoading: false,
+  isLoadingComments: false,
   error: null,
   currentPage: 1,
   hasMore: true,
@@ -126,12 +140,18 @@ export const usePostStore = create<State & Actions>()((set, get) => ({
     }
   },
   // Inside usePostStore
-  fetchUserPosts: async (filter = "new", isRefresh = true) => {
+  // `silent` skips the isLoading flips — used by voteOnPollPost's
+  // after-the-fact refresh so it doesn't blank the whole feed (community.tsx
+  // shows a full-screen loader on isLoading) for what the user experiences
+  // as a single tap, not a fresh page load. Note the early-return below still
+  // applies: a silent call made while a real (non-silent) load is already in
+  // flight is a no-op, same as any other overlapping call.
+  fetchUserPosts: async (filter = "new", isRefresh = true, silent = false) => {
     const { currentPage, hasMore, isLoading } = get();
 
     if (isLoading || (!isRefresh && !hasMore)) return;
 
-    set({ isLoading: true });
+    if (!silent) set({ isLoading: true });
 
     try {
       const pageToFetch = isRefresh ? 1 : currentPage + 1;
@@ -243,36 +263,22 @@ export const usePostStore = create<State & Actions>()((set, get) => ({
       throw new Error(message);
     }
   },
+  // Optimistic: flips the tapped post's state immediately (no isLoading —
+  // this used to share the feed's full-screen loading flag, so every single
+  // like tap blanked the whole Community screen behind a backdrop for the
+  // length of the network round trip). Rolls back to the pre-tap state on
+  // failure instead of waiting for the response to update anything.
   likePost: async (postId) => {
-    set({ isLoading: true, error: null });
+    set({ error: null });
+    set((state) => ({
+      userPosts: state.userPosts.map((p) =>
+        p.id === postId ? { ...p, isLiked: true, likesCount: (p.likesCount || 0) + 1 } : p,
+      ),
+    }));
 
     try {
       await likePostById(postId);
-      set((state) => ({
-        userPosts: state.userPosts.map((p) =>
-          p.id === postId ? { ...p, isLiked: true, likesCount: (p.likesCount || 0) + 1 } : p,
-        ),
-      }));
-
-      set({ isLoading: false });
     } catch (error) {
-      set((state) => ({
-        userPosts: state.userPosts.map((p) =>
-          p.id === postId
-            ? { ...p, isLiked: false, likesCount: Math.max(0, p.likesCount || 1) }
-            : p,
-        ),
-      }));
-      set({ isLoading: false });
-
-      const message = getErrorMessage(error, "Like Post failed");
-      throw new Error(message);
-    }
-  },
-  unLikePost: async (postId) => {
-    set({ isLoading: true, error: null });
-    try {
-      await unlikePostById(postId);
       set((state) => ({
         userPosts: state.userPosts.map((p) =>
           p.id === postId
@@ -280,79 +286,88 @@ export const usePostStore = create<State & Actions>()((set, get) => ({
             : p,
         ),
       }));
-      set({ isLoading: false });
+
+      const message = getErrorMessage(error, "Like Post failed");
+      set({ error: message });
+      throw new Error(message);
+    }
+  },
+  unLikePost: async (postId) => {
+    set({ error: null });
+    set((state) => ({
+      userPosts: state.userPosts.map((p) =>
+        p.id === postId
+          ? { ...p, isLiked: false, likesCount: Math.max(0, (p.likesCount || 1) - 1) }
+          : p,
+      ),
+    }));
+
+    try {
+      await unlikePostById(postId);
     } catch (error) {
-      const message = getErrorMessage(error, "Unlike Post failed");
       set((state) => ({
         userPosts: state.userPosts.map((p) =>
-          p.id === postId ? { ...p, isLiked: true, likesCount: Math.max(0, p.likesCount || 1) } : p,
+          p.id === postId ? { ...p, isLiked: true, likesCount: (p.likesCount || 0) + 1 } : p,
         ),
       }));
-      set({
-        isLoading: false,
-        error: message,
-      });
 
+      const message = getErrorMessage(error, "Unlike Post failed");
+      set({ error: message });
       throw new Error(message);
     }
   },
 
   bookmarkPost: async (postId) => {
-    set({ isLoading: true, error: null });
+    set({ error: null });
+    set((state) => ({
+      userPosts: state.userPosts.map((p) => (p.id === postId ? { ...p, isBookmarked: true } : p)),
+    }));
+
     try {
       await bookmarkById(postId);
-      set((state) => ({
-        userPosts: state.userPosts.map((p) => (p.id === postId ? { ...p, isBookmarked: true } : p)),
-      }));
-      set({ isLoading: false });
     } catch (error) {
-      const message = getErrorMessage(error, "Bookmark Post failed");
       set((state) => ({
         userPosts: state.userPosts.map((p) =>
           p.id === postId ? { ...p, isBookmarked: false } : p,
         ),
       }));
-      set({
-        isLoading: false,
-        error: message,
-      });
+
+      const message = getErrorMessage(error, "Bookmark Post failed");
+      set({ error: message });
       throw new Error(message);
     }
   },
   unBookmarkPost: async (postId) => {
-    set({ isLoading: true, error: null });
+    set({ error: null });
+    set((state) => ({
+      userPosts: state.userPosts.map((p) =>
+        p.id === postId ? { ...p, isBookmarked: false } : p,
+      ),
+    }));
+
     try {
       await unBookmarkById(postId);
-      set((state) => ({
-        userPosts: state.userPosts.map((p) =>
-          p.id === postId ? { ...p, isBookmarked: false } : p,
-        ),
-      }));
-      set({ isLoading: false });
     } catch (error) {
-      const message = getErrorMessage(error, "Unbookmark Post failed");
-
       set((state) => ({
         userPosts: state.userPosts.map((p) => (p.id === postId ? { ...p, isBookmarked: true } : p)),
       }));
-      set({
-        isLoading: false,
-        error: message,
-      });
 
+      const message = getErrorMessage(error, "Unbookmark Post failed");
+      set({ error: message });
       throw new Error(message);
     }
   },
 
+  // Uses isLoadingComments, not the feed's isLoading — see its declaration.
   fetchPostComments: async (postId) => {
-    set({ isLoading: true, error: null });
+    set({ isLoadingComments: true, error: null });
     try {
       const result = await getComments(postId);
-      set({ isLoading: false, postComments: result.data });
+      set({ isLoadingComments: false, postComments: result.data });
     } catch (error) {
       const message = getErrorMessage(error, "Fetch Post Comments failed");
       set({
-        isLoading: false,
+        isLoadingComments: false,
         error: message,
       });
 
@@ -360,16 +375,16 @@ export const usePostStore = create<State & Actions>()((set, get) => ({
     }
   },
   addCommentToPost: async (postId, content) => {
-    set({ isLoading: true, error: null });
+    set({ isLoadingComments: true, error: null });
     try {
       await addComment(postId, content);
       await get().fetchPostComments(postId);
-      await get().fetchUserPosts();
-      set({ isLoading: false });
+      await get().fetchUserPosts(undefined, true, true);
+      set({ isLoadingComments: false });
     } catch (error) {
       const message = getErrorMessage(error, "Add Comment to Post failed");
       set({
-        isLoading: false,
+        isLoadingComments: false,
         error: message,
       });
 
@@ -377,16 +392,16 @@ export const usePostStore = create<State & Actions>()((set, get) => ({
     }
   },
   removeCommentFromPost: async (postId, commentId) => {
-    set({ isLoading: true, error: null });
+    set({ isLoadingComments: true, error: null });
     try {
       await deleteComment(commentId);
       await get().fetchPostComments(postId);
-      await get().fetchUserPosts();
-      set({ isLoading: false });
+      await get().fetchUserPosts(undefined, true, true);
+      set({ isLoadingComments: false });
     } catch (error) {
       const message = getErrorMessage(error, "Remove Comment from Post failed");
       set({
-        isLoading: false,
+        isLoadingComments: false,
         error: message,
       });
 
@@ -394,38 +409,37 @@ export const usePostStore = create<State & Actions>()((set, get) => ({
     }
   },
 
+  // No loading flag: the feed refetch below already gives visible feedback
+  // (the post's option counts update), and gating this on the shared
+  // isLoading used to blank the whole feed for every vote.
   voteOnPollPost: async (postId, optionId) => {
-    set({ isLoading: true, error: null });
+    set({ error: null });
     try {
       await voteOnPoll(postId, optionId);
-      await get().fetchUserPosts();
-      set({ isLoading: false });
+      await get().fetchUserPosts(undefined, true, true);
     } catch (error) {
       const message = getErrorMessage(error, "Vote on Post failed");
-      set({
-        isLoading: false,
-        error: message,
-      });
+      set({ error: message });
       throw new Error(message);
     }
   },
   replyToCommmentWithId: async (postId, request) => {
-    set({ isLoading: true, error: null });
+    set({ isLoadingComments: true, error: null });
     try {
       await replyToComment(postId, request);
       await get().fetchPostComments(postId);
-      set({ isLoading: false });
+      set({ isLoadingComments: false });
     } catch (error) {
       const message = getErrorMessage(error, "Reply on Post failed");
       set({
-        isLoading: false,
+        isLoadingComments: false,
         error: message,
       });
       throw new Error(message);
     }
   },
   fetchCommentReplies: async (commentId) => {
-    set({ isLoading: true, error: null, postReplies: [] });
+    set({ isLoadingComments: true, error: null, postReplies: [] });
     try {
       const response = await getCommentReplies(commentId);
       set({ postReplies: response.data.replies });
@@ -435,7 +449,7 @@ export const usePostStore = create<State & Actions>()((set, get) => ({
         error: message,
       });
     } finally {
-      set({ isLoading: false });
+      set({ isLoadingComments: false });
     }
   },
   searchUserPosts: async (

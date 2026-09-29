@@ -13,6 +13,7 @@ import SocialPost from "@/components/social/SocialPost";
 import { usePostStore } from "@/stores/postStore";
 import EmptyView from "@/components/ui/empty-view";
 import PostCard from "@/components/social/PostCard";
+import { PostFeedSkeleton } from "@/components/social/PostCardSkeleton";
 import { verticalScale } from "@/utils/scale";
 import { LocalizedStrings } from "@/i18n/LocalizedStrings";
 import { useNotificationStore } from "@/stores/notificationStore";
@@ -256,7 +257,6 @@ export default function CommunityScreen() {
       style={[themedStyles.screen, themedStyles.contentContainer]}
       edges={["top"]}
     >
-      {isLoading && <Loader />}
       <>
         <ThemeStatusBar style={theme.mode === "dark" ? "light" : "dark"} />
  
@@ -278,19 +278,29 @@ export default function CommunityScreen() {
           />
         </View>
  
-        <FlatList
-          data={userPosts}
-          extraData={userPosts}
-          keyExtractor={keyExtractor}
-          showsVerticalScrollIndicator={false}
-          renderItem={renderPostItem}
-          onEndReached={handleLoadMore}
-          onEndReachedThreshold={0.5}
-          contentContainerStyle={{ flexGrow: 1 }}
-          refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />}
-          ListFooterComponent={renderFooterComponent}
-          ListEmptyComponent={renderEmptyComponent}
-        />
+        {isLoading && userPosts.length === 0 ? (
+          // Cold load (first mount, or a filter/search switch that left no
+          // cached posts to show) — a skeleton feed in place of the FlatList,
+          // instead of a full-screen loader that used to hide the header,
+          // search box and filter tabs behind a backdrop for every load.
+          <View style={{ paddingHorizontal: theme.spacing.lg }}>
+            <PostFeedSkeleton />
+          </View>
+        ) : (
+          <FlatList
+            data={userPosts}
+            extraData={userPosts}
+            keyExtractor={keyExtractor}
+            showsVerticalScrollIndicator={false}
+            renderItem={renderPostItem}
+            onEndReached={handleLoadMore}
+            onEndReachedThreshold={0.5}
+            contentContainerStyle={{ flexGrow: 1 }}
+            refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />}
+            ListFooterComponent={renderFooterComponent}
+            ListEmptyComponent={renderEmptyComponent}
+          />
+        )}
  
         <SocialPost />
       </>

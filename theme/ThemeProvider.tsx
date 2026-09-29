@@ -18,21 +18,17 @@ export const ThemeContext = createContext<ThemeContextType>({
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const deviceColorScheme = useColorScheme();
-  const {
-    mode: themeMode,
-    systemPrefersDark,
-    setSystemPrefersDark,
-    setThemeMode,
-    toggleTheme,
-  } = useThemeStore();
+  // mode/systemPrefersDark themselves aren't read while locked to light (see
+  // below) — only their setters, so the store stays populated for whenever
+  // dark mode is re-enabled.
+  const { setSystemPrefersDark, setThemeMode, toggleTheme } = useThemeStore();
 
-  // Determine which theme mode to use
-  const resolvedMode = useMemo(() => {
-    if (themeMode === "system") {
-      return systemPrefersDark ? "light" : "light";
-    }
-    return themeMode;
-  }, [themeMode, systemPrefersDark]);
+  // Locked to light per brief §Priority 3 until a proper dark theme ships —
+  // see the comment on userInterfaceStyle in app.config.ts. themeMode/
+  // systemPrefersDark are still tracked (persisted store, system-scheme
+  // listener below) so re-enabling dark mode later is a one-line change
+  // here, not a re-plumb.
+  const resolvedMode = "light";
 
   // Create theme object based on resolved mode
   const theme = useMemo(() => {
