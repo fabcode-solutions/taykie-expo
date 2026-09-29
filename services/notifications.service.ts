@@ -162,17 +162,30 @@ export async function handleLidOpenResponse(
 // only appears in the unconfirmed list, with no late push (brief P1.7).
 export const LID_LIVE_WINDOW_MS = 5 * 60 * 1000;
 
+/**
+ * Newly-created (not merged into an existing one) lid events that are still
+ * recent enough to treat as "just happened" — shared by the OS notification
+ * path below and the in-app prompt (see bleStore's F6 handler), so both use
+ * the exact same "is this fresh" rule.
+ */
+export function getFreshLidEvents(
+  results: { event: LidOpenEvent; isNew: boolean }[],
+  now: Date = new Date(),
+): LidOpenEvent[] {
+  return results
+    .filter(({ isNew }) => isNew)
+    .map(({ event }) => event)
+    .filter((event) => now.getTime() - new Date(event.openedAt).getTime() <= LID_LIVE_WINDOW_MS);
+}
+
 /** Raises the notification for freshly created lid events that are still recent. */
 export async function notifyNewLidEvents(
   results: { event: LidOpenEvent; isNew: boolean }[],
   now: Date = new Date(),
 ): Promise<void> {
-  for (const { event, isNew } of results) {
-    if (!isNew) continue;
-    const openedAt = new Date(event.openedAt);
-    if (now.getTime() - openedAt.getTime() > LID_LIVE_WINDOW_MS) continue;
+  for (const event of getFreshLidEvents(results, now)) {
     try {
-      await showLidOpenNotification(event.id, openedAt);
+      await showLidOpenNotification(event.id, new Date(event.openedAt));
     } catch (error) {
       console.error("Failed to show lid-open notification:", error);
     }

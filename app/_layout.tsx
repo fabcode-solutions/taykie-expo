@@ -30,6 +30,7 @@ import {
   useNotificationStore,
 } from "@/stores/notificationStore";
 import { InAppBanner } from "@/components/inAppBanner";
+import { LidOpenPrompt } from "@/components/LidOpenPrompt";
 import { setupNotificationChannels } from "@/hooks/usePushNotifications";
 import {
   isDosageReminder,
@@ -276,6 +277,7 @@ function RootLayoutNav() {
                     ))}
                   </Stack>
                   <InAppBanner />
+                  <LidOpenPrompt />
                 </AlertProvider>
               </ThemeProvider>
             </QueryClientProvider>
