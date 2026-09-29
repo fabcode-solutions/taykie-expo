@@ -18,6 +18,13 @@ export function useUnconfirmedLidEvents() {
     queryKey: lidEventKeys.unconfirmed(),
     queryFn: getUnconfirmedLidEvents,
     refetchOnMount: "always",
+    // LidOpenPrompt (mounted once, globally) relies on this to notice an
+    // unconfirmed event that shows up without any explicit invalidation
+    // nearby — e.g. one synced while the app was briefly backgrounded. The
+    // explicit invalidateQueries calls elsewhere (after a history upload, or
+    // resolving an event) still make the common case instant; this is the
+    // safety net for everything else.
+    refetchInterval: 30_000,
   });
 }
 

@@ -332,8 +332,7 @@ import {
 } from "@/services/api/device";
 import { queryClient } from "@/hooks/queries/queryClient";
 import { lidEventKeys } from "@/hooks/queries/lidEvents";
-import { notifyNewLidEvents, getFreshLidEvents } from "@/services/notifications.service";
-import { useLidPromptStore } from "@/stores/lidPromptStore";
+import { notifyNewLidEvents } from "@/services/notifications.service";
 
 interface BLEState {
   // Scanning state
@@ -658,19 +657,10 @@ export const useBLEStore = create<BLEState & BLEAction>()(
 
                 // Lid opens found in this batch: notify for fresh ones, and refresh
                 // the unconfirmed list (missed opens stay silent, brief P1.7).
-                const lidEventResults = uploadResponse?.data?.lidEvents ?? [];
-                await notifyNewLidEvents(lidEventResults);
+                // LidOpenPrompt (the in-app modal) reacts to this same
+                // invalidated query on its own — it isn't triggered from here.
+                await notifyNewLidEvents(uploadResponse?.data?.lidEvents ?? []);
                 queryClient.invalidateQueries({ queryKey: lidEventKeys.all });
-
-                // Also prompt in-app immediately, rather than only relying on
-                // the OS notification actually being delivered/tapped — same
-                // "fresh" rule as the notification above, via getFreshLidEvents.
-                const [freshEvent] = getFreshLidEvents(lidEventResults);
-                if (freshEvent) {
-                  useLidPromptStore
-                    .getState()
-                    .show({ id: freshEvent.id, openedAt: freshEvent.openedAt });
-                }
 
                 set({ historySequenceOffset: offset + records.length });
                 console.log("Backend saved", records.length, "history records");

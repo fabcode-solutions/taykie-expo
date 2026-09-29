@@ -5,11 +5,8 @@ import { useTranslation } from "react-i18next";
 import { BottomDrawer } from "./BottomDrawer";
 import { ThemeText } from "./primitives";
 import { Button } from "./ui/button";
-import { useLidPromptStore } from "@/stores/lidPromptStore";
-import { resolveLidEvent } from "@/services/api/device";
+import { useUnconfirmedLidEvents, useResolveLidEvent } from "@/hooks/queries/lidEvents";
 import { formatOpenTime } from "@/services/notifications.service";
-import { queryClient } from "@/hooks/queries/queryClient";
-import { lidEventKeys } from "@/hooks/queries/lidEvents";
 import { LocalizedStrings } from "@/i18n/LocalizedStrings";
 import { useTheme } from "@/theme";
 import { useAlert } from "@/provider/AlertProvider";
@@ -17,20 +14,38 @@ import { AlertPresets } from "@/utils/alert";
 import { moderateScale, verticalScale } from "@/utils/scale";
 
 /**
- * The brief's "What did you do?" prompt, shown in-app the moment a fresh lid
- * open is detected — not just as a system notification, which depends on the
- * OS actually delivering/displaying it (channel setup, foreground behavior,
- * etc.). Mounted once at the root layout, next to InAppBanner, so it can pop
- * up over whatever screen is open. Backed by useLidPromptStore, set from the
- * same place that triggers the OS notification (see bleStore's F6 handler).
+ * The brief's "What did you do?" prompt for ANY still-unconfirmed lid event —
+ * not only one just detected this session. Mounted once at the root layout
+ * (next to InAppBanner), so it renders as an overlay over whatever screen is
+ * open, on its own, independent of navigation.
+ *
+ * Driven directly by useUnconfirmedLidEvents (oldest first, per the backend's
+ * own ordering) rather than a separate "is this fresh" signal: as long as
+ * that list is non-empty, something here is unconfirmed and gets prompted
+ * for. That list is invalidated after every history upload and after
+ * resolving an event (see bleStore.ts / this file's own mutation), and
+ * additionally polled every 30s as a safety net — see the hook.
  */
 export function LidOpenPrompt() {
   const { t } = useTranslation();
   const theme = useTheme();
   const alert = useAlert();
-  const activeEvent = useLidPromptStore((s) => s.activeEvent);
-  const hide = useLidPromptStore((s) => s.hide);
-  const [isResolving, setIsResolving] = useState(false);
+  const { data: unconfirmedEvents } = useUnconfirmedLidEvents();
+  const resolveMutation = useResolveLidEvent();
+
+  // Dismissed here means "not right now" — the event stays unconfirmed on
+  // the backend (brief §5), so it's still in `unconfirmedEvents` on the next
+  // fetch. Tracking dismissals only in local, unpersisted state is what
+  // keeps it from being re-shown in an instant loop the moment it's
+  // dismissed, while still coming back next time the app opens (a fresh
+  // mount starts with an empty set) — matching "still unconfirmed -> still
+  // prompted for" without nagging mid-session.
+  const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
+
+  const activeEvent = useMemo(
+    () => unconfirmedEvents?.find((e) => !dismissedIds.has(e.id)) ?? null,
+    [unconfirmedEvents, dismissedIds],
+  );
 
   const openedAt = useMemo(
     () => (activeEvent ? new Date(activeEvent.openedAt) : null),
@@ -38,36 +53,27 @@ export function LidOpenPrompt() {
   );
 
   const handleClose = useCallback(() => {
-    // Dismiss / swipe-away / backdrop tap: brief §5 — stays unconfirmed,
-    // resolvable later from Device > "Unconfirmed opens". No API call.
-    hide();
-  }, [hide]);
+    if (!activeEvent) return;
+    setDismissedIds((prev) => new Set(prev).add(activeEvent.id));
+  }, [activeEvent]);
 
   const handleTookDose = useCallback(() => {
     if (!activeEvent) return;
     const eventId = activeEvent.id;
-    hide();
     router.push({
       pathname: "/lid-events/[eventId]",
       params: { eventId, openedAt: activeEvent.openedAt },
     } as Href);
-  }, [activeEvent, hide]);
+  }, [activeEvent]);
 
   const handleRefilled = useCallback(async () => {
     if (!activeEvent) return;
-    setIsResolving(true);
     try {
-      await resolveLidEvent(activeEvent.id, { action: "refill" });
-      queryClient.invalidateQueries({ queryKey: lidEventKeys.all });
-      hide();
+      await resolveMutation.mutateAsync({ eventId: activeEvent.id, request: { action: "refill" } });
     } catch (error: any) {
-      alert.show(
-        AlertPresets.error(t(LocalizedStrings.common.error), error?.message),
-      );
-    } finally {
-      setIsResolving(false);
+      alert.show(AlertPresets.error(t(LocalizedStrings.common.error), error?.message));
     }
-  }, [activeEvent, hide, alert, t]);
+  }, [activeEvent, resolveMutation, alert, t]);
 
   return (
     <BottomDrawer
@@ -90,20 +96,20 @@ export function LidOpenPrompt() {
           <Button
             title={t(LocalizedStrings.lidEvent.tookDose)}
             onPress={handleTookDose}
-            disabled={isResolving}
+            disabled={resolveMutation.isPending}
           />
           <Button
             title={t(LocalizedStrings.lidEvent.refilled)}
             variant="outline"
             onPress={handleRefilled}
-            loading={isResolving}
-            disabled={isResolving}
+            loading={resolveMutation.isPending}
+            disabled={resolveMutation.isPending}
           />
           <Button
             title={t(LocalizedStrings.lidEvent.dismiss)}
             variant="text"
             onPress={handleClose}
-            disabled={isResolving}
+            disabled={resolveMutation.isPending}
           />
         </View>
       </View>
