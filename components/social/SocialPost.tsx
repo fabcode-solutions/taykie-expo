@@ -6,25 +6,28 @@ import BlurModal from "../ui/Modal";
 import { useTheme } from "@/theme";
 import AlertModal from "../ui/Alert/AlertModal";
 import { moderateScale } from "@/utils/scale";
+import { useTranslation } from "react-i18next";
+import { LocalizedStrings } from "@/i18n/LocalizedStrings";
 
 const SocialPost = () => {
   const theme = useTheme();
+  const { t } = useTranslation();
   const [searchVisible, setSearchVisible] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
 
   return (
     <>
       <BlurModal
-        heading="Search"
+        heading={t(LocalizedStrings.schedule.placeHolders.search)}
         visible={searchVisible}
         onRequestClose={() => setSearchVisible(false)}
       >
-        <Text>Text</Text>
+        <Text>{t(LocalizedStrings.community.post.textPost)}</Text>
       </BlurModal>
 
       <AlertModal
         visible={showSuccess}
-        heading="Successfully Created!"
+        heading={t(LocalizedStrings.community.post.postCreated)}
         onRequestClose={() => setShowSuccess(false)}
       />
       <TouchableOpacity

@@ -16,6 +16,8 @@ import { useTheme } from "@/theme";
 import { useInfiniteReplies } from "@/hooks/queries/useComments";
 import type { Comment } from "@/types/comment.types";
 import { moderateScale, scale, verticalScale } from "@/utils/scale";
+import { useTranslation } from "react-i18next";
+import { LocalizedStrings } from "@/i18n/LocalizedStrings";
 
 /**
  * RepliesScreen - Full screen for viewing all replies to a parent comment
@@ -33,6 +35,7 @@ const RepliesScreen: React.FC = () => {
   const { commentId } = useLocalSearchParams<{ commentId: string }>();
   const router = useRouter();
   const theme = useTheme();
+  const { t } = useTranslation();
   const [replyToCommentId, setReplyToCommentId] = useState<string | undefined>();
 
   // Fetch replies with infinite scroll
@@ -89,28 +92,28 @@ const RepliesScreen: React.FC = () => {
       <>
         <View style={styles.parentCommentContainer}>
           <Text style={[styles.sectionTitle, { color: theme.colors.text.secondary }]}>
-            Original Comment
+            {t(LocalizedStrings.community.post.originalComment)}
           </Text>
           <CommentItem comment={parentComment} onReply={handleReply} showRepliesButton={false} />
         </View>
         <View style={styles.repliesSeparator}>
           <Text style={[styles.sectionTitle, { color: theme.colors.text.secondary }]}>
-            Replies ({replies.length})
+            {t(LocalizedStrings.community.post.repliesCount, { count: replies.length })}
           </Text>
         </View>
       </>
     );
-  }, [parentComment, replies.length, handleReply, theme]);
+  }, [parentComment, replies.length, handleReply, theme, t]);
 
   const renderEmpty = useCallback(
     () => (
       <View style={styles.emptyContainer}>
         <Text style={[styles.emptyText, { color: theme.colors.text.secondary }]}>
-          No replies yet. Be the first to reply!
+          {t(LocalizedStrings.community.post.no_replies_yet)}
         </Text>
       </View>
     ),
-    [theme],
+    [theme, t],
   );
 
   const renderFooter = useCallback(() => {
@@ -130,11 +133,11 @@ const RepliesScreen: React.FC = () => {
       >
         <View style={styles.errorContainer}>
           <Text style={[styles.errorText, { color: theme.colors.error.main }]}>
-            Comment ID is required
+            {t(LocalizedStrings.community.post.comment_id_required)}
           </Text>
           <Pressable onPress={handleClose} style={styles.closeButton}>
             <Text style={[styles.closeButtonText, { color: theme.colors.primary.main }]}>
-              Go Back
+              {t(LocalizedStrings.home.extras.goBack)}
             </Text>
           </Pressable>
         </View>
@@ -150,11 +153,15 @@ const RepliesScreen: React.FC = () => {
           onPress={handleClose}
           style={styles.backButton}
           accessibilityRole="button"
-          accessibilityLabel="Go back"
+          accessibilityLabel={t(LocalizedStrings.common.goBack)}
         >
-          <Text style={[styles.backButtonText, { color: theme.colors.primary.main }]}>← Back</Text>
+          <Text style={[styles.backButtonText, { color: theme.colors.primary.main }]}>
+            ← {t(LocalizedStrings.navigation.back)}
+          </Text>
         </Pressable>
-        <Text style={[styles.headerTitle, { color: theme.colors.text.primary }]}>Replies</Text>
+        <Text style={[styles.headerTitle, { color: theme.colors.text.primary }]}>
+          {t(LocalizedStrings.community.post.replies)}
+        </Text>
         <View style={styles.headerSpacer} />
       </View>
 
@@ -163,13 +170,13 @@ const RepliesScreen: React.FC = () => {
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={theme.colors.primary.main} />
           <Text style={[styles.loadingText, { color: theme.colors.text.secondary }]}>
-            Loading replies...
+            {t(LocalizedStrings.community.post.loading_replies)}
           </Text>
         </View>
       ) : error ? (
         <View style={styles.errorContainer}>
           <Text style={[styles.errorText, { color: theme.colors.error.main }]}>
-            Failed to load replies. Pull to refresh.
+            {t(LocalizedStrings.community.post.load_replies_failed)}
           </Text>
         </View>
       ) : (
@@ -205,7 +212,7 @@ const RepliesScreen: React.FC = () => {
       <CommentInput
         postId={parentComment?.postId || ""}
         parentCommentId={commentId}
-        placeholder="Write a reply..."
+        placeholder={t(LocalizedStrings.community.post.write_reply)}
         onCommentCreated={handleCommentCreated}
         autoFocus={false}
       />

@@ -24,6 +24,10 @@ import {
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { CardListSkeleton } from "@/components/profile/ProfileSkeletons";
+
+const getErrorMessage = (error: unknown) =>
+  error instanceof Error ? error.message : String(error);
 
 const ProductList = () => {
   const theme = useTheme();
@@ -33,15 +37,13 @@ const ProductList = () => {
   const [selectedProduct, setSelectedproduct] = useState<Medication | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const styles = useMemo(() => createStyles(theme), [theme]);
-  const {
-    fetchUserProducts,
-    userProducts,
-    createProduct,
-    updateProduct,
-    deleteProductById,
-    isLoading,
-    hasMore,
-  } = useProductStore();
+  const fetchUserProducts = useProductStore((s) => s.fetchUserProducts);
+  const userProducts = useProductStore((s) => s.userProducts);
+  const createProduct = useProductStore((s) => s.createProduct);
+  const updateProduct = useProductStore((s) => s.updateProduct);
+  const deleteProductById = useProductStore((s) => s.deleteProductById);
+  const isLoading = useProductStore((s) => s.isLoading);
+  const hasMore = useProductStore((s) => s.hasMore);
 
   useEffect(() => {
     fetchProducts();
@@ -53,7 +55,7 @@ const ProductList = () => {
     try {
       await fetchUserProducts(isRefresh);
     } catch (error) {
-      alert.show(AlertPresets.error(t(LocalizedStrings.common.error), error.message));
+      alert.show(AlertPresets.error(t(LocalizedStrings.common.error), getErrorMessage(error)));
     }
   }, []);
 
@@ -83,7 +85,7 @@ const ProductList = () => {
           ]);
         }
       } catch (error) {
-        alert.show(AlertPresets.error(t(LocalizedStrings.common.error), error.message));
+        alert.show(AlertPresets.error(t(LocalizedStrings.common.error), getErrorMessage(error)));
       }
     },
     [selectedProduct, t],
@@ -101,7 +103,7 @@ const ProductList = () => {
       await createProduct(request);
       setAddVisible(false);
     } catch (error) {
-      alert.show(AlertPresets.error(t(LocalizedStrings.common.error), error.message));
+      alert.show(AlertPresets.error(t(LocalizedStrings.common.error), getErrorMessage(error)));
     }
   }, []);
 
@@ -119,7 +121,9 @@ const ProductList = () => {
               await deleteProductById(product.id);
               await fetchProducts(true);
             } catch (error) {
-              alert.show(AlertPresets.error(t(LocalizedStrings.common.error), error.message));
+              alert.show(
+                AlertPresets.error(t(LocalizedStrings.common.error), getErrorMessage(error)),
+              );
             }
           },
         },
@@ -137,6 +141,24 @@ const ProductList = () => {
     [],
   );
 
+  const handleEditProduct = useCallback((item: Medication) => {
+    setSelectedproduct(item);
+    setEditVisible(true);
+  }, []);
+  const handleOpenAdd = useCallback(() => setAddVisible(true), []);
+
+  const renderProduct = useCallback(
+    ({ item }: { item: Medication }) => (
+      <ProductRow item={item} onEdit={handleEditProduct} onDelete={handleDeleteProduct} />
+    ),
+    [handleEditProduct, handleDeleteProduct],
+  );
+
+  const refreshControl = useMemo(
+    () => <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />,
+    [isRefreshing, handleRefresh],
+  );
+
   return (
     <SafeAreaScreen style={styles.safeArea}>
       <View style={[styles.row, styles.headerRow]}>
@@ -146,7 +168,7 @@ const ProductList = () => {
           </View>
         </TouchableOpacity>
         <TouchableOpacity
-          onPress={() => setAddVisible(true)}
+          onPress={handleOpenAdd}
           style={styles.addButton}
           activeOpacity={0.7}
           accessibilityRole="button"
@@ -161,25 +183,25 @@ const ProductList = () => {
       </ThemeText>
       <FlatList
         data={userProducts}
-        refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />}
-        extraData={userProducts}
+        refreshControl={refreshControl}
         showsVerticalScrollIndicator={false}
         keyExtractor={keyExtractor}
-        renderItem={({ item }) => (
-          <ProductItem
-            name={item.name}
-            onEdit={() => {
-              setSelectedproduct(item);
-              setEditVisible(true);
-            }}
-            onDelete={() => handleDeleteProduct(item)}
-          />
-        )}
+        renderItem={renderProduct}
         contentContainerStyle={{ gap: verticalScale(16) }}
         onEndReached={handleLoadMore}
         onEndReachedThreshold={0.4}
-        ListFooterComponent={isLoading ? <Loader fullScreen={false} size="small" /> : null}
-        ListEmptyComponent={<EmptyView message={t(LocalizedStrings.product.no_product_found)} />}
+        ListFooterComponent={
+          isLoading && userProducts.length > 0 ? (
+            <CardListSkeleton variant="product" count={1} />
+          ) : null
+        }
+        ListEmptyComponent={
+          isLoading ? (
+            <CardListSkeleton variant="product" />
+          ) : (
+            <EmptyView message={t(LocalizedStrings.product.no_product_found)} />
+          )
+        }
       />
 
       <BlurModal
@@ -207,6 +229,25 @@ const ProductList = () => {
     </SafeAreaScreen>
   );
 };
+// Gives each ProductItem stable onEdit/onDelete callbacks instead of per-render closures.
+const ProductRow = memo(
+  ({
+    item,
+    onEdit,
+    onDelete,
+  }: {
+    item: Medication;
+    onEdit: (item: Medication) => void;
+    onDelete: (item: Medication) => void;
+  }) => {
+    const handleEdit = useCallback(() => onEdit(item), [onEdit, item]);
+    const handleDelete = useCallback(() => onDelete(item), [onDelete, item]);
+    return <ProductItem name={item.name} onEdit={handleEdit} onDelete={handleDelete} />;
+  },
+);
+
+ProductRow.displayName = "ProductRow";
+
 const ProductItem = memo(
   ({ name, onEdit, onDelete }: { name: string; onEdit: () => void; onDelete: () => void }) => {
     const theme = useTheme();

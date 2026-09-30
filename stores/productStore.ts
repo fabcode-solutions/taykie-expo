@@ -13,6 +13,8 @@ import {
 } from "@/hooks/queries/products";
 import { create } from "zustand";
 import { getErrorMessage } from "./postStore";
+import { t } from "i18next";
+import { LocalizedStrings } from "@/i18n/LocalizedStrings";
 
 export interface User {
   id: string;
@@ -84,7 +86,7 @@ export const useProductStore = create<State & Actions>()(
           const message = getErrorMessage(error);
           set({
             isLoading: false,
-            error: error instanceof Error ? error.message : "Create Product failed",
+            error: error instanceof Error ? error.message : t(LocalizedStrings.errors.api.createProduct),
           });
           throw Error(message);
         }
@@ -98,7 +100,7 @@ export const useProductStore = create<State & Actions>()(
           const message = getErrorMessage(error);
           set({
             isLoading: false,
-            error: error instanceof Error ? error.message : "Fetch Public Products failed",
+            error: error instanceof Error ? error.message : t(LocalizedStrings.errors.api.fetchPublicProducts),
           });
           throw Error(message);
         }
@@ -144,7 +146,7 @@ export const useProductStore = create<State & Actions>()(
           const message = getErrorMessage(error);
           set({
             isLoading: false,
-            error: error instanceof Error ? error.message : "Fetch Product By ID failed",
+            error: error instanceof Error ? error.message : t(LocalizedStrings.errors.api.fetchProduct),
           });
           throw Error(message);
         }
@@ -159,7 +161,7 @@ export const useProductStore = create<State & Actions>()(
           const message = getErrorMessage(error);
           set({
             isLoading: false,
-            error: error instanceof Error ? error.message : "Delete Product failed",
+            error: error instanceof Error ? error.message : t(LocalizedStrings.errors.api.deleteProduct),
           });
           throw Error(message);
         }
@@ -176,7 +178,7 @@ export const useProductStore = create<State & Actions>()(
           const message = getErrorMessage(error);
           set({
             isLoading: false,
-            error: error instanceof Error ? error.message : "Update Product failed",
+            error: error instanceof Error ? error.message : t(LocalizedStrings.errors.api.updateProduct),
           });
           throw Error(message);
         }
@@ -202,7 +204,7 @@ export const useProductStore = create<State & Actions>()(
           const message = getErrorMessage(error);
           set({
             isLoading: false,
-            error: error instanceof Error ? error.message : "Create Product Log failed",
+            error: error instanceof Error ? error.message : t(LocalizedStrings.errors.api.createProductLog),
           });
           throw Error(message);
         }

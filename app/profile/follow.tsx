@@ -15,7 +15,6 @@ import { fontFamily, Theme, useTheme } from "@/theme";
 import { useLocalSearchParams } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuthStore } from "@/stores/authStore";
-import { ActivityIndicator } from "react-native-paper";
 import { Ionicons } from "@expo/vector-icons";
 import IconSearch from "@/components/icons/IconSearch";
 import BackButton from "@/components/BackButton";
@@ -28,7 +27,91 @@ import { t } from "i18next";
 import { LocalizedStrings } from "@/i18n/LocalizedStrings";
 import { AlertPresets } from "@/utils/alert";
 import { useAlert } from "@/provider/AlertProvider";
-import AuthScreenLayout from "@/components/shared/layout/AuthScreenLayout";
+import { UserListSkeleton } from "@/components/profile/ProfileSkeletons";
+
+const getErrorMessage = (error: unknown) =>
+  error instanceof Error ? error.message : String(error);
+
+const getInitials = (name: string) => {
+  if (!name) return "?"; // Fallback if name is also missing
+  const names = name.trim().split(" ");
+  if (names.length === 1) return names[0].charAt(0).toUpperCase();
+  return (names[0].charAt(0) + names[names.length - 1].charAt(0)).toUpperCase();
+};
+
+const userKeyExtractor = (item: { id: string }) => item.id;
+
+interface FollowUser {
+  id: string;
+  firstName?: string;
+  lastName?: string;
+  avatarUrl?: string | null;
+  isFriend?: boolean;
+}
+
+interface UserRowProps {
+  item: FollowUser;
+  label: string;
+  onAction: (item: FollowUser) => void;
+  styles: ReturnType<typeof createStyles>;
+}
+
+// One row shared by the Following, Followers and suggestion lists; memoized so a
+// change to one row does not re-render the rest.
+const UserRow = React.memo(function UserRow({ item, label, onAction, styles }: UserRowProps) {
+  const handlePress = useCallback(() => onAction(item), [onAction, item]);
+  return (
+    <View style={styles.userItem}>
+      <View style={styles.userItemLeft}>
+        <TouchableOpacity style={styles.userItemInter}>
+          <View style={styles.userItemImage}>
+            {item.avatarUrl ? (
+              <Image source={{ uri: item.avatarUrl }} style={styles.userItemImage} />
+            ) : (
+              <ThemeText variant="manrope.body1Bold">
+                {getInitials(`${item.firstName} ${item.lastName}`)}
+              </ThemeText>
+            )}
+          </View>
+          <View>
+            <Text style={styles.userItemName}>{item.firstName}</Text>
+          </View>
+        </TouchableOpacity>
+      </View>
+      <TouchableOpacity style={styles.userItemBtn} onPress={handlePress}>
+        <Text style={styles.userItemBtnText}>{label}</Text>
+      </TouchableOpacity>
+    </View>
+  );
+});
+
+type FollowTabKey = "Followers" | "Following";
+
+interface FollowTabProps {
+  tabKey: FollowTabKey;
+  label: string;
+  count?: number;
+  active: boolean;
+  onSelect: (key: FollowTabKey) => void;
+  styles: ReturnType<typeof createStyles>;
+}
+
+const FollowTab = React.memo(function FollowTab({
+  tabKey,
+  label,
+  count,
+  active,
+  onSelect,
+  styles,
+}: FollowTabProps) {
+  const handlePress = useCallback(() => onSelect(tabKey), [onSelect, tabKey]);
+  return (
+    <Pressable onPress={handlePress} style={[styles.followTab, active && styles.followTabActive]}>
+      <Text style={[styles.followTabText, active && styles.followTabTextActive]}>{label}</Text>
+      <Text style={[styles.followTabText, active && styles.followTabTextActive]}>{count}</Text>
+    </Pressable>
+  );
+});
 
 export default function FollowScreen() {
   const params = useLocalSearchParams();
@@ -36,29 +119,25 @@ export default function FollowScreen() {
   const { type } = params;
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
-  const {
-    user,
-    stats,
-    isLoading,
-    fetchFollowersList,
-    fetchFollowingList,
-    followers,
-    following,
-    suggestionList,
-    followUserId,
-    unFollowUserId,
-    fetchSuggestionList,
-  } = useAuthStore();
-  const { sendNotification } = useNotificationStore();
-  const [activeTab, setActiveTab] = useState(type);
+  const user = useAuthStore((s) => s.user);
+  const stats = useAuthStore((s) => s.stats);
+  const isLoading = useAuthStore((s) => s.isLoading);
+  const fetchFollowersList = useAuthStore((s) => s.fetchFollowersList);
+  const fetchFollowingList = useAuthStore((s) => s.fetchFollowingList);
+  const followers = useAuthStore((s) => s.followers);
+  const following = useAuthStore((s) => s.following);
+  const suggestionList = useAuthStore((s) => s.suggestionList);
+  const followUserId = useAuthStore((s) => s.followUserId);
+  const unFollowUserId = useAuthStore((s) => s.unFollowUserId);
+  const fetchSuggestionList = useAuthStore((s) => s.fetchSuggestionList);
+  const sendNotification = useNotificationStore((s) => s.sendNotification);
+  // isLoading is shared with the list fetches, so follow/unfollow tracks its own busy
+  // flag: overlay for the action, skeletons for list loading.
+  const [isActionBusy, setIsActionBusy] = useState(false);
+  const isListLoading = isLoading && !isActionBusy;
+  const [activeTab, setActiveTab] = useState<string | string[] | undefined>(type);
+  const handleSelectTab = useCallback((key: FollowTabKey) => setActiveTab(key), []);
   const [searchQuery, setSearchQuery] = useState("");
-
-  const getInitials = (name: string) => {
-    if (!name) return "?"; // Fallback if name is also missing
-    const names = name.trim().split(" ");
-    if (names.length === 1) return names[0].charAt(0).toUpperCase();
-    return (names[0].charAt(0) + names[names.length - 1].charAt(0)).toUpperCase();
-  };
 
   useEffect(() => {
     if (activeTab === "Following") {
@@ -76,20 +155,29 @@ export default function FollowScreen() {
       await fetchFollowersList();
       await fetchSuggestionList();
     } catch (error) {
-      alert.show(AlertPresets.error(t(LocalizedStrings.common.error), error.message));
+      alert.show(AlertPresets.error(t(LocalizedStrings.common.error), getErrorMessage(error)));
     }
-  }, [stats, followers]);
+  }, [fetchFollowersList, fetchSuggestionList, alert]);
 
   const fetchUserFollowing = useCallback(async () => {
     try {
       await fetchFollowingList();
     } catch (error) {
-      alert.show(AlertPresets.error(t(LocalizedStrings.common.error), error.message));
+      alert.show(AlertPresets.error(t(LocalizedStrings.common.error), getErrorMessage(error)));
     }
-  }, [stats, following]);
+  }, [fetchFollowingList, alert]);
+
+  const createNotification = useCallback(async (request: NotificationRequest) => {
+    try {
+      await sendNotification(request);
+    } catch (error) {
+      alert.show(AlertPresets.error(t(LocalizedStrings.common.error), getErrorMessage(error)));
+    }
+  }, []);
 
   const handleFollowUnFollow = useCallback(
     async (userId: string) => {
+      setIsActionBusy(true);
       try {
         let message = "";
         let request: NotificationRequest = {
@@ -105,26 +193,76 @@ export default function FollowScreen() {
           request = {
             ...request,
             heading: t(LocalizedStrings.follow.unfollowed_you),
-            context: t("follow.unfollowed_User", { user: user?.firstName }),
+            context: t(LocalizedStrings.follow.unfollowed_user, { user: user?.firstName }),
           };
           message = await unFollowUserId(userId);
         }
         await createNotification(request);
         alert.show(AlertPresets.success(t(LocalizedStrings.common.success), message));
       } catch (error) {
-        alert.show(AlertPresets.error(t(LocalizedStrings.common.error), error.message));
+        alert.show(AlertPresets.error(t(LocalizedStrings.common.error), getErrorMessage(error)));
+      } finally {
+        setIsActionBusy(false);
       }
     },
-    [activeTab, t],
+    [activeTab, user, followUserId, unFollowUserId, createNotification, alert],
   );
 
-  const createNotification = useCallback(async (request: NotificationRequest) => {
-    try {
-      await sendNotification(request);
-    } catch (error) {
-      alert.show(AlertPresets.error(t(LocalizedStrings.common.error), error.message));
-    }
-  }, []);
+  const handleUnfollowUser = useCallback(
+    (item: FollowUser) => handleFollowUnFollow(item.id),
+    [handleFollowUnFollow],
+  );
+  const handleFollowerAction = useCallback(
+    (item: FollowUser) => {
+      if (!item.isFriend) {
+        handleFollowUnFollow(item.id);
+      } else {
+        Alert.alert(
+          t(LocalizedStrings.follow.message),
+          t(LocalizedStrings.follow.messagingComingSoon),
+        );
+      }
+    },
+    [handleFollowUnFollow],
+  );
+
+  const renderFollowing = useCallback(
+    ({ item }: { item: FollowUser }) => (
+      <UserRow
+        item={item}
+        label={t(LocalizedStrings.follow.unfollow)}
+        onAction={handleUnfollowUser}
+        styles={styles}
+      />
+    ),
+    [handleUnfollowUser, styles],
+  );
+  const renderFollower = useCallback(
+    ({ item }: { item: FollowUser }) => (
+      <UserRow
+        item={item}
+        label={
+          item.isFriend
+            ? t(LocalizedStrings.follow.message)
+            : t(LocalizedStrings.follow.follow_back)
+        }
+        onAction={handleFollowerAction}
+        styles={styles}
+      />
+    ),
+    [handleFollowerAction, styles],
+  );
+  const renderSuggestion = useCallback(
+    ({ item }: { item: FollowUser }) => (
+      <UserRow
+        item={item}
+        label={t(LocalizedStrings.follow.title)}
+        onAction={handleUnfollowUser}
+        styles={styles}
+      />
+    ),
+    [handleUnfollowUser, styles],
+  );
 
   const filteredList = useMemo(() => {
     const list = activeTab === "Following" ? following : followers;
@@ -144,7 +282,7 @@ export default function FollowScreen() {
 
   return (
     <>
-      {isLoading && <Loader />}
+      {isActionBusy && <Loader />}
       <Pressable onPress={Keyboard.dismiss} accessible={false}>
         <SafeAreaView style={styles.container}>
           <BackButton />
@@ -155,48 +293,22 @@ export default function FollowScreen() {
           </View>
           <View>
             <View style={styles.followTabs}>
-              <Pressable
-                onPress={() => setActiveTab("Followers")}
-                style={[styles.followTab, activeTab === "Followers" && styles.followTabActive]}
-              >
-                <Text
-                  style={[
-                    styles.followTabText,
-                    activeTab === "Followers" && styles.followTabTextActive,
-                  ]}
-                >
-                  {t(LocalizedStrings.follow.followers)}
-                </Text>
-                <Text
-                  style={[
-                    styles.followTabText,
-                    activeTab === "Followers" && styles.followTabTextActive,
-                  ]}
-                >
-                  {stats?.followersCount}
-                </Text>
-              </Pressable>
-              <Pressable
-                onPress={() => setActiveTab("Following")}
-                style={[styles.followTab, activeTab === "Following" && styles.followTabActive]}
-              >
-                <Text
-                  style={[
-                    styles.followTabText,
-                    activeTab === "Following" && styles.followTabTextActive,
-                  ]}
-                >
-                  {t(LocalizedStrings.follow.following)}
-                </Text>
-                <Text
-                  style={[
-                    styles.followTabText,
-                    activeTab === "Following" && styles.followTabTextActive,
-                  ]}
-                >
-                  {stats?.followingCount}
-                </Text>
-              </Pressable>
+              <FollowTab
+                tabKey="Followers"
+                label={t(LocalizedStrings.follow.followers)}
+                count={stats?.followersCount}
+                active={activeTab === "Followers"}
+                onSelect={handleSelectTab}
+                styles={styles}
+              />
+              <FollowTab
+                tabKey="Following"
+                label={t(LocalizedStrings.follow.following)}
+                count={stats?.followingCount}
+                active={activeTab === "Following"}
+                onSelect={handleSelectTab}
+                styles={styles}
+              />
             </View>
             {showSearchBar && (
               <View style={styles.searchWrapper}>
@@ -206,9 +318,7 @@ export default function FollowScreen() {
                   onChangeText={setSearchQuery}
                   leftIcon={<IconSearch />}
                   rightIcon={
-                    isLoading ? (
-                      <ActivityIndicator size="small" color={theme.colors.primary.main} />
-                    ) : searchQuery ? (
+                    searchQuery ? (
                       <TouchableOpacity onPress={handleClearSearch}>
                         <Ionicons
                           name="close-circle"
@@ -229,40 +339,17 @@ export default function FollowScreen() {
               <FlatList
                 style={{ height: "100%" }}
                 data={filteredList}
-                keyExtractor={(item) => item.id}
-                renderItem={({ item }) => (
-                  <View style={styles.userItem}>
-                    <View style={styles.userItemLeft}>
-                      <TouchableOpacity style={styles.userItemInter}>
-                        <View style={styles.userItemImage}>
-                          {item.avatarUrl ? (
-                            <Image source={{ uri: item.avatarUrl }} style={styles.userItemImage} />
-                          ) : (
-                            <ThemeText variant="manrope.body1Bold">
-                              {getInitials(`${item.firstName} ${item.lastName}`)}
-                            </ThemeText>
-                          )}
-                        </View>
-                        <View>
-                          <Text style={styles.userItemName}>{item.firstName}</Text>
-                        </View>
-                      </TouchableOpacity>
-                    </View>
-                    <TouchableOpacity
-                      style={styles.userItemBtn}
-                      onPress={() => handleFollowUnFollow(item.id)}
-                    >
-                      <Text style={styles.userItemBtnText}>
-                        {t(LocalizedStrings.follow.unfollow)}
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
+                keyExtractor={userKeyExtractor}
+                renderItem={renderFollowing}
                 ListEmptyComponent={
-                  <EmptyView
-                    title={t(LocalizedStrings.follow.empty.no_following)}
-                    message={t(LocalizedStrings.follow.empty.no_following_desc)}
-                  />
+                  isListLoading ? (
+                    <UserListSkeleton />
+                  ) : (
+                    <EmptyView
+                      title={t(LocalizedStrings.follow.empty.no_following)}
+                      message={t(LocalizedStrings.follow.empty.no_following_desc)}
+                    />
+                  )
                 }
               />
             )}
@@ -270,46 +357,17 @@ export default function FollowScreen() {
             {activeTab === "Followers" && (
               <FlatList
                 data={filteredList}
-                keyExtractor={(item) => item.id}
-                renderItem={({ item }) => (
-                  <View style={styles.userItem}>
-                    <View style={styles.userItemLeft}>
-                      <TouchableOpacity style={styles.userItemInter}>
-                        <View style={styles.userItemImage}>
-                          {item.avatarUrl ? (
-                            <Image source={{ uri: item.avatarUrl }} style={styles.userItemImage} />
-                          ) : (
-                            <ThemeText variant="manrope.body1Bold">
-                              {getInitials(`${item.firstName} ${item.lastName}`)}
-                            </ThemeText>
-                          )}
-                        </View>
-                        <View>
-                          <Text style={styles.userItemName}>{item.firstName}</Text>
-                        </View>
-                      </TouchableOpacity>
-                    </View>
-                    <TouchableOpacity
-                      style={styles.userItemBtn}
-                      onPress={() =>
-                        !item.isFriend
-                          ? handleFollowUnFollow(item.id)
-                          : Alert.alert("Message", "Messaging feature coming soon!")
-                      }
-                    >
-                      <Text style={styles.userItemBtnText}>
-                        {item.isFriend
-                          ? t(LocalizedStrings.follow.message)
-                          : t(LocalizedStrings.follow.follow_back)}
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
+                keyExtractor={userKeyExtractor}
+                renderItem={renderFollower}
                 ListEmptyComponent={
-                  <EmptyView
-                    title={t(LocalizedStrings.follow.empty.no_followers)}
-                    message={t(LocalizedStrings.follow.empty.no_followers_desc)}
-                  />
+                  isListLoading ? (
+                    <UserListSkeleton />
+                  ) : (
+                    <EmptyView
+                      title={t(LocalizedStrings.follow.empty.no_followers)}
+                      message={t(LocalizedStrings.follow.empty.no_followers_desc)}
+                    />
+                  )
                 }
               />
             )}
@@ -322,33 +380,8 @@ export default function FollowScreen() {
                   </Text>
                 }
                 data={suggestionList}
-                keyExtractor={(item) => item.id}
-                renderItem={({ item }) => (
-                  <View style={styles.userItem}>
-                    <View style={styles.userItemLeft}>
-                      <TouchableOpacity style={styles.userItemInter}>
-                        <View style={styles.userItemImage}>
-                          {item.avatarUrl ? (
-                            <Image source={{ uri: item.avatarUrl }} style={styles.userItemImage} />
-                          ) : (
-                            <ThemeText variant="manrope.body1Bold">
-                              {getInitials(`${item.firstName} ${item.lastName}`)}
-                            </ThemeText>
-                          )}
-                        </View>
-                        <View>
-                          <Text style={styles.userItemName}>{item.firstName}</Text>
-                        </View>
-                      </TouchableOpacity>
-                    </View>
-                    <TouchableOpacity
-                      style={styles.userItemBtn}
-                      onPress={() => handleFollowUnFollow(item.id)}
-                    >
-                      <Text style={styles.userItemBtnText}>{t(LocalizedStrings.follow.title)}</Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
+                keyExtractor={userKeyExtractor}
+                renderItem={renderSuggestion}
               />
             )}
           </View>

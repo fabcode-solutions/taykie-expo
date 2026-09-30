@@ -21,6 +21,8 @@ import { mmkvJSONStateStorage } from "./stateStorage";
 import { getErrorMessage } from "./postStore";
 import { useAuthStore } from "./authStore";
 import { deleteLog, getUserLogs } from "@/hooks/queries/products";
+import { t } from "i18next";
+import { LocalizedStrings } from "@/i18n/LocalizedStrings";
 
 type State = {
   userSchedules: Schedule[];
@@ -89,7 +91,7 @@ export const useScheduleStore = create<State & Actions>()(
           const message = getErrorMessage(error);
           set({
             isLoading: false,
-            error: error instanceof Error ? error.message : "Create Schedule failed",
+            error: error instanceof Error ? error.message : t(LocalizedStrings.errors.api.createSchedule),
           });
           throw Error(message);
         }
@@ -146,7 +148,7 @@ export const useScheduleStore = create<State & Actions>()(
           set({
             isLoading: false,
             isFetchingNextPage: false,
-            error: error instanceof Error ? error.message : "Fetch User Schedules failed",
+            error: error instanceof Error ? error.message : t(LocalizedStrings.errors.api.fetchUserSchedules),
           });
 
           throw Error(message);
@@ -174,7 +176,7 @@ export const useScheduleStore = create<State & Actions>()(
           const message = getErrorMessage(error);
           set({
             isLoading: false,
-            error: error instanceof Error ? error.message : "Fetch Today's Schedule failed",
+            error: error instanceof Error ? error.message : t(LocalizedStrings.errors.api.fetchTodaySchedule),
           });
           throw Error(message);
         }
@@ -191,7 +193,7 @@ export const useScheduleStore = create<State & Actions>()(
           const message = getErrorMessage(error);
           set({
             isLoading: false,
-            error: error instanceof Error ? error.message : "Delete Schedule failed",
+            error: error instanceof Error ? error.message : t(LocalizedStrings.errors.api.deleteSchedule),
           });
           throw Error(message);
         }
@@ -214,7 +216,7 @@ export const useScheduleStore = create<State & Actions>()(
           const message = getErrorMessage(error);
           set({
             isLoading: false,
-            error: error instanceof Error ? error.message : "Update Schedule failed",
+            error: error instanceof Error ? error.message : t(LocalizedStrings.errors.api.updateSchedule),
           });
           throw Error(message);
         }
@@ -230,7 +232,7 @@ export const useScheduleStore = create<State & Actions>()(
           const message = getErrorMessage(error);
           set({
             isLoading: false,
-            error: error instanceof Error ? error.message : "Mark Medicine as Taken failed",
+            error: error instanceof Error ? error.message : t(LocalizedStrings.errors.api.markMedicineTaken),
           });
           throw Error(message);
         }
@@ -244,7 +246,7 @@ export const useScheduleStore = create<State & Actions>()(
           const message = getErrorMessage(error);
           set({
             isLoading: false,
-            error: error instanceof Error ? error.message : "Fetching Schedules failed",
+            error: error instanceof Error ? error.message : t(LocalizedStrings.errors.api.fetchSchedules),
           });
           throw Error(message);
         }
@@ -258,7 +260,7 @@ export const useScheduleStore = create<State & Actions>()(
           const message = getErrorMessage(error);
           set({
             isLoading: false,
-            error: error instanceof Error ? error.message : "Fetching Upcoming Reminder failed",
+            error: error instanceof Error ? error.message : t(LocalizedStrings.errors.api.fetchUpcomingReminder),
           });
           throw Error(message);
         }
@@ -277,7 +279,7 @@ export const useScheduleStore = create<State & Actions>()(
           const message = getErrorMessage(error);
           set({
             isLoading: false,
-            error: error instanceof Error ? error.message : "Fetching User Streak failed",
+            error: error instanceof Error ? error.message : t(LocalizedStrings.errors.api.fetchStreak),
           });
           throw Error(message);
         }
@@ -294,7 +296,7 @@ export const useScheduleStore = create<State & Actions>()(
           const message = getErrorMessage(error);
           set({
             isLoading: false,
-            error: error instanceof Error ? error.message : "Create Snooze failed",
+            error: error instanceof Error ? error.message : t(LocalizedStrings.errors.api.createSnooze),
           });
           throw Error(message);
         }
@@ -308,7 +310,7 @@ export const useScheduleStore = create<State & Actions>()(
           const message = getErrorMessage(error);
           set({
             isLoading: false,
-            error: error instanceof Error ? error.message : "Fetching User Logs failed",
+            error: error instanceof Error ? error.message : t(LocalizedStrings.errors.api.fetchLogs),
           });
           throw Error(message);
         }
@@ -324,7 +326,7 @@ export const useScheduleStore = create<State & Actions>()(
           const message = getErrorMessage(error);
           set({
             isLoading: false,
-            error: error instanceof Error ? error.message : "Delete Log failed",
+            error: error instanceof Error ? error.message : t(LocalizedStrings.errors.api.deleteLog),
           });
           throw Error(message);
         }

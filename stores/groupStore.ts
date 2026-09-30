@@ -19,6 +19,8 @@ import {
 import { getErrorMessage } from "./postStore";
 import { GroupMember } from "@/services/repositories/groups";
 import { useUploadStore } from "./uploadStore";
+import { t } from "i18next";
+import { LocalizedStrings } from "@/i18n/LocalizedStrings";
 
 type State = {
   userGroups: GroupResponse[];
@@ -83,7 +85,7 @@ export const useGroupStore = create<State & Actions>()(
           set({ isLoading: false, groupFriends: [] });
           return response.message;
         } catch (error) {
-          const message = getErrorMessage(error, "Create Group failed");
+          const message = getErrorMessage(error, t(LocalizedStrings.errors.api.createGroup));
 
           set({
             isLoading: false,
@@ -99,7 +101,7 @@ export const useGroupStore = create<State & Actions>()(
           const result = await getUserGroups();
           set({ isLoading: false, userGroups: result?.data });
         } catch (error) {
-          const message = getErrorMessage(error, "Fetch User Groups failed");
+          const message = getErrorMessage(error, t(LocalizedStrings.errors.api.fetchUserGroups));
 
           set({
             isLoading: false,
@@ -116,7 +118,7 @@ export const useGroupStore = create<State & Actions>()(
           const result = await getGroupById(groupId);
           set({ isLoading: false, group: result.data });
         } catch (error) {
-          const message = getErrorMessage(error, "Fetch Today's Groups failed");
+          const message = getErrorMessage(error, t(LocalizedStrings.errors.api.fetchTodayGroups));
 
           set({
             isLoading: false,
@@ -133,7 +135,7 @@ export const useGroupStore = create<State & Actions>()(
           const result = await getAllGroups();
           set({ isLoading: false, groups: result.data });
         } catch (error) {
-          const message = getErrorMessage(error, "Fetch All Groups failed");
+          const message = getErrorMessage(error, t(LocalizedStrings.errors.api.fetchAllGroups));
 
           set({
             isLoading: false,
@@ -151,7 +153,7 @@ export const useGroupStore = create<State & Actions>()(
           await get().fetchUserGroups();
           set({ isLoading: false });
         } catch (error) {
-          const message = getErrorMessage(error, "Delete Group failed");
+          const message = getErrorMessage(error, t(LocalizedStrings.errors.api.deleteGroup));
 
           set({
             isLoading: false,
@@ -169,7 +171,7 @@ export const useGroupStore = create<State & Actions>()(
           await get().fetchUserGroups();
           set({ isLoading: false });
         } catch (error) {
-          const message = getErrorMessage(error, "Update Group failed");
+          const message = getErrorMessage(error, t(LocalizedStrings.errors.api.updateGroup));
 
           set({
             isLoading: false,
@@ -189,7 +191,7 @@ export const useGroupStore = create<State & Actions>()(
           set({ isLoading: false });
           return response.message;
         } catch (error) {
-          const message = getErrorMessage(error, "Leave Group failed");
+          const message = getErrorMessage(error, t(LocalizedStrings.errors.api.leaveGroup));
 
           set({
             isLoading: false,
@@ -209,7 +211,7 @@ export const useGroupStore = create<State & Actions>()(
           set({ isLoading: false });
           return response.message;
         } catch (error) {
-          const message = getErrorMessage(error, "Join Group failed");
+          const message = getErrorMessage(error, t(LocalizedStrings.errors.api.joinGroup));
 
           set({
             isLoading: false,
@@ -225,7 +227,7 @@ export const useGroupStore = create<State & Actions>()(
           const response = await getGroupMembers(groupId);
           set({ isLoading: false, groupMembers: response.data });
         } catch (error) {
-          const message = getErrorMessage(error, "Fetch Group Members failed");
+          const message = getErrorMessage(error, t(LocalizedStrings.errors.api.fetchGroupMembers));
           set({
             isLoading: false,
             error: message,
@@ -240,7 +242,7 @@ export const useGroupStore = create<State & Actions>()(
           const response = await getRecommendedGroups();
           set({ isLoading: false, recommendedGroups: response.data });
         } catch (error) {
-          const message = getErrorMessage(error, "Fetch Recommended Groups failed");
+          const message = getErrorMessage(error, t(LocalizedStrings.errors.api.fetchRecommendedGroups));
           set({
             isLoading: false,
             error: message,
@@ -255,7 +257,7 @@ export const useGroupStore = create<State & Actions>()(
           const response = await getFriends();
           set({ isLoading: false, groupFriends: response.data });
         } catch (error) {
-          const message = getErrorMessage(error, "Fetch Group Friends failed");
+          const message = getErrorMessage(error, t(LocalizedStrings.errors.api.fetchGroupFriends));
           set({
             isLoading: false,
             error: message,

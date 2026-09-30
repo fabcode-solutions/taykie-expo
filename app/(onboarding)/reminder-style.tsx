@@ -13,26 +13,6 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { t } from "i18next";
 import { LocalizedStrings } from "@/i18n/LocalizedStrings";
 
-interface SoundOption {
-  key: string;
-  label: string;
-  description: string;
-}
-
-const SOUNDS: SoundOption[] = [
-  {
-    key: "gentle_chime",
-    label: "Gentle Chime",
-    description: "Soft single bell — calm and non-intrusive",
-  },
-  { key: "soft_bells", label: "Soft Bells", description: "Gentle repeating bell sequence" },
-  { key: "morning_tone", label: "Morning Tone", description: "Warm ascending two-note tone" },
-  { key: "soft_ping", label: "Soft Ping", description: "Clean, minimal notification ding" },
-  { key: "nature_chime", label: "Nature Chime", description: "Wind chime texture, airy feel" },
-  { key: "calm_arpeggio", label: "Calm Arpeggio", description: "Short ascending piano notes" },
-  { key: "marimba_tap", label: "Marimba Tap", description: "Warm marimba single note" },
-];
-
 interface ReminderOptionProps {
   label: string;
   description: string;

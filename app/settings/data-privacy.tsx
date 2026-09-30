@@ -24,6 +24,7 @@ import * as FileSystem from "expo-file-system";
 import { useInsightStore } from "@/stores/insightStore";
 import { AlertPresets } from "@/utils/alert";
 import { useAlert } from "@/provider/AlertProvider";
+import { useAppLockStore } from "@/stores/appLockStore";
 
 export default function DataPrivacyScreen() {
   const { t } = useTranslation();
@@ -31,19 +32,51 @@ export default function DataPrivacyScreen() {
   const theme = useTheme();
   const router = useRouter();
   const styles = useMemo(() => createStyles(theme), [theme]);
-  const [dataPrivacy, setDataPrivacy] = useState({
-    appLock: true,
-  });
+  const appLockEnabled = useAppLockStore((s) => s.enabled);
   const { deleteAccount } = useAuthStore();
   const { fetchDataToExport } = useInsightStore();
   const [dataPrivacyIsOpen, setDataPrivacyIsOpen] = useState(false);
   const [accountDelete, setAccountDelete] = useState(false);
-  const handleDataPrivacy = useCallback((action: boolean, key: keyof typeof dataPrivacy) => {
-    setDataPrivacy((prev) => ({
-      ...prev,
-      [key]: !action,
-    }));
-  }, []);
+  // Turning the lock on requires a successful biometric/passcode check first, and is
+  // refused (with an explanation) when the device has no biometrics set up.
+  const handleAppLockToggle = useCallback(async () => {
+    const { enabled, disable, enable, getBiometricSupport, authenticate } =
+      useAppLockStore.getState();
+
+    if (enabled) {
+      // Also require authentication to turn the lock off.
+      const ok = await authenticate(
+        t(LocalizedStrings.settings.dataPrivacy.appLock.unlockPrompt),
+        t(LocalizedStrings.common.cancel),
+      );
+      if (ok) disable();
+      return;
+    }
+
+    const support = await getBiometricSupport();
+    if (support === "no-hardware") {
+      alert.show(
+        AlertPresets.error(
+          t(LocalizedStrings.settings.dataPrivacy.appLock.noHardwareTitle),
+          t(LocalizedStrings.settings.dataPrivacy.appLock.noHardwareMessage),
+        ),
+      );
+      return;
+    }
+    if (support === "not-enrolled") {
+      alert.show(
+        AlertPresets.error(
+          t(LocalizedStrings.settings.dataPrivacy.appLock.notEnrolledTitle),
+          t(LocalizedStrings.settings.dataPrivacy.appLock.notEnrolledMessage),
+        ),
+      );
+      return;
+    }
+    await enable(
+      t(LocalizedStrings.settings.dataPrivacy.appLock.enablePrompt),
+      t(LocalizedStrings.common.cancel),
+    );
+  }, [alert, t]);
 
   const deleteUserAccount = useCallback(async () => {
     try {
@@ -98,41 +131,41 @@ export default function DataPrivacyScreen() {
     () => ({
       change_password: {
         leftIcon: <IconKey />,
-        heading: "Change Profile Password",
+        heading: t(LocalizedStrings.settings.dataPrivacy.change_password.title),
         action: "/settings/change-password",
-        description: "Change the user’s profile password.",
+        description: t(LocalizedStrings.settings.dataPrivacy.change_password.description),
         rightIcon: <IconForward />,
       },
       appLock: {
         leftIcon: <IconLock />,
-        heading: "App Lock",
+        heading: t(LocalizedStrings.settings.dataPrivacy.appLock.title),
         action: "",
-        description: "Use your device’s biometrics for access.",
+        description: t(LocalizedStrings.settings.dataPrivacy.appLock.description),
         rightIcon: (
           <Switch
             style={styles.switch}
             trackColors={{ on: theme.colors.text.primary, off: "#B4B4B4" }}
-            onPress={() => handleDataPrivacy(!dataPrivacy.appLock, "appLock")}
-            value={dataPrivacy.appLock}
+            onPress={handleAppLockToggle}
+            value={appLockEnabled}
           />
         ),
       },
       request_data: {
         leftIcon: <IconBoard />,
-        heading: "Request my data",
+        heading: t(LocalizedStrings.settings.dataPrivacy.request_data.title),
         action: "request_data",
-        description: "Permanently delete all your Product account.",
+        description: t(LocalizedStrings.settings.dataPrivacy.request_data.description),
         rightIcon: null,
       },
       delete_account: {
         leftIcon: <IconDelete />,
-        heading: "Delete My Account & Data",
+        heading: t(LocalizedStrings.settings.dataPrivacy.delete_account.title),
         action: "delete",
-        description: "Permanently delete all your Product account.",
+        description: t(LocalizedStrings.settings.dataPrivacy.delete_account.description),
         rightIcon: null,
       },
     }),
-    [styles.switch, dataPrivacy.appLock, handleDataPrivacy, theme.colors],
+    [styles.switch, appLockEnabled, handleAppLockToggle, theme.colors, t],
   );
 
   const handleDelete = useCallback(() => {

@@ -37,7 +37,7 @@ function LockScreenMockup({ theme }: { theme: Theme }) {
 
       {/* Time */}
       <ThemeText style={mockupStyles.clockText}>9:41</ThemeText>
-      <ThemeText style={mockupStyles.dateText}>Friday, March 20</ThemeText>
+      <ThemeText style={mockupStyles.dateText}>{t(LocalizedStrings.onboarding.lock_screen.mockup.date)}</ThemeText>
 
       {/* Notification card */}
       <View style={[mockupStyles.notifCard, { backgroundColor: "rgba(255,255,255,0.15)" }]}>
@@ -50,8 +50,8 @@ function LockScreenMockup({ theme }: { theme: Theme }) {
           />
         </View>
         <View style={mockupStyles.notifContent}>
-          <ThemeText style={mockupStyles.notifApp}>Taykie</ThemeText>
-          <ThemeText style={mockupStyles.notifMsg}>Time for your morning supplements 💊</ThemeText>
+          <ThemeText style={mockupStyles.notifApp}>{t(LocalizedStrings.app.name)}</ThemeText>
+          <ThemeText style={mockupStyles.notifMsg}>{t(LocalizedStrings.onboarding.lock_screen.mockup.message)}</ThemeText>
         </View>
       </View>
     </View>

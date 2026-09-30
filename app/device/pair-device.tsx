@@ -212,14 +212,14 @@ export default function PairDeviceScreen() {
           </View>
           <Text style={styles.searching}>
             {isConnecting || connectionStatus === "connecting"
-              ? "Connecting to device..."
+              ? t(LocalizedStrings.device.pairing.connecting)
               : isSearching
-                ? "Searching for nearby devices..."
+                ? t(LocalizedStrings.device.pairing.searching)
                 : hasMultipleDevices
-                  ? "Multiple devices found — tap one to connect"
+                  ? t(LocalizedStrings.device.pairing.multipleFound)
                   : foundDevice
-                    ? "Device found"
-                    : "No Taykie device found nearby"}
+                    ? t(LocalizedStrings.device.pairing.found)
+                    : t(LocalizedStrings.device.pairing.noneFound)}
           </Text>
           {hasMultipleDevices ? (
             <FlatList
@@ -236,8 +236,8 @@ export default function PairDeviceScreen() {
                 >
                   <Ionicons name="bluetooth" size={moderateScale(22)} color={theme.colors.primary.main} />
                   <View style={styles.deviceInfo}>
-                    <Text style={styles.deviceName}>{item.name || "Unnamed Taykie Device"}</Text>
-                    <Text style={styles.deviceRssi}>Signal: {item.rssi ?? "--"} dBm</Text>
+                    <Text style={styles.deviceName}>{item.name || t(LocalizedStrings.device.unnamed)}</Text>
+                    <Text style={styles.deviceRssi}>{t(LocalizedStrings.device.pairing.signal, { rssi: item.rssi ?? "--" })}</Text>
                   </View>
                   <Ionicons
                     name="chevron-forward"
@@ -259,14 +259,16 @@ export default function PairDeviceScreen() {
             <View style={{ marginTop: verticalScale(30) }}>
               {!isScanning && !foundDevice ? (
                 <Button
-                  title="Try Again"
+                  title={t(LocalizedStrings.device.try_again)}
                   onPress={handleRetryScan}
                   textStyle={{ fontSize: moderateScale(20) }}
                   rightIcon={null}
                 />
               ) : (
                 <Button
-                  title={isConnecting ? "Connecting..." : "Connect"}
+                  title={
+                    isConnecting ? t(LocalizedStrings.device.scan.connecting) : t(LocalizedStrings.common.connect)
+                  }
                   onPress={handleConnect}
                   disabled={!foundDevice || isConnecting}
                   textStyle={{ fontSize: moderateScale(20) }}

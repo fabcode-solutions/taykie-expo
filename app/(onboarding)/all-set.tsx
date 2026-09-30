@@ -18,12 +18,6 @@ import { useOnboardingStore } from "@/stores/onboardingStore";
 import { t } from "i18next";
 import { LocalizedStrings } from "@/i18n/LocalizedStrings";
 
-const DOSE_FREQ_LABELS: Record<number, string> = {
-  1: "Once daily",
-  2: "Twice daily",
-  3: "Three times daily",
-};
-
 const REMINDER_ICONS: {
   key: "reminder_sound" | "reminder_light" | "reminder_push";
   icon: keyof typeof Ionicons.glyphMap;

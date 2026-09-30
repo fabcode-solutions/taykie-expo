@@ -6,11 +6,14 @@ import { CommentInput } from "./CommentInput";
 import { useToggleCommentLike } from "@/hooks/queries/useComments";
 import { useTheme } from "@/theme";
 import { moderateScale, scale, verticalScale } from "@/utils/scale";
+import { useTranslation } from "react-i18next";
+import { LocalizedStrings } from "@/i18n/LocalizedStrings";
 
 export default function CommentsScreen() {
   const { postId } = useLocalSearchParams<{ postId: string }>();
   const router = useRouter();
   const theme = useTheme();
+  const { t } = useTranslation();
   const [replyToCommentId, setReplyToCommentId] = useState<string | undefined>();
   const inputRef = useRef<TextInput>(null);
   const toggleLikeMutation = useToggleCommentLike(postId);
@@ -46,11 +49,11 @@ export default function CommentsScreen() {
       >
         <View style={styles.errorContainer}>
           <Text style={[styles.errorText, { color: theme.colors.error.main }]}>
-            Post ID is required
+            {t(LocalizedStrings.community.post.post_id_required)}
           </Text>
           <Pressable onPress={handleClose} style={styles.closeButton}>
             <Text style={[styles.closeButtonText, { color: theme.colors.primary.main }]}>
-              Go Back
+              {t(LocalizedStrings.home.extras.goBack)}
             </Text>
           </Pressable>
         </View>
@@ -66,11 +69,15 @@ export default function CommentsScreen() {
           onPress={handleClose}
           style={styles.closeButton}
           accessibilityRole="button"
-          accessibilityLabel="Close comments"
+          accessibilityLabel={t(LocalizedStrings.community.post.close_comments)}
         >
-          <Text style={[styles.closeButtonText, { color: theme.colors.primary.main }]}>Close</Text>
+          <Text style={[styles.closeButtonText, { color: theme.colors.primary.main }]}>
+            {t(LocalizedStrings.common.close)}
+          </Text>
         </Pressable>
-        <Text style={[styles.headerTitle, { color: theme.colors.text.primary }]}>Comments</Text>
+        <Text style={[styles.headerTitle, { color: theme.colors.text.primary }]}>
+          {t(LocalizedStrings.community.post.comments)}
+        </Text>
         <View style={styles.headerSpacer} />
       </View>
 
@@ -84,7 +91,9 @@ export default function CommentsScreen() {
         postId={postId}
         inputRef={inputRef}
         parentCommentId={replyToCommentId}
-        placeholder={replyToCommentId ? "Write a reply..." : "Write a comment..."}
+        placeholder={
+          replyToCommentId ? t(LocalizedStrings.community.post.write_reply) : t(LocalizedStrings.community.post.write_comment)
+        }
         onCommentCreated={handleCommentCreated}
         autoFocus={!!replyToCommentId}
       />

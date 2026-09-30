@@ -1,12 +1,5 @@
-import React, { useEffect } from "react";
-import { StyleProp, ViewStyle } from "react-native";
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withRepeat,
-  withTiming,
-  Easing,
-} from "react-native-reanimated";
+import React, { useEffect, useRef } from "react";
+import { Animated, Easing, StyleProp, ViewStyle } from "react-native";
 import { useTheme } from "@/theme";
 import { moderateScale } from "@/utils/scale";
 
@@ -20,6 +13,9 @@ interface SkeletonProps {
 /**
  * A pulsing placeholder box shown while content is loading. Uses the
  * divider color so it stays readable in both light and dark themes.
+ *
+ * Uses core Animated with the native driver: the opacity pulse runs on the UI
+ * thread, so many skeletons on screen at once don't cost JS-thread work.
  */
 export const Skeleton = ({
   width = "100%",
@@ -28,17 +24,28 @@ export const Skeleton = ({
   style,
 }: SkeletonProps) => {
   const theme = useTheme();
-  const opacity = useSharedValue(0.4);
+  const opacity = useRef(new Animated.Value(0.4)).current;
 
   useEffect(() => {
-    opacity.value = withRepeat(
-      withTiming(1, { duration: 700, easing: Easing.inOut(Easing.ease) }),
-      -1,
-      true,
+    const pulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(opacity, {
+          toValue: 1,
+          duration: 700,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(opacity, {
+          toValue: 0.4,
+          duration: 700,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ]),
     );
+    pulse.start();
+    return () => pulse.stop();
   }, [opacity]);
-
-  const animatedStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
 
   return (
     <Animated.View
@@ -48,8 +55,8 @@ export const Skeleton = ({
           height,
           borderRadius,
           backgroundColor: theme.colors.divider,
+          opacity,
         },
-        animatedStyle,
         style,
       ]}
     />

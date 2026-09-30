@@ -7,6 +7,7 @@ import {
   ImageSourcePropType,
   Pressable,
   Alert,
+  ActivityIndicator,
   ScrollView,
   KeyboardAvoidingView,
   Platform,
@@ -25,7 +26,7 @@ import ChooseBirthYear from "@/components/profile/ChooseBirthYear";
 import { moderateScale, scale, verticalScale } from "@/utils/scale";
 import { useForm } from "react-hook-form";
 import { ProfileUpdateRequest } from "@/services/api/auth";
-import { getDeviceTimezone } from "@/utils/timezone";
+import { getDeviceTimezone, getTimezoneLabel } from "@/utils/timezone";
 import { Images } from "@/assets";
 import { LocalizedStrings } from "@/i18n/LocalizedStrings";
 import { COUNTRIES } from "../(onboarding)/country-language";
@@ -33,6 +34,7 @@ import { AlertPresets } from "@/utils/alert";
 import { useAlert } from "@/provider/AlertProvider";
 import { Input } from "@/components/ui/TextInput/input";
 import ChooseCountry from "@/components/profile/ChooseCountry";
+import ChooseTimezone from "@/components/profile/ChooseTimezone";
 import { SafeAreaView } from "react-native-safe-area-context";
 import BackButton from "@/components/BackButton";
 
@@ -46,6 +48,7 @@ type FormData = {
   bio: string | null;
   username: string | null;
   phone: string | null;
+  timezone: string | null;
 };
 
 export default function EditProfileScreen() {
@@ -54,7 +57,8 @@ export default function EditProfileScreen() {
   const theme = useTheme();
   const router = useRouter();
   const styles = useMemo(() => createStyles(theme), [theme]);
-  const { user, updateProfile } = useAuthStore();
+  const user = useAuthStore((s) => s.user);
+  const updateProfile = useAuthStore((s) => s.updateProfile);
   const navigation = useNavigation();
   // Local, not authStore.isLoading — that flag is shared with ~9 unrelated
   // actions (follow/unfollow, fetchPublicProfile, ...), so it could show a
@@ -64,10 +68,23 @@ export default function EditProfileScreen() {
   // updateProfile's onStageChange in authStore.ts.
   const [saveStage, setSaveStage] = useState<"idle" | "uploading" | "saving">("idle");
   const isSaving = saveStage !== "idle";
+  // True while a newly picked or remote avatar is still loading into the Image, so the
+  // photo swap shows a loader instead of a blank or stale circle. Also covers the upload
+  // phase of saving.
+  const [isAvatarLoading, setIsAvatarLoading] = useState(false);
+  const showAvatarLoader = isAvatarLoading || saveStage === "uploading";
+  const handleAvatarLoadStart = useCallback(() => setIsAvatarLoading(true), []);
+  const handleAvatarLoadEnd = useCallback(() => setIsAvatarLoading(false), []);
   const [chooseIsOpen, setChooseIsOpen] = useState(false);
   const [yearIsOpen, setYearIsOpen] = useState(false);
   const [genderIsOpen, setGenderIsOpen] = useState(false);
   const [countryIsOpen, setCountryIsOpen] = useState(false);
+  const [timezoneIsOpen, setTimezoneIsOpen] = useState(false);
+
+  // "UTC" is the DB column default, i.e. never actually set — treat it as
+  // unset and show the phone's zone instead. Any save then writes it.
+  const savedTimezone = user?.timezone && user.timezone !== "UTC" ? user.timezone : null;
+  const initialTimezone = savedTimezone ?? getDeviceTimezone() ?? null;
 
   const { control, handleSubmit, setValue, watch } = useForm<FormData>({
     mode: "onChange",
@@ -82,10 +99,11 @@ export default function EditProfileScreen() {
       bio: user?.bio ?? null,
       phone: user?.phoneNumber ?? null,
       username: user?.username ?? null,
+      timezone: initialTimezone,
     },
   });
 
-  const { name, birthYear, gender, country, avatarUrl, bio, phone, username } = watch();
+  const { name, birthYear, gender, country, avatarUrl, bio, phone, username, timezone } = watch();
 
   // Map country code → display name
   const countryLabel = useMemo(() => {
@@ -122,9 +140,10 @@ export default function EditProfileScreen() {
       (avatarUrl ?? "") !== (user.avatarUrl ?? "") ||
       (bio ?? "") !== (user.bio ?? "") ||
       (phone ?? "") !== (user.phoneNumber ?? "") ||
-      (username ?? "") !== (user.username ?? "")
+      (username ?? "") !== (user.username ?? "") ||
+      timezone !== initialTimezone
     );
-  }, [name, birthYear, gender, country, avatarUrl, user, bio, username, phone]);
+  }, [name, birthYear, gender, country, avatarUrl, user, bio, username, phone, timezone, initialTimezone]);
 
   const handleChooseClose = useCallback(() => {
     setChooseIsOpen((prev) => !prev);
@@ -135,7 +154,7 @@ export default function EditProfileScreen() {
       setValue("avatarUrl", image.url);
       handleChooseClose();
     },
-    [handleChooseClose],
+    [handleChooseClose, setValue],
   );
 
   const onSelectLocalImage = useCallback(
@@ -143,12 +162,21 @@ export default function EditProfileScreen() {
       setValue("avatarUrl", image);
       handleChooseClose();
     },
-    [handleChooseClose],
+    [handleChooseClose, setValue],
   );
 
   const handleGenderClose = useCallback(() => setGenderIsOpen((prev) => !prev), []);
   const handleyearClose = useCallback(() => setYearIsOpen((prev) => !prev), []);
   const handleCountryClose = useCallback(() => setCountryIsOpen((prev) => !prev), []);
+  const handleOpenChoose = useCallback(() => setChooseIsOpen(true), []);
+  const handleSaveGender = useCallback((label: string) => setValue("gender", label), [setValue]);
+  const handleSaveYear = useCallback(
+    (label: string) => setValue("birthYear", parseInt(label)),
+    [setValue],
+  );
+  const handleSaveCountry = useCallback((code: string) => setValue("country", code), [setValue]);
+  const handleTimezoneClose = useCallback(() => setTimezoneIsOpen((prev) => !prev), []);
+  const handleSaveTimezone = useCallback((code: string) => setValue("timezone", code), [setValue]);
 
   const getChangedFields = useCallback(() => {
     if (!user) return {};
@@ -161,8 +189,11 @@ export default function EditProfileScreen() {
     if (bio !== user.bio) changed.bio = bio;
     if (username !== user.username) changed.username = username;
     if (phone !== user.phoneNumber) changed.phone = phone;
+    // Also true while the saved zone is still the "UTC" default, so any
+    // save backfills the auto-detected zone.
+    if (timezone && timezone !== user.timezone) changed.timezone = timezone;
     return changed;
-  }, [name, birthYear, gender, country, avatarUrl, user, bio, phone, username]);
+  }, [name, birthYear, gender, country, avatarUrl, user, bio, phone, username, timezone]);
 
   const handleProfileUpdate = useCallback(async () => {
     try {
@@ -177,7 +208,6 @@ export default function EditProfileScreen() {
       const nameParts = changedFields.name?.trim().split(" ").filter(Boolean) || [];
       const firstName = nameParts[0] || "";
       const lastName = nameParts.slice(1).join(" ") || "";
-      const deviceTimezone = getDeviceTimezone();
 
       const requestBody: ProfileUpdateRequest = {
         ...(firstName && { firstName }),
@@ -191,10 +221,9 @@ export default function EditProfileScreen() {
         ...(changedFields.bio && { bio: changedFields.bio }),
         ...(changedFields.username && { username: changedFields.username }),
         ...(changedFields.phone && { phoneNumber: changedFields.phone }),
-        // Not a form field the user edits — piggybacks on any profile save
-        // so a device that's changed timezone (e.g. travel) since last
-        // update gets picked up without a dedicated settings toggle.
-        ...(deviceTimezone && { timezone: deviceTimezone }),
+        // Only sent when it differs from what's saved, so a manual override
+        // is never silently replaced by the phone's zone on a later save.
+        ...(changedFields.timezone && { timezone: changedFields.timezone }),
       };
 
       const message = await updateProfile(requestBody, setSaveStage);
@@ -202,11 +231,16 @@ export default function EditProfileScreen() {
         { text: t(LocalizedStrings.common.ok), onPress: router.back },
       ]);
     } catch (error) {
-      alert.show(AlertPresets.error(t(LocalizedStrings.common.error), error.message));
+      alert.show(
+        AlertPresets.error(
+          t(LocalizedStrings.common.error),
+          error instanceof Error ? error.message : String(error),
+        ),
+      );
     } finally {
       setSaveStage("idle");
     }
-  }, [name, birthYear, gender, country, avatarUrl, updateProfile, user, phone, username]);
+  }, [getChangedFields, updateProfile, user, alert, router, t]);
 
   const saveButtonTitle = useMemo(() => {
     switch (saveStage) {
@@ -263,11 +297,22 @@ export default function EditProfileScreen() {
             <View style={styles.avatarWrapperOuter}>
               <View style={styles.avatarWrapper}>
                 {avatarSource ? (
-                  <Image source={avatarSource} style={styles.avatarUrl} />
+                  <Image
+                    source={avatarSource}
+                    style={styles.avatarUrl}
+                    onLoadStart={handleAvatarLoadStart}
+                    onLoadEnd={handleAvatarLoadEnd}
+                    onError={handleAvatarLoadEnd}
+                  />
                 ) : (
                   <Text style={styles.avatarInitial}>{avatarInitial}</Text>
                 )}
-                <TouchableOpacity onPress={() => setChooseIsOpen(true)} style={styles.cameraButton}>
+                {showAvatarLoader && (
+                  <View style={styles.avatarLoader} pointerEvents="none">
+                    <ActivityIndicator size="large" color={theme.colors.white} />
+                  </View>
+                )}
+                <TouchableOpacity onPress={handleOpenChoose} style={styles.cameraButton}>
                   <IconCamera />
                 </TouchableOpacity>
               </View>
@@ -335,7 +380,7 @@ export default function EditProfileScreen() {
                 },
                 pattern: {
                   value: /^[a-zA-Z0-9_]+$/,
-                  message: "Only letters, numbers, and underscores allowed",
+                  message: t(LocalizedStrings.errors.validation.username.pattern),
                 },
               }}
             />
@@ -349,7 +394,7 @@ export default function EditProfileScreen() {
               rules={{
                 pattern: {
                   value: /^\+?[0-9]{7,15}$/,
-                  message: "Enter a valid phone number",
+                  message: t(LocalizedStrings.errors.validation.phone.invalid),
                 },
               }}
             />
@@ -393,6 +438,19 @@ export default function EditProfileScreen() {
               </Pressable>
             </View>
 
+            <View style={styles.section}>
+              <Text>{t(LocalizedStrings.onboarding.timezone)}</Text>
+              <Pressable onPress={handleTimezoneClose} style={styles.infoSection}>
+                <Text
+                  style={{
+                    color: timezone ? theme.colors.text.primary : theme.colors.text.disabled,
+                  }}
+                >
+                  {timezone ? getTimezoneLabel(timezone) : t(LocalizedStrings.onboarding.timezone)}
+                </Text>
+              </Pressable>
+            </View>
+
             <Button
               title={saveButtonTitle}
               onPress={handleSubmit(handleProfileUpdate)}
@@ -412,19 +470,25 @@ export default function EditProfileScreen() {
           <ChooseGender
             isVisible={genderIsOpen}
             onClose={handleGenderClose}
-            onSave={(label) => setValue("gender", label)}
+            onSave={handleSaveGender}
           />
           <ChooseBirthYear
             selected={user?.birthYear?.toString()}
             onClose={handleyearClose}
             isVisible={yearIsOpen}
-            onSave={(label) => setValue("birthYear", parseInt(label))}
+            onSave={handleSaveYear}
           />
           <ChooseCountry
             selected={country ?? user?.country}
             onClose={handleCountryClose}
             isVisible={countryIsOpen}
-            onSave={(code) => setValue("country", code)}
+            onSave={handleSaveCountry}
+          />
+          <ChooseTimezone
+            selected={timezone}
+            onClose={handleTimezoneClose}
+            isVisible={timezoneIsOpen}
+            onSave={handleSaveTimezone}
           />
         </SafeAreaView>
       </KeyboardAvoidingView>
@@ -468,6 +532,13 @@ const createStyles = (theme: Theme) =>
       borderRadius: 999,
       aspectRatio: 1,
       height: verticalScale(140),
+    },
+    avatarLoader: {
+      ...StyleSheet.absoluteFillObject,
+      borderRadius: 999,
+      backgroundColor: "rgba(0,0,0,0.4)",
+      justifyContent: "center",
+      alignItems: "center",
     },
     avatarInitial: {
       color: theme.colors.text.primary,

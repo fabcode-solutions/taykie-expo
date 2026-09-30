@@ -74,9 +74,9 @@ function SignUpScreen() {
 
   React.useEffect(() => {
     registerField("acceptedTerms", {
-      validate: (value) => value || "You must accept Terms & Privacy Policy",
+      validate: (value) => value || t(LocalizedStrings.auth.signup.legal.mustAccept),
     });
-  }, [registerField]);
+  }, [registerField, t]);
 
   const navigateToLogin = () => {
     if (from === "login") {
@@ -312,19 +312,19 @@ function SignUpScreen() {
                 </TouchableOpacity>
 
                 <ThemeText style={dynamicStyles.termsText}>
-                  I agree to the{" "}
+                  {t(LocalizedStrings.auth.signup.legal.agreePrefix)}{" "}
                   <ThemeText
                     style={dynamicStyles.link}
                     onPress={() => router.push("/(auth)/terms-and-conditions")}
                   >
-                    Terms
+                    {t(LocalizedStrings.auth.signup.legal.terms)}
                   </ThemeText>{" "}
-                  and{" "}
+                  {t(LocalizedStrings.auth.signup.legal.and)}{" "}
                   <ThemeText
                     style={dynamicStyles.link}
                     onPress={() => router.push("/(auth)/privacy-policy")}
                   >
-                    Privacy Policy
+                    {t(LocalizedStrings.auth.signup.legal.privacyPolicy)}
                   </ThemeText>
                 </ThemeText>
               </View>

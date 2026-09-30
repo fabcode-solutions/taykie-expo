@@ -16,6 +16,8 @@ import { SCHEDULE_SLOT_COUNT } from "@/services/ble/TaykieProtocol";
 import { AlertPresets } from "@/utils/alert";
 import { useAlert } from "@/provider/AlertProvider";
 import { formatTimeAmPm } from "@/utils/formatter";
+import { t } from "i18next";
+import { LocalizedStrings } from "@/i18n/LocalizedStrings";
 
 function scheduleId(schedule: Schedule): string | null {
   return schedule.scheduleId ?? schedule.id ?? null;
@@ -30,10 +32,10 @@ function scheduleTimes(schedule: Schedule): string[] {
 
 function scheduleFrequencyLabel(schedule: Schedule): string {
   return schedule.scheduleType === "daily"
-    ? "Every day"
+    ? t(LocalizedStrings.device.days.everyDay)
     : schedule.scheduleType === "weekly"
-      ? `Every ${schedule.scheduleDay ?? "week"}`
-      : "Monthly";
+      ? `${t(LocalizedStrings.common.Every)} ${schedule.scheduleDay ?? t(LocalizedStrings.device.sync.week)}`
+      : t(LocalizedStrings.home.schedule.monthly);
 }
 
 interface ScheduleCardProps {
@@ -216,8 +218,8 @@ export default function ScheduleSyncScreen() {
     if (slotsUsed + 1 > SCHEDULE_SLOT_COUNT) {
       alert.show(
         AlertPresets.error(
-          "Slot limit reached",
-          `Your Taykie device can only hold ${SCHEDULE_SLOT_COUNT} reminder slots total. Remove another time first to make room.`,
+          t(LocalizedStrings.device.sync.slotLimitTitle),
+          t(LocalizedStrings.device.sync.slotLimitMessage, { count: SCHEDULE_SLOT_COUNT }),
         ),
       );
       return;
@@ -228,7 +230,7 @@ export default function ScheduleSyncScreen() {
   const handleSave = async () => {
     if (connectionStatus !== "connected") {
       alert.show(
-        AlertPresets.error("Not connected", "Connect to your Taykie device first to sync schedules."),
+        AlertPresets.error(t(LocalizedStrings.device.notConnected), t(LocalizedStrings.device.sync.notConnectedMessage)),
       );
       return;
     }
@@ -239,21 +241,25 @@ export default function ScheduleSyncScreen() {
       if (result.skippedScheduleIds.length > 0) {
         alert.show(
           AlertPresets.error(
-            "Some schedules were skipped",
-            `${result.skippedScheduleIds.length} selected schedule(s) couldn't fit or aren't supported on-device. ${result.slotsUsed}/${SCHEDULE_SLOT_COUNT} slots synced.`,
+            t(LocalizedStrings.device.sync.skippedTitle),
+            t(LocalizedStrings.device.sync.skippedMessage, {
+              skipped: result.skippedScheduleIds.length,
+              used: result.slotsUsed,
+              total: SCHEDULE_SLOT_COUNT,
+            }),
           ),
         );
       } else {
         alert.show(
           AlertPresets.success(
-            "Synced",
-            `${result.slotsUsed}/${SCHEDULE_SLOT_COUNT} reminder slots synced to your device.`,
+            t(LocalizedStrings.device.sync.syncedTitle),
+            t(LocalizedStrings.device.sync.syncedMessage, { used: result.slotsUsed, total: SCHEDULE_SLOT_COUNT }),
           ),
         );
         router.back();
       }
     } catch (error: any) {
-      alert.show(AlertPresets.error("Error", error.message));
+      alert.show(AlertPresets.error(t(LocalizedStrings.common.error), error.message));
     } finally {
       setIsSaving(false);
     }
@@ -269,17 +275,15 @@ export default function ScheduleSyncScreen() {
         </TouchableOpacity>
 
         <ThemeText variant="manrope.h2" style={styles.header}>
-          On-Device Reminders
+          {t(LocalizedStrings.device.sync.title)}
         </ThemeText>
         <ThemeText variant="manrope.body2" style={styles.description}>
-          Schedules you select here ring directly from your Taykie device — using its own clock —
-          even when your phone is off or out of range. If a reminder has multiple times, you can
-          pick just the ones you want on-device.
+          {t(LocalizedStrings.device.sync.description)}
         </ThemeText>
 
         <View style={styles.slotCounterRow}>
           <ThemeText variant="manrope.body1Bold" style={{ color: theme.colors.text.primary }}>
-            {slotsUsed}/{SCHEDULE_SLOT_COUNT} slots used
+            {t(LocalizedStrings.device.sync.slotsUsed, { used: slotsUsed, total: SCHEDULE_SLOT_COUNT })}
           </ThemeText>
         </View>
 
@@ -294,7 +298,7 @@ export default function ScheduleSyncScreen() {
             <>
               {eligibleSchedules.length === 0 && (
                 <ThemeText variant="manrope.body2" style={styles.emptyText}>
-                  No daily or weekly schedules yet — create one from the Schedule tab first.
+                  {t(LocalizedStrings.device.sync.empty)}
                 </ThemeText>
               )}
               {eligibleSchedules.map((schedule) => {
@@ -317,11 +321,10 @@ export default function ScheduleSyncScreen() {
         {!isInitialLoading && ineligibleSchedules.length > 0 && (
           <View style={styles.section}>
             <ThemeText variant="manrope.body1Bold" style={styles.sectionLabel}>
-              Not available on-device
+              {t(LocalizedStrings.device.sync.unavailableTitle)}
             </ThemeText>
             <ThemeText variant="manrope.caption" style={styles.emptyText}>
-              Monthly schedules can't be synced — the device only understands day-of-week
-              recurrence, not day-of-month. These still work as regular phone reminders.
+              {t(LocalizedStrings.device.sync.unavailableDescription)}
             </ThemeText>
             {ineligibleSchedules.map((schedule) => (
               <ScheduleCard key={scheduleId(schedule) ?? schedule.name} theme={theme} schedule={schedule} />
@@ -331,7 +334,7 @@ export default function ScheduleSyncScreen() {
       </ScrollView>
 
       <View style={styles.footer}>
-        <Button title="Save" onPress={handleSave} loading={isSaving} fullWidth style={styles.saveBtn} />
+        <Button title={t(LocalizedStrings.common.save)} onPress={handleSave} loading={isSaving} fullWidth style={styles.saveBtn} />
       </View>
     </SafeAreaView>
   );

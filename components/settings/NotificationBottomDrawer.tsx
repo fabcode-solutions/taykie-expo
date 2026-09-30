@@ -6,11 +6,6 @@ import { View } from "react-native";
 import { moderateScale, verticalScale } from "@/utils/scale";
 import { t } from "i18next";
 import { LocalizedStrings } from "@/i18n/LocalizedStrings";
-const monthItems: PickerItem<number>[] = [
-  { value: 1, label: "Default app sound", key: "default" },
-  { value: 2, label: "Silent", key: "silent" },
-];
-
 // Move these outside or keep them as constants
 const soundToValueMap: Record<string, number> = {
   default: 1,

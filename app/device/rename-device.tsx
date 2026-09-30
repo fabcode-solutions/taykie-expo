@@ -44,11 +44,13 @@ export default function RenameDeviceScreen() {
   const trimmedName = name.trim();
   const isDirty = trimmedName.length > 0 && trimmedName !== (connectedDevice?.name ?? "").trim();
   const lastSyncedText = lastSyncedAt
-    ? `Last Synced: ${new Date(lastSyncedAt).toLocaleString(undefined, {
-        hour: "numeric",
-        minute: "2-digit",
-      })}`
-    : "Last Synced: --";
+    ? t(LocalizedStrings.device.lastSynced, {
+        time: new Date(lastSyncedAt).toLocaleString(undefined, {
+          hour: "numeric",
+          minute: "2-digit",
+        }),
+      })
+    : t(LocalizedStrings.device.lastSynced, { time: "--" });
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -85,8 +87,8 @@ export default function RenameDeviceScreen() {
   const handleInfo = () => {
     alert.show(
       AlertPresets.info(
-        "About Device Name",
-        "This name only changes how your Taykie is labeled in the app — it isn't sent to the device itself, since the device has no way to store a custom name over Bluetooth.",
+        t(LocalizedStrings.device.rename.aboutTitle),
+        t(LocalizedStrings.device.rename.aboutMessage),
       ),
     );
   };
@@ -105,7 +107,7 @@ export default function RenameDeviceScreen() {
 
         <View style={styles.headerRow}>
           <ThemeText variant="manrope.h2" style={styles.header}>
-            Device Name
+            {t(LocalizedStrings.device.rename.heading)}
           </ThemeText>
           <TouchableOpacity onPress={handleInfo} activeOpacity={0.7}>
             <Ionicons
@@ -129,7 +131,7 @@ export default function RenameDeviceScreen() {
               <TextInput
                 value={name}
                 onChangeText={setName}
-                placeholder="Device name"
+                placeholder={t(LocalizedStrings.device.rename.placeholder)}
                 style={styles.deviceNameInput}
                 placeholderTextColor={theme.colors.text.secondary}
                 autoCapitalize="words"
@@ -143,7 +145,7 @@ export default function RenameDeviceScreen() {
                 ]}
               />
               <ThemeText variant="manrope.caption" style={styles.statusText}>
-                {isConnected ? "Connected" : "Disconnected"}
+                {isConnected ? t(LocalizedStrings.common.connected) : t(LocalizedStrings.device.connection.disconnected)}
               </ThemeText>
             </View>
           </View>
@@ -160,13 +162,13 @@ export default function RenameDeviceScreen() {
             style={styles.infoNoteIcon}
           />
           <ThemeText variant="manrope.caption" style={styles.infoNoteText}>
-            In-app only — this doesn&apos;t change anything on the physical device.
+            {t(LocalizedStrings.device.rename.inAppOnly)}
           </ThemeText>
         </View>
 
         <View>
           <Button
-            title="Save Name"
+            title={t(LocalizedStrings.device.rename.save)}
             onPress={handleSave}
             loading={isSaving}
             disabled={!isDirty}
@@ -175,7 +177,9 @@ export default function RenameDeviceScreen() {
           />
         </View>
         <Button
-          title={isConnected ? "Disconnect" : "Connect"}
+          title={
+            isConnected ? t(LocalizedStrings.common.disconnect) : t(LocalizedStrings.common.connect)
+          }
           onPress={handleToggleConnection}
           loading={isToggling}
           disabled={!connectedDevice}
@@ -189,7 +193,7 @@ export default function RenameDeviceScreen() {
           activeOpacity={0.7}
         >
           <ThemeText variant="manrope.body1Bold" style={styles.changeDeviceText}>
-            Change Device
+            {t(LocalizedStrings.device.changeDevice)}
           </ThemeText>
         </TouchableOpacity>
       </ScrollView>

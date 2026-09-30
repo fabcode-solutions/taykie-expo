@@ -7,6 +7,8 @@ import { GoogleSignin } from "@react-native-google-signin/google-signin";
 import { useAuthStore } from "@/stores/authStore";
 import { OnboardRequest } from "@/stores/onboardingStore";
 import messaging from "@react-native-firebase/messaging";
+import { t } from "i18next";
+import { LocalizedStrings } from "@/i18n/LocalizedStrings";
 
 type ProviderType = "google" | "apple";
 export type LoginResponse = {
@@ -261,7 +263,7 @@ export async function startNextAuthOAuth(provider: "google" | "apple"): Promise<
   )}`;
   const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri);
   if (result.type !== "success") {
-    throw new Error("Authentication canceled");
+    throw new Error(t(LocalizedStrings.errors.auth.canceled));
   }
   // Try cookie bridge if backend includes an exchange token in the redirect URL
   await tryBridgeFromRedirect(result.url).catch(() => false);
@@ -342,14 +344,14 @@ export async function startGoogleNativeAndExchange(): Promise<void> {
 export async function startAppleNativeAndExchange(): Promise<void> {
   const Apple = await import("expo-apple-authentication");
   const available = await (Apple as any).isAvailableAsync();
-  if (!available) throw new Error("Apple Sign-In not available on this device");
+  if (!available) throw new Error(t(LocalizedStrings.errors.auth.appleUnavailable));
   const cr = await (Apple as any).signInAsync({
     requestedScopes: [
       (Apple as any).AppleAuthenticationScope.FULL_NAME,
       (Apple as any).AppleAuthenticationScope.EMAIL,
     ],
   });
-  if (!cr.identityToken && !cr.authorizationCode) throw new Error("No Apple credentials returned");
+  if (!cr.identityToken && !cr.authorizationCode) throw new Error(t(LocalizedStrings.errors.auth.appleNoCredentials));
 
   const request: SocialLoginRequest = {
     provider: "apple",

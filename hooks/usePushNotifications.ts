@@ -13,6 +13,8 @@ import {
 } from "@/utils/reminderSound";
 import { useAlert } from "@/provider/AlertProvider";
 import { AlertPresets } from "@/utils/alert";
+import { t } from "i18next";
+import { LocalizedStrings } from "@/i18n/LocalizedStrings";
 export function usePushNotifications() {
   const alert = useAlert();
   const { registerFCMToken } = useNotificationStore();
@@ -70,7 +72,7 @@ export function usePushNotifications() {
         await registerFCMToken(token);
       }
     } catch (error) {
-      alert.show(AlertPresets.error("❌ FCM Token Error", error.message));
+      alert.show(AlertPresets.error(t(LocalizedStrings.errors.fcmToken), error.message));
     }
   };
 
@@ -122,7 +124,7 @@ export const showLocalNotification = async (remoteMessage: any) => {
   await Notifications.scheduleNotificationAsync({
     identifier: remoteMessage.messageId,
     content: {
-      title: remoteMessage.notification?.title || "New Notification",
+      title: remoteMessage.notification?.title || t(LocalizedStrings.common.newNotification),
       body: remoteMessage.notification?.body || "",
       data: remoteMessage.data,
       // Falls back to "default" if sound is on but no tone is selected
@@ -201,15 +203,32 @@ export const setupNotificationChannels = async (
     { sound: false, vibrate: true, lock: false, id: "silent_vibrate_nolock" },
     { sound: false, vibrate: false, lock: true, id: "silent_novibrate_lock" },
     { sound: false, vibrate: false, lock: false, id: "silent_novibrate_nolock" },
+    // UN-suffixed sound channels. The backend (taykie-backend notification.service.ts
+    // sendToDevice) targets `${sound|silent}_${vibrate|novibrate}_${lock|nolock}` with no
+    // tone suffix, because it doesn't know which tone this device picked. Without these,
+    // a push that arrives while the app is backgrounded/killed (follow, like, comment,
+    // reminders…) names a channel that doesn't exist, so Android files it under FCM's
+    // low-importance fallback channel: no heads-up pop-up, no sound — it only shows up
+    // when the user happens to pull down the shade. Default system sound, since the
+    // backend can't pick the device tone either. Never deleted on tone change.
+    { sound: true, vibrate: true, lock: true, id: "sound_vibrate_lock", defaultSound: true },
+    { sound: true, vibrate: true, lock: false, id: "sound_vibrate_nolock", defaultSound: true },
+    { sound: true, vibrate: false, lock: true, id: "sound_novibrate_lock", defaultSound: true },
+    { sound: true, vibrate: false, lock: false, id: "sound_novibrate_nolock", defaultSound: true },
   ];
 
   for (const config of configurations) {
+    const channelSound = config.sound
+      ? "defaultSound" in config && config.defaultSound
+        ? "default"
+        : (toneFile ?? "default")
+      : null;
     await Notifications.setNotificationChannelAsync(config.id, {
-      name: `${config.sound ? "Sound" : "Silent"}, ${config.vibrate ? "Vibrate" : "No Vibrate"} (${config.lock ? "Lock Screen" : "Hidden"})`,
+      name: `${config.sound ? t(LocalizedStrings.notifications.channel.sound) : t(LocalizedStrings.notifications.channel.silent)}, ${config.vibrate ? t(LocalizedStrings.notifications.channel.vibrate) : t(LocalizedStrings.notifications.channel.noVibrate)} (${config.lock ? t(LocalizedStrings.notifications.channel.lockScreen) : t(LocalizedStrings.notifications.channel.hidden)})`,
       importance: Notifications.AndroidImportance.MAX,
       // Falls back to "default" if this is a sound channel but no tone is
       // selected (Mute, or nothing chosen yet).
-      sound: config.sound ? (toneFile ?? "default") : null,
+      sound: channelSound,
       enableVibrate: config.vibrate,
       vibrationPattern: config.vibrate ? vibrationPattern : undefined,
       // Here is the lock screen magic:

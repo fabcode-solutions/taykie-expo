@@ -4,6 +4,8 @@ import { PickerItem, ScrollPicker } from "../shared/picker/ScrollPicker";
 import { Button } from "@/components/ui/button";
 import { View } from "react-native";
 import { moderateScale, verticalScale } from "@/utils/scale";
+import { t } from "i18next";
+import { LocalizedStrings } from "@/i18n/LocalizedStrings";
 const monthItems: PickerItem<number>[] = Array.from({ length: 12 }, (_, i) => {
   const minutes = (i + 1) * 5;
   return {
@@ -44,7 +46,7 @@ const SnoozeDuration = ({
     <BottomDrawer
       isVisible={isVisible}
       onClose={onClose}
-      title="Snooze Duration"
+      title={t(LocalizedStrings.settings.snoozeDuration.title)}
       height="50%"
       showHandle
       closeOnSwipeDown
@@ -60,7 +62,7 @@ const SnoozeDuration = ({
       />
       <View style={{ padding: verticalScale(20), width: "100%" }}>
         <Button
-          title={"Save Changes"}
+          title={t(LocalizedStrings.settings.dosagePreferences.save)}
           onPress={() => {
             // Find the label by matching the value
             const selectedItem = monthItems.find((i) => i.value === selectedValue);

@@ -13,8 +13,6 @@ import { LocalizedStrings } from "@/i18n/LocalizedStrings";
 
 type FrequencyOption = {
   value: 1 | 2 | 3;
-  label: string;
-  description: string;
   times: string[];
   compartments: number;
 };
@@ -22,22 +20,16 @@ type FrequencyOption = {
 const OPTIONS: FrequencyOption[] = [
   {
     value: 1,
-    label: "Once a day",
-    description: "One compartment — morning, evening, or whenever suits you.",
     times: ["08:00"],
     compartments: 7,
   },
   {
     value: 2,
-    label: "Twice a day",
-    description: "Two compartments — e.g. morning and evening.",
     times: ["08:00", "20:00"],
     compartments: 14,
   },
   {
     value: 3,
-    label: "Three times a day",
-    description: "Three compartments — morning, midday and evening.",
     times: ["08:00", "13:00", "20:00"],
     compartments: 21,
   },
@@ -144,7 +136,7 @@ export default function DosageFrequency() {
               onPress={() => setSelected(opt.value)}
               accessibilityRole="radio"
               accessibilityState={{ checked: isSelected }}
-              accessibilityLabel={opt.label}
+              accessibilityLabel={t(`onboarding.dosage.frequency.frequency${opt.value}`)}
             >
               <View style={styles.cardRow}>
                 <ThemeText

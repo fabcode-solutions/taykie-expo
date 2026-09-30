@@ -106,16 +106,16 @@ export default function NotificationSettingsScreen() {
     () => [
       {
         leftIcon: <IconNotifications />,
-        heading: "Notification Sound",
+        heading: t(LocalizedStrings.settings.notificationSettings.notificationSound.title),
         action: "notificationSound",
-        description: "Change How Notification Sound.",
+        description: t(LocalizedStrings.settings.notificationSettings.notificationSound.description),
         rightIcon: <IconForward />,
       },
       {
         leftIcon: <IconDevice stroke={theme.colors.slateCharcoal} />,
-        heading: "App Notification",
+        heading: t(LocalizedStrings.settings.notificationSettings.appNotification.title),
         action: "appNotification",
-        description: "Receive mobile app notifications.",
+        description: t(LocalizedStrings.settings.notificationSettings.appNotification.description),
         rightIcon: (
           <Switch
             style={styles.switch}
@@ -127,9 +127,9 @@ export default function NotificationSettingsScreen() {
       },
       {
         leftIcon: <IconVibration />,
-        heading: "Vibration",
+        heading: t(LocalizedStrings.settings.notificationSettings.vibration.title),
         action: "vibration",
-        description: "Vibrate device when a reminder is due.",
+        description: t(LocalizedStrings.settings.notificationSettings.vibration.description),
         // If iOS, show a forward arrow instead of a switch to indicate navigation
         rightIcon: IS_IOS ? (
           <IconForward />
@@ -144,9 +144,9 @@ export default function NotificationSettingsScreen() {
       },
       {
         leftIcon: <IconLock />,
-        heading: "Show on Lock Screen",
+        heading: t(LocalizedStrings.settings.notificationSettings.showOnLockScreen.title),
         action: "showOnLockScreen",
-        description: "Display Product reminder on lock screen. ",
+        description: t(LocalizedStrings.settings.notificationSettings.showOnLockScreen.description),
         // If iOS, show a forward arrow instead of a switch to indicate navigation
         rightIcon: IS_IOS ? (
           <IconForward />
@@ -168,6 +168,7 @@ export default function NotificationSettingsScreen() {
       notification.vibration,
       notification.showOnLockScreen,
       handleNotifications,
+      t,
       t,
     ],
   );

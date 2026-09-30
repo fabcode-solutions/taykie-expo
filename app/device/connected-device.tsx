@@ -49,7 +49,7 @@ export default function ConnectedDeviceScreen() {
         leftIcon: <IconApple />,
         heading: "Apple Health",
         action: "appleHealth",
-        description: "Sync Products, heart rate, and steps",
+        description: t(LocalizedStrings.settings.integrations.appleHealth.description),
         rightIcon: (
           <Switch
             style={styles.switch}
@@ -62,7 +62,7 @@ export default function ConnectedDeviceScreen() {
         leftIcon: <IconGoogleFit />,
         heading: "Google Fit",
         action: "googleFit",
-        description: "Track your activity and sleep automatically",
+        description: t(LocalizedStrings.settings.integrations.googleFit.description),
         rightIcon: (
           <Switch
             style={styles.switch}
@@ -86,28 +86,28 @@ export default function ConnectedDeviceScreen() {
         leftIcon: <IconFitbit />,
         heading: "Fitbit",
         action: "fitbit",
-        description: "Sync sleeps & activity data",
+        description: t(LocalizedStrings.settings.integrations.fitbit.description),
         rightIcon: null,
       },
       {
         leftIcon: <IconGarmin />,
         heading: "Garmin",
         action: "garmin",
-        description: "Track activity insights",
+        description: t(LocalizedStrings.settings.integrations.garmin.description),
         rightIcon: null,
       },
       {
         leftIcon: <IconWatch />,
         heading: "Galaxy Watch",
         action: "galaxyWatch",
-        description: "Sync vitals & reminders",
+        description: t(LocalizedStrings.settings.integrations.galaxyWatch.description),
         rightIcon: null,
       },
       {
         leftIcon: <IconRing />,
         heading: "Oura Ring",
         action: "ouraRing",
-        description: "Connect for sleep & readiness data",
+        description: t(LocalizedStrings.settings.integrations.ouraRing.description),
         rightIcon: null,
       },
     ],
@@ -157,12 +157,16 @@ export default function ConnectedDeviceScreen() {
                 <Text style={[styles.deviceVersion]}>iOS 17.0</Text>
                 <View style={[styles.deviceStatusWrapper]}>
                   <View style={[styles.deviceDot]}></View>
-                  <Text style={[styles.deviceStatus]}>Connected</Text>
+                  <Text style={[styles.deviceStatus]}>{t(LocalizedStrings.common.connected)}</Text>
                 </View>
               </View>
             </View>
           </View>
-          <Text style={[styles.deviceLastSync]}>Last Synced: Today 10:30 AM</Text>
+          <Text style={[styles.deviceLastSync]}>
+            {t(LocalizedStrings.device.lastSynced, {
+              time: `${t(LocalizedStrings.home.today.title)} 10:30 AM`,
+            })}
+          </Text>
         </View>
         <View style={{ marginTop: verticalScale(30), gap: verticalScale(20) }}>
           <Button

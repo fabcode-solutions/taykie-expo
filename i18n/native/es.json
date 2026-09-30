@@ -1,0 +1,6 @@
+{
+  "NSCameraUsageDescription": "Esta aplicación necesita acceso a la cámara para tomar fotos de perfil.",
+  "NSPhotoLibraryUsageDescription": "Esta aplicación necesita acceso a la fototeca para seleccionar fotos de perfil.",
+  "NSPhotoLibraryAddUsageDescription": "Esta aplicación necesita acceso para guardar fotos en tu fototeca.",
+  "NSFaceIDUsageDescription": "Permite que Taykie use Face ID para desbloquear la aplicación."
+}

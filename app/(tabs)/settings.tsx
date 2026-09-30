@@ -12,12 +12,46 @@ import { RoutePath, SETTINGS } from "@/data/settings";
 import DeleteSchedule from "@/components/schedule/DeleteSchedule";
 import { moderateScale, scale, verticalScale } from "@/utils/scale";
 import { LocalizedStrings } from "@/i18n/LocalizedStrings";
+import { Skeleton } from "@/components/ui/Skeleton";
+
+type ActionItemProps = React.ComponentProps<typeof ActionItem>;
+
+interface SettingsRowProps {
+  heading: string;
+  description: string;
+  leftIcon: ActionItemProps["leftIcon"];
+  rightIcon: ActionItemProps["rightIcon"];
+  action: string;
+  onAction: (action: string) => void;
+}
+
+// Memoized so the whole settings list doesn't re-render on unrelated state
+// changes (logout modal toggle, isLoggingOut, ...).
+const SettingsRow = React.memo(function SettingsRow({
+  heading,
+  description,
+  leftIcon,
+  rightIcon,
+  action,
+  onAction,
+}: SettingsRowProps) {
+  const handlePress = useCallback(() => onAction(action), [onAction, action]);
+  return (
+    <ActionItem
+      heading={heading}
+      description={description}
+      leftIcon={leftIcon}
+      rightIcon={rightIcon}
+      onPress={handlePress}
+    />
+  );
+});
 
 export default function SettingsScreen() {
   const { t } = useTranslation();
   const theme = useTheme();
   const router = useRouter();
-  const { logout } = useAuthStore();
+  const logout = useAuthStore((state) => state.logout);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [accountDelete, setAccountDelete] = useState(false);
   // DeleteSchedule's own BlurModal closes itself ~2500ms after onYes resolves.
@@ -49,6 +83,41 @@ export default function SettingsScreen() {
       router.replace("/(auth)/auth-start");
     }
   }, [router]);
+  const handleEditProfile = useCallback(() => router.push("/profile/edit-profile"), [router]);
+  const handleAction = useCallback(
+    (action: string) => {
+      if (action === "logout") {
+        handleDelete();
+      } else {
+        router.push(action as RoutePath);
+      }
+    },
+    [handleDelete, router],
+  );
+
+  const sections = useMemo(
+    () =>
+      Object.keys(SETTINGS).map((key) => (
+        <View style={styles.settingItemWrapper} key={key}>
+          <Text style={styles.settingHeader}>{t(`settings.${key}.title`)}</Text>
+          <View style={styles.section}>
+            {SETTINGS[key].map((item, index) => (
+              <SettingsRow
+                key={index}
+                heading={t(item.heading)}
+                description={t(item.description)}
+                leftIcon={item.leftIcon}
+                rightIcon={item.rightIcon}
+                action={item.action}
+                onAction={handleAction}
+              />
+            ))}
+          </View>
+        </View>
+      )),
+    [t, styles, handleAction],
+  );
+
   const performLogout = async () => {
     if (isLoggingOut) return;
 
@@ -58,9 +127,11 @@ export default function SettingsScreen() {
       await logout();
       logoutPendingRef.current = true;
     } catch (error) {
-      crossPlatformAlert(t(LocalizedStrings.common.error), error.message, [
-        { text: t(LocalizedStrings.common.ok) },
-      ]);
+      crossPlatformAlert(
+        t(LocalizedStrings.common.error),
+        error instanceof Error ? error.message : String(error),
+        [{ text: t(LocalizedStrings.common.ok) }],
+      );
     } finally {
       setIsLoggingOut(false);
     }
@@ -78,54 +149,41 @@ export default function SettingsScreen() {
             {t(LocalizedStrings.settings.title)}
           </ThemeText>
         </View>
-        <View style={styles.profileWrapper}>
-          <TouchableOpacity onPress={handleProfile} style={styles.avatar}>
-            {user?.avatarUrl ? (
-              <Image source={{ uri: user.avatarUrl }} style={styles.avatarUrl} />
-            ) : (
-              <Text style={styles.avatarInitial}>{avatarInitial}</Text>
-            )}
-          </TouchableOpacity>
-          <View style={{ gap: verticalScale(10) }}>
-            <Text style={styles.profileName}>{displayName}</Text>
-            <View style={styles.editProfileBtnWrapper}>
-              <TouchableOpacity
-                style={styles.editProfile}
-                onPress={() => router.push("/profile/edit-profile")}
-              >
-                <Text style={styles.editProfileText}>
-                  {t(LocalizedStrings.profile.editProfile)}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-        {/* Appearance */}
-        {Object.keys(SETTINGS).map((key) => {
-          return (
-            <View style={styles.settingItemWrapper} key={key}>
-              <Text style={styles.settingHeader}>{t(`settings.${key}.title`)}</Text>
-              <View style={styles.section}>
-                {SETTINGS[key].map((item, index) => (
-                  <ActionItem
-                    key={index}
-                    heading={t(item.heading)}
-                    description={t(item.description)}
-                    leftIcon={item.leftIcon}
-                    rightIcon={item.rightIcon}
-                    onPress={() => {
-                      if (item.action === "logout") {
-                        handleDelete();
-                      } else {
-                        router.push(item.action as RoutePath);
-                      }
-                    }}
-                  />
-                ))}
+        {user ? (
+          <View style={styles.profileWrapper}>
+            <TouchableOpacity onPress={handleProfile} style={styles.avatar}>
+              {user.avatarUrl ? (
+                <Image source={{ uri: user.avatarUrl }} style={styles.avatarUrl} />
+              ) : (
+                <Text style={styles.avatarInitial}>{avatarInitial}</Text>
+              )}
+            </TouchableOpacity>
+            <View style={{ gap: verticalScale(10) }}>
+              <Text style={styles.profileName}>{displayName}</Text>
+              <View style={styles.editProfileBtnWrapper}>
+                <TouchableOpacity style={styles.editProfile} onPress={handleEditProfile}>
+                  <Text style={styles.editProfileText}>
+                    {t(LocalizedStrings.profile.editProfile)}
+                  </Text>
+                </TouchableOpacity>
               </View>
             </View>
-          );
-        })}
+          </View>
+        ) : (
+          <View style={styles.profileWrapper}>
+            <Skeleton width={verticalScale(60)} height={verticalScale(60)} borderRadius={999} />
+            <View style={{ gap: verticalScale(10) }}>
+              <Skeleton width={scale(140)} height={moderateScale(16)} />
+              <Skeleton
+                width={scale(90)}
+                height={moderateScale(22)}
+                borderRadius={moderateScale(5)}
+              />
+            </View>
+          </View>
+        )}
+        {/* Appearance */}
+        {sections}
       </ScrollView>
       {accountDelete && (
         <DeleteSchedule

@@ -165,7 +165,7 @@ export default function PairDevice() {
                   />
                   <View style={styles.deviceInfo}>
                     <ThemeText variant="manrope.body1Bold">
-                      {item.name || "Unnamed Taykie Device"}
+                      {item.name || t(LocalizedStrings.device.unnamed)}
                     </ThemeText>
                     <ThemeText
                       variant="manrope.caption"

@@ -12,13 +12,22 @@ import { router } from "expo-router";
 import { memo, useCallback, useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { FlatList, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { CardListSkeleton } from "@/components/profile/ProfileSkeletons";
+
+const getErrorMessage = (error: unknown) =>
+  error instanceof Error ? error.message : String(error);
+
+const logKeyExtractor = (item: LogsData) => String(item.id);
 
 const LogsScreen = () => {
   const theme = useTheme();
   const alert = useAlert();
   const { t } = useTranslation();
   const styles = useMemo(() => createStyles(theme), [theme]);
-  const { fetchUserLogs, userLogs, deleteUserLog, isLoading } = useScheduleStore();
+  const fetchUserLogs = useScheduleStore((s) => s.fetchUserLogs);
+  const userLogs = useScheduleStore((s) => s.userLogs);
+  const deleteUserLog = useScheduleStore((s) => s.deleteUserLog);
+  const isLoading = useScheduleStore((s) => s.isLoading);
 
   const handleBack = useCallback(() => router.back(), [router]);
 
@@ -30,7 +39,7 @@ const LogsScreen = () => {
     try {
       await fetchUserLogs();
     } catch (error) {
-      alert.show(AlertPresets.error(t(LocalizedStrings.common.error), error.message));
+      alert.show(AlertPresets.error(t(LocalizedStrings.common.error), getErrorMessage(error)));
     }
   }, []);
 
@@ -40,14 +49,19 @@ const LogsScreen = () => {
         const message = await deleteUserLog(id);
         alert.show(AlertPresets.error(t(LocalizedStrings.common.success), message));
       } catch (error) {
-        alert.show(AlertPresets.error(t(LocalizedStrings.common.error), error.message));
+        alert.show(AlertPresets.error(t(LocalizedStrings.common.error), getErrorMessage(error)));
       }
     },
-    [t],
+    [t, deleteUserLog, alert],
+  );
+
+  const renderLog = useCallback(
+    ({ item }: { item: LogsData }) => <LogItem item={item} onRemove={handleRemoveLog} />,
+    [handleRemoveLog],
   );
 
   return (
-    <SafeAreaScreen style={styles.safeArea} showLoader={isLoading}>
+    <SafeAreaScreen style={styles.safeArea}>
       <View>
         <TouchableOpacity onPress={handleBack} style={styles.backButton} activeOpacity={0.7}>
           <View style={styles.backButtonInner}>
@@ -62,9 +76,16 @@ const LogsScreen = () => {
       <FlatList
         data={userLogs}
         showsVerticalScrollIndicator={false}
-        renderItem={({ item }) => <LogItem item={item} onRemove={handleRemoveLog} />}
+        keyExtractor={logKeyExtractor}
+        renderItem={renderLog}
         contentContainerStyle={{ gap: verticalScale(16) }}
-        ListEmptyComponent={<EmptyView message={t(LocalizedStrings.logs.no_logs_found)} />}
+        ListEmptyComponent={
+          isLoading ? (
+            <CardListSkeleton variant="log" />
+          ) : (
+            <EmptyView message={t(LocalizedStrings.logs.no_logs_found)} />
+          )
+        }
       />
     </SafeAreaScreen>
   );

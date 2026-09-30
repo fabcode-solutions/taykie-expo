@@ -240,7 +240,7 @@ const Schedule = ({ item, onAddRoutine }: ScheduleProps) => {
                     onPress={() => setActivePickerIndex(isPickerOpen ? null : index)}
                     activeOpacity={0.85}
                     accessibilityRole="button"
-                    accessibilityLabel="Select dosage time"
+                    accessibilityLabel={t(LocalizedStrings.schedule.routine.selectTime)}
                   >
                     <Ionicons
                       name="time-outline"
@@ -263,7 +263,7 @@ const Schedule = ({ item, onAddRoutine }: ScheduleProps) => {
                     <TouchableOpacity
                       onPress={() => removeTime(index)}
                       accessibilityRole="button"
-                      accessibilityLabel="Remove time"
+                      accessibilityLabel={t(LocalizedStrings.schedule.routine.removeTime)}
                     >
                       <Ionicons
                         name="close-circle"
@@ -294,7 +294,7 @@ const Schedule = ({ item, onAddRoutine }: ScheduleProps) => {
             onPress={addTime}
             activeOpacity={0.85}
             accessibilityRole="button"
-            accessibilityLabel="Add another time"
+            accessibilityLabel={t(LocalizedStrings.schedule.routine.addTime)}
           >
             <Ionicons
               name="add-circle-outline"

@@ -27,27 +27,27 @@ export default function HelpSupportScreen() {
     () => [
       {
         leftIcon: <IconFaq />,
-        heading: "Frequently Asked Questions",
+        heading: t(LocalizedStrings.settings.helpSupport.faq.title),
         action: "faq",
-        description: "Find answers to common questions.",
+        description: t(LocalizedStrings.settings.helpSupport.faq.description),
         rightIcon: null,
       },
       {
         leftIcon: <IconContact />,
-        heading: "Contact Us",
+        heading: t(LocalizedStrings.settings.helpSupport.contact.title),
         action: "contact",
-        description: "Get in touch with our support team.",
+        description: t(LocalizedStrings.settings.helpSupport.contact.description),
         rightIcon: null,
       },
       {
         leftIcon: <IconPaperBoard />,
-        heading: "Warranty & Policies",
+        heading: t(LocalizedStrings.settings.helpSupport.policy.title),
         action: "policy",
-        description: "View warranty information and terms.",
+        description: t(LocalizedStrings.settings.helpSupport.policy.description),
         rightIcon: null,
       },
     ],
-    [],
+    [t],
   );
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.colors.background.default }]}>
@@ -76,7 +76,7 @@ export default function HelpSupportScreen() {
               leftIcon={item.leftIcon}
               rightIcon={item.rightIcon}
               onPress={() => {
-                router.push(item.action as RoutePath);
+                router.push(`/settings/${item.action}` as never);
               }}
             />
           ))}

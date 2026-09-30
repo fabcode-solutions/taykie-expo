@@ -19,7 +19,7 @@ import Svg, { Path } from "react-native-svg";
 import PostCard from "@/components/social/PostCard";
 import { usePostStore } from "@/stores/postStore";
 import { moderateScale, scale, verticalScale } from "@/utils/scale";
-import { Loader } from "@/components/shared/loader";
+import { PostCardSkeleton } from "@/components/social/PostCardSkeleton";
 import { LocalizedStrings } from "@/i18n/LocalizedStrings";
 import { AlertPresets } from "@/utils/alert";
 import { useAlert } from "@/provider/AlertProvider";
@@ -69,15 +69,14 @@ export default function BookmarkedScreen() {
   const [searchQuery, setSearchQuery] = React.useState("");
   const themedStyles = React.useMemo(() => createStyles(theme), [theme]);
 
-  const {
-    fetchBookmarkedPosts,
-    searchInBookmarkedPosts,
-    fetchPostComments,
-    bookmarkedPost,
-    unBookmarkPost,
-    isLoading,
-    hasMore, // Using our isolated bookmark tracker
-  } = usePostStore();
+  // Individual selectors so unrelated post-store updates don't re-render this screen.
+  const fetchBookmarkedPosts = usePostStore((s) => s.fetchBookmarkedPosts);
+  const searchInBookmarkedPosts = usePostStore((s) => s.searchInBookmarkedPosts);
+  const fetchPostComments = usePostStore((s) => s.fetchPostComments);
+  const bookmarkedPost = usePostStore((s) => s.bookmarkedPost);
+  const unBookmarkPost = usePostStore((s) => s.unBookmarkPost);
+  const isLoading = usePostStore((s) => s.isLoading);
+  const hasMore = usePostStore((s) => s.hasMore); // Using our isolated bookmark tracker
 
   // Local state exactly like CommunityScreen
   const [isFetchingMore, setIsFetchingMore] = React.useState(false);
@@ -188,11 +187,20 @@ export default function BookmarkedScreen() {
     });
   }, []);
 
+  // Flag once per data change (not per render) so PostCard's props stay referentially
+  // stable for rows that didn't change.
+  const bookmarkedData = React.useMemo(
+    () => bookmarkedPost.map((post: any) => ({ ...post, isBookmarked: true })),
+    [bookmarkedPost],
+  );
+
+  const isInitialLoading = isLoading && bookmarkedPost.length === 0;
+
   // Extracted renderItem just like CommunityScreen
   const renderPostItem = useCallback(
     ({ item }: { item: any }) => (
       <PostCard
-        post={{ ...item, isBookmarked: true }}
+        post={item}
         onApiLike={handleApiLike}
         onApiComment={handleApiComment}
         onApiShare={handleApiShare}
@@ -213,7 +221,7 @@ export default function BookmarkedScreen() {
 
   // Extracted Footer Component
   const renderFooterComponent = useCallback(() => {
-    if (isFetchingMore) return <Loader fullScreen={false} />;
+    if (isFetchingMore) return <PostCardSkeleton />;
     if (!hasMore && bookmarkedPost.length > 0) {
       return <View style={{ padding: verticalScale(20), alignItems: "center" }} />;
     }
@@ -229,18 +237,45 @@ export default function BookmarkedScreen() {
     setSearchQuery("");
   }, []);
 
+  const refreshControl = React.useMemo(
+    () => <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />,
+    [isRefreshing, handleRefresh],
+  );
+
+  const listEmpty = React.useMemo(
+    () =>
+      isInitialLoading ? (
+        <View>
+          <PostCardSkeleton />
+          <PostCardSkeleton />
+        </View>
+      ) : (
+        <EmptyState
+          icon={
+            <View style={themedStyles.emptyIconContainer}>
+              <Svg width="60" height="60" viewBox="0 0 60 60" fill="none">
+                <Path
+                  d="M5 23.75C5.00005 20.968 5.84398 18.2515 7.42033 15.9592C8.99668 13.6669 11.2313 11.9067 13.829 10.911C16.4268 9.91536 19.2654 9.73112 21.97 10.3826C24.6747 11.0341 27.1181 12.4907 28.9775 14.56C29.1085 14.7 29.2668 14.8117 29.4427 14.888C29.6186 14.9643 29.8083 15.0037 30 15.0037C30.1917 15.0037 30.3814 14.9643 30.5573 14.888C30.7332 14.8117 30.8915 14.7 31.0225 14.56C32.8761 12.4773 35.3201 11.0084 38.0291 10.349C40.7381 9.6896 43.5837 9.87088 46.1872 10.8687C48.7906 11.8666 51.0285 13.6336 52.6028 15.9348C54.1771 18.2359 55.0133 20.9619 55 23.75C55 29.475 51.25 33.75 47.5 37.5L33.77 50.7825C33.3042 51.3175 32.7298 51.7473 32.0851 52.0433C31.4404 52.3392 30.7401 52.4946 30.0307 52.4991C29.3213 52.5036 28.6191 52.3571 27.9707 52.0693C27.3223 51.7815 26.7426 51.3591 26.27 50.83L12.5 37.5C8.75 33.75 5 29.5 5 23.75Z"
+                  fill="#DADADA"
+                />
+              </Svg>
+            </View>
+          }
+          title={t(LocalizedStrings.bookmarks.empty.title)}
+          description={t(LocalizedStrings.bookmarks.empty.description)}
+          theme={theme}
+        />
+      ),
+    [isInitialLoading, themedStyles.emptyIconContainer, t, theme],
+  );
+
   return (
     <KeyboardAvoidingView
       style={{ backgroundColor: theme.colors.background.default, flex: 1 }}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       keyboardVerticalOffset={Platform.OS === "ios" ? 80 : 0}
     >
-      <SafeAreaScreen
-        withBackground={true}
-        style={themedStyles.screen}
-        edges={["top"]}
-        showLoader={isLoading && bookmarkedPost.length === 0}
-      >
+      <SafeAreaScreen withBackground={true} style={themedStyles.screen} edges={["top"]}>
         <ThemeStatusBar style={theme.mode === "dark" ? "light" : "dark"} />
 
         {/* Static Header Section */}
@@ -303,33 +338,16 @@ export default function BookmarkedScreen() {
         </View>
 
         <FlatList
-          data={bookmarkedPost}
-          extraData={bookmarkedPost}
+          data={bookmarkedData}
           keyExtractor={keyExtractor}
           showsVerticalScrollIndicator={false}
           renderItem={renderPostItem}
           onEndReached={handleLoadMore}
           onEndReachedThreshold={0.5}
           contentContainerStyle={themedStyles.scrollContent}
-          refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />}
+          refreshControl={refreshControl}
           ListFooterComponent={renderFooterComponent}
-          ListEmptyComponent={
-            <EmptyState
-              icon={
-                <View style={themedStyles.emptyIconContainer}>
-                  <Svg width="60" height="60" viewBox="0 0 60 60" fill="none">
-                    <Path
-                      d="M5 23.75C5.00005 20.968 5.84398 18.2515 7.42033 15.9592C8.99668 13.6669 11.2313 11.9067 13.829 10.911C16.4268 9.91536 19.2654 9.73112 21.97 10.3826C24.6747 11.0341 27.1181 12.4907 28.9775 14.56C29.1085 14.7 29.2668 14.8117 29.4427 14.888C29.6186 14.9643 29.8083 15.0037 30 15.0037C30.1917 15.0037 30.3814 14.9643 30.5573 14.888C30.7332 14.8117 30.8915 14.7 31.0225 14.56C32.8761 12.4773 35.3201 11.0084 38.0291 10.349C40.7381 9.6896 43.5837 9.87088 46.1872 10.8687C48.7906 11.8666 51.0285 13.6336 52.6028 15.9348C54.1771 18.2359 55.0133 20.9619 55 23.75C55 29.475 51.25 33.75 47.5 37.5L33.77 50.7825C33.3042 51.3175 32.7298 51.7473 32.0851 52.0433C31.4404 52.3392 30.7401 52.4946 30.0307 52.4991C29.3213 52.5036 28.6191 52.3571 27.9707 52.0693C27.3223 51.7815 26.7426 51.3591 26.27 50.83L12.5 37.5C8.75 33.75 5 29.5 5 23.75Z"
-                      fill="#DADADA"
-                    />
-                  </Svg>
-                </View>
-              }
-              title={t(LocalizedStrings.bookmarks.empty.title)}
-              description={t(LocalizedStrings.bookmarks.empty.description)}
-              theme={theme}
-            />
-          }
+          ListEmptyComponent={listEmpty}
         />
       </SafeAreaScreen>
     </KeyboardAvoidingView>

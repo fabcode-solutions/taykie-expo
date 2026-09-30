@@ -38,11 +38,14 @@ import {
   getPublicProfile,
 } from "@/services/api/auth";
 import { getErrorMessage, usePostStore } from "./postStore";
+import { getDeviceTimezone } from "@/utils/timezone";
 import { useUploadStore } from "./uploadStore";
 import { Images } from "@/assets";
 import { useOnboardingStore } from "./onboardingStore";
 import { useNotificationStore } from "./notificationStore";
 import { UserStreakData } from "@/types/schedule.types";
+import { t } from "i18next";
+import { LocalizedStrings } from "@/i18n/LocalizedStrings";
 export interface SocialLogeinData {
   accessToken: string;
   refreshToken: string;
@@ -188,7 +191,7 @@ export const useAuthStore = create<State & Actions>()(
       login: async (credentials) => {
         set({ isLoading: true, error: null });
         if (!credentials.email || !credentials.password) {
-          set({ isLoading: false, error: "Email and password are required" });
+          set({ isLoading: false, error: t(LocalizedStrings.errors.api.credentialsRequired) });
           return;
         }
         try {
@@ -205,7 +208,7 @@ export const useAuthStore = create<State & Actions>()(
           await useOnboardingStore.getState().fetchOnboardingStatus();
         } catch (error) {
           const message = getErrorMessage(error);
-          set({ isLoading: false, error: error instanceof Error ? error.message : "Login failed" });
+          set({ isLoading: false, error: error instanceof Error ? error.message : t(LocalizedStrings.errors.api.login) });
           throw Error(message);
         }
       },
@@ -224,11 +227,11 @@ export const useAuthStore = create<State & Actions>()(
           await get().fetchUserProfile();
           return result.message;
         } catch (error) {
-          const message = getErrorMessage(error, "Registration failed");
+          const message = getErrorMessage(error, t(LocalizedStrings.errors.api.registration));
 
           set({
             isLoading: false,
-            error: error instanceof Error ? error.message : "Registration failed",
+            error: error instanceof Error ? error.message : t(LocalizedStrings.errors.api.registration),
           });
           throw Error(message);
         }
@@ -240,10 +243,10 @@ export const useAuthStore = create<State & Actions>()(
           await forgotPasswordApi(email);
           set({ isLoading: false, resetEmail: email });
         } catch (error) {
-          const message = getErrorMessage(error, "Request failed");
+          const message = getErrorMessage(error, t(LocalizedStrings.errors.api.requestFailed));
           set({
             isLoading: false,
-            error: error instanceof Error ? error.message : "Request failed",
+            error: error instanceof Error ? error.message : t(LocalizedStrings.errors.api.requestFailed),
           });
           throw Error(message);
         }
@@ -256,10 +259,10 @@ export const useAuthStore = create<State & Actions>()(
           set({ isLoading: false });
           return response.message;
         } catch (error) {
-          const message = getErrorMessage(error, "Request failed");
+          const message = getErrorMessage(error, t(LocalizedStrings.errors.api.requestFailed));
           set({
             isLoading: false,
-            error: error instanceof Error ? error.message : "Request failed",
+            error: error instanceof Error ? error.message : t(LocalizedStrings.errors.api.requestFailed),
           });
           throw Error(message);
         }
@@ -283,11 +286,26 @@ export const useAuthStore = create<State & Actions>()(
             error: null,
             userStreak: res.data.streak,
           });
+
+          // Accounts from before timezone auto-detect still have the DB's
+          // "UTC" default, which makes server reminders fire at the wrong
+          // local time. Backfill the phone's zone once — only while unset,
+          // so a zone the user picked in Edit Profile is never overwritten.
+          const savedTimezone = res.data.timezone;
+          const deviceTimezone = getDeviceTimezone();
+          if ((!savedTimezone || savedTimezone === "UTC") && deviceTimezone) {
+            updateUserprofile({ timezone: deviceTimezone })
+              .then(() => {
+                const current = get().user;
+                if (current) set({ user: { ...current, timezone: deviceTimezone } });
+              })
+              .catch((backfillError) => console.warn("Timezone backfill failed:", backfillError));
+          }
         } catch (error) {
-          const message = getErrorMessage(error, "Request failed");
+          const message = getErrorMessage(error, t(LocalizedStrings.errors.api.requestFailed));
           set({
             isLoading: false,
-            error: error instanceof Error ? error.message : "Request failed",
+            error: error instanceof Error ? error.message : t(LocalizedStrings.errors.api.requestFailed),
           });
           throw Error(message);
         }
@@ -300,7 +318,7 @@ export const useAuthStore = create<State & Actions>()(
           const res = await verifyOtpApi({ email, otp: code });
 
           if (!res?.data?.verified) {
-            throw new Error(res?.message || "Invalid OTP");
+            throw new Error(res?.message || t(LocalizedStrings.errors.api.invalidOtp));
           }
 
           set({
@@ -309,10 +327,10 @@ export const useAuthStore = create<State & Actions>()(
             resetToken: code,
           });
         } catch (error) {
-          const message = getErrorMessage(error, "Request failed");
+          const message = getErrorMessage(error, t(LocalizedStrings.errors.api.requestFailed));
           set({
             isLoading: false,
-            error: error instanceof Error ? error.message : "Verification failed",
+            error: error instanceof Error ? error.message : t(LocalizedStrings.errors.api.verification),
           });
           throw Error(message);
         }
@@ -337,10 +355,10 @@ export const useAuthStore = create<State & Actions>()(
           set({ isLoading: false, resetToken: null });
           return message;
         } catch (error) {
-          const message = getErrorMessage(error, "Request failed");
+          const message = getErrorMessage(error, t(LocalizedStrings.errors.api.requestFailed));
           set({
             isLoading: false,
-            error: error instanceof Error ? error.message : "Reset failed",
+            error: error instanceof Error ? error.message : t(LocalizedStrings.errors.api.reset),
           });
           throw Error(message);
         }
@@ -359,10 +377,10 @@ export const useAuthStore = create<State & Actions>()(
           await get().fetchUserProfile();
           await useOnboardingStore.getState().fetchOnboardingStatus();
         } catch (error) {
-          const message = getErrorMessage(error, "Request failed");
+          const message = getErrorMessage(error, t(LocalizedStrings.errors.api.requestFailed));
           set({
             isLoading: false,
-            error: error instanceof Error ? error.message : "Request failed",
+            error: error instanceof Error ? error.message : t(LocalizedStrings.errors.api.requestFailed),
           });
           throw Error(message);
         }
@@ -374,10 +392,10 @@ export const useAuthStore = create<State & Actions>()(
           await logoutUser();
           await performCompleteCleanup();
         } catch (error) {
-          const message = getErrorMessage(error, "Request failed");
+          const message = getErrorMessage(error, t(LocalizedStrings.errors.api.requestFailed));
           set({
             isLoading: false,
-            error: error instanceof Error ? error.message : "Request failed",
+            error: error instanceof Error ? error.message : t(LocalizedStrings.errors.api.requestFailed),
           });
           throw Error(message);
         }
@@ -392,10 +410,10 @@ export const useAuthStore = create<State & Actions>()(
           await get().fetchUserProfile();
           return response.message;
         } catch (error) {
-          const message = getErrorMessage(error, "Request failed");
+          const message = getErrorMessage(error, t(LocalizedStrings.errors.api.requestFailed));
           set({
             isLoading: false,
-            error: error instanceof Error ? error.message : "Request failed",
+            error: error instanceof Error ? error.message : t(LocalizedStrings.errors.api.requestFailed),
           });
           throw Error(message);
         }
@@ -410,10 +428,10 @@ export const useAuthStore = create<State & Actions>()(
           await get().fetchUserProfile();
           return response.message;
         } catch (error) {
-          const message = getErrorMessage(error, "Request failed");
+          const message = getErrorMessage(error, t(LocalizedStrings.errors.api.requestFailed));
           set({
             isLoading: false,
-            error: error instanceof Error ? error.message : "Request failed",
+            error: error instanceof Error ? error.message : t(LocalizedStrings.errors.api.requestFailed),
           });
           throw Error(message);
         }
@@ -476,10 +494,10 @@ export const useAuthStore = create<State & Actions>()(
 
           return response.message;
         } catch (error) {
-          const message = getErrorMessage(error, "Request failed");
+          const message = getErrorMessage(error, t(LocalizedStrings.errors.api.requestFailed));
           set({
             isLoading: false,
-            error: error instanceof Error ? error.message : "Request failed",
+            error: error instanceof Error ? error.message : t(LocalizedStrings.errors.api.requestFailed),
           });
           throw Error(message);
         }
@@ -596,10 +614,10 @@ export const useAuthStore = create<State & Actions>()(
             error: null,
           });
         } catch (error) {
-          const message = getErrorMessage(error, "Request failed");
+          const message = getErrorMessage(error, t(LocalizedStrings.errors.api.requestFailed));
           set({
             isLoading: false,
-            error: error instanceof Error ? error.message : "Request failed",
+            error: error instanceof Error ? error.message : t(LocalizedStrings.errors.api.requestFailed),
           });
           throw Error(message);
         }

@@ -11,6 +11,8 @@ import {
 import { omitNullUndefined } from "@/utils/formatter";
 import { getDeviceTimezone } from "@/utils/timezone";
 import { useAuthStore } from "./authStore";
+import { t } from "i18next";
+import { LocalizedStrings } from "@/i18n/LocalizedStrings";
 
 export interface SupplementItem {
   name: string;
@@ -157,15 +159,26 @@ type Actions = {
   resetOnboarding: () => Promise<void>;
 };
 
-const DEFAULT_SLOT_LABELS: Record<number, string[]> = {
-  1: ["Morning"],
-  2: ["Morning", "Evening"],
-  3: ["Morning", "Midday", "Evening"],
+// This runs at module load (via initialState), which can happen before i18n is
+// initialised because of the store require cycles — t() then returns undefined,
+// so fall back to the English slot name instead of crashing every route.
+const slotLabel = (key: string, fallback: string): string => {
+  const value = t(key);
+  return typeof value === "string" && value ? value : fallback;
+};
+
+const buildDefaultSlotLabels = (freq: 1 | 2 | 3): string[] => {
+  const morning = slotLabel(LocalizedStrings.home.schedule.morning, "morning");
+  const midday = slotLabel(LocalizedStrings.home.schedule.midday, "midday");
+  const evening = slotLabel(LocalizedStrings.home.schedule.evening, "evening");
+  if (freq === 1) return [morning];
+  if (freq === 2) return [morning, evening];
+  return [morning, midday, evening];
 };
 
 const buildDefaultSupplements = (freq: 1 | 2 | 3): SupplementSlot[] => {
-  const labels = DEFAULT_SLOT_LABELS[freq];
-  return labels.map((label, i) => ({
+  const labels = buildDefaultSlotLabels(freq);
+  return labels.map((label) => ({
     slot: label.toLowerCase(),
     scheduleTime: "",
     items: [{ name: "", dose: "" }],
@@ -177,10 +190,9 @@ const initialState: State = {
   isOnboardingComplete: false,
   user_country: "AU",
   user_language: "en-AU",
-  // Pre-filled from the device so the onboarding screen shows a sensible
-  // selection immediately rather than an empty picker — the user can still
-  // override it there before continuing.
-  user_timezone:  "Australia/Sydney",// getDeviceTimezone() ??,
+  // Auto-detected from the phone — onboarding has no timezone picker. The
+  // user can override it later from Edit Profile.
+  user_timezone: getDeviceTimezone() ?? "Australia/Sydney",
   dose_frequency: 1,
   dose_times: ["08:00"],
   supplements: buildDefaultSupplements(1),
@@ -204,7 +216,9 @@ const mapResponseToState = (data: any): Partial<State> => ({
 
   user_country: data.user_country ?? "AU",
   user_language: data.user_language ?? "en-AU",
-  user_timezone: data.user_timezone ?? getDeviceTimezone() ?? "Australia/Sydney",
+  // Device first: the server row defaults to "UTC" until onboarding saves
+  // it, so preferring the server value would overwrite the detected zone.
+  user_timezone: getDeviceTimezone() ?? data.user_timezone ?? "Australia/Sydney",
 
   dose_frequency: Number(data.dose_frequency ?? 1) as 1 | 2 | 3,
 
@@ -328,7 +342,7 @@ export const useOnboardingStore = create<State & Actions>()(
           await get().fetchOnboardingStatus();
           set({ isLoading: false, currentStep: 10 });
         } catch (error) {
-          const message = getErrorMessage(error, "Complete Onboarding failed");
+          const message = getErrorMessage(error, t(LocalizedStrings.errors.api.completeOnboarding));
           set({
             isLoading: false,
             error: message,
@@ -350,7 +364,7 @@ export const useOnboardingStore = create<State & Actions>()(
             isLoading: false,
           });
         } catch (error) {
-          const message = getErrorMessage(error, "Fetch Onboarding failed");
+          const message = getErrorMessage(error, t(LocalizedStrings.errors.api.fetchOnboarding));
           set({ isLoading: false, error: message });
           throw new Error(message);
         }
@@ -368,7 +382,7 @@ export const useOnboardingStore = create<State & Actions>()(
             isLoading: false,
           });
         } catch (error) {
-          const message = getErrorMessage(error, "Save Onboarding failed");
+          const message = getErrorMessage(error, t(LocalizedStrings.errors.api.saveOnboarding));
           set({ isLoading: false, error: message });
           throw new Error(message);
         }
@@ -381,7 +395,7 @@ export const useOnboardingStore = create<State & Actions>()(
           // Update store
           await get().fetchOnboardingStatus();
         } catch (error) {
-          const message = getErrorMessage(error, "Save Onboarding failed");
+          const message = getErrorMessage(error, t(LocalizedStrings.errors.api.saveOnboarding));
           set({ isLoading: false, error: message });
           throw new Error(message);
         }

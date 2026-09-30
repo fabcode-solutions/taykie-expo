@@ -16,6 +16,8 @@ import { AlertConfig, AlertStyles } from "@/types/alert";
 import { ALERT_COLORS, ALERT_CONSTANTS, ALERT_ICONS } from "@/constants/alert";
 import { ThemeText, ThemeView } from "@/components/primitives";
 import { moderateScale, verticalScale } from "@/utils/scale";
+import { t } from "i18next";
+import { LocalizedStrings } from "@/i18n/LocalizedStrings";
 
 interface AlertProps extends AlertConfig {
   index: number;
@@ -101,7 +103,13 @@ export const Alert: React.FC<AlertProps> = ({
 
     // Announce to screen readers
     if (Platform.OS === "ios") {
-      AccessibilityInfo.announceForAccessibility(`${type} alert: ${title}. ${message ?? ""}`);
+      AccessibilityInfo.announceForAccessibility(
+        t(LocalizedStrings.accessibility.alertAnnouncement, {
+          type: t(`alerts.types.${type}`, { defaultValue: type }),
+          title,
+          message: message ?? "",
+        }),
+      );
     }
   }, [
     positionOffset,

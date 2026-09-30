@@ -3,23 +3,23 @@ import {
   TouchableOpacity,
   View,
   Text,
-  KeyboardAvoidingView,
   Animated,
   Dimensions,
   TextInput,
   Platform,
+  Keyboard,
+  ScrollView,
 } from "react-native";
 import { ParallaxScrollView, SafeAreaScreen, ThemeStatusBar } from "@/components";
 import { fontFamily, Theme, useTheme } from "@/theme";
 import { useRouter, useLocalSearchParams } from "expo-router";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Images } from "@/assets";
 import { GroupDetailsHero } from "@/components/groups/GroupDetailsHero";
 import IconMembers from "@/components/icons/IconMembers";
 import IconImage from "@/components/icons/IconImage";
 import IconPoll from "@/components/icons/IconPoll";
 import { useGroupStore } from "@/stores/groupStore";
-import { getFullYear } from "@/utils/formatter";
 import { moderateScale, scale, verticalScale } from "@/utils/scale";
 import { formatDistanceToNow } from "date-fns";
 import { LocalizedStrings } from "@/i18n/LocalizedStrings";
@@ -28,59 +28,227 @@ import { GroupMember } from "@/services/repositories/groups";
 import { AlertPresets } from "@/utils/alert";
 import { useAlert } from "@/provider/AlertProvider";
 import { Button } from "@/components/ui/button";
+import { GroupDetailsSkeleton } from "@/components/groups/GroupSkeletons";
+import { GroupResponse } from "@/types/groups.types";
+
+type ParallaxProps = React.ComponentProps<typeof ParallaxScrollView>;
+type RenderHeader = NonNullable<ParallaxProps["renderHeader"]>;
+type GroupStyles = ReturnType<typeof createStyles>;
 
 const HEADER_MAX_HEIGHT = Dimensions.get("screen").height / 1.3;
 const HEADER_MIN_HEIGHT = Dimensions.get("screen").height / 2.2;
+// While the keyboard is open the hero collapses down to just its top row (back button),
+// instead of the usual ~45% of the screen — otherwise header + keyboard together leave
+// no visible room for the post box.
+const HEADER_MIN_HEIGHT_KEYBOARD = verticalScale(120);
+const POST_MAX_LENGTH = 250;
+
+const getErrorMessage = (error: unknown) =>
+  error instanceof Error ? error.message : String(error);
+
+const getYear = (value?: string | null) => {
+  if (!value) return "—";
+  const year = new Date(value).getFullYear();
+  return Number.isNaN(year) ? "—" : String(year);
+};
+
+// formatDistanceToNow throws a RangeError on an invalid date — guard it so a bad
+// updatedAt from the API can't crash the screen.
+const getLastActivity = (value?: string | null) => {
+  if (!value) return t(LocalizedStrings.device.compartments.noActivity);
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return t(LocalizedStrings.device.compartments.noActivity);
+  return formatDistanceToNow(date, { addSuffix: true });
+};
+
+const getJoinedBy = (group: GroupResponse | null) => {
+  if (!group?.members || group.members.length === 0) return "";
+
+  const members = group.members;
+  // Fallback to array length if membersCount isn't provided
+  const totalCount = group.membersCount ?? members.length;
+  const getName = (member: GroupMember) => member.user?.firstName || "";
+
+  if (totalCount <= 2) {
+    return members.map(getName).filter(Boolean).join(", ");
+  }
+
+  const firstTwo = members.slice(0, 2).map(getName).filter(Boolean).join(", ");
+  const remaining = totalCount - 2;
+  const andText = t(LocalizedStrings.auth.signup.legal.and);
+  const label =
+    remaining === 1 ? t(LocalizedStrings.common.other) : t(LocalizedStrings.common.others);
+
+  return `${firstTwo} ${andText} ${remaining} ${label}`;
+};
+
+// ─── Post composer ────────────────────────────────────────────────────────────
+
+interface PostComposerProps {
+  styles: GroupStyles;
+  placeholderColor: string;
+  onFocus: () => void;
+}
+
+// Owns its own text state: typing used to re-render the WHOLE screen (parallax header,
+// hero image, group details) on every keystroke.
+const PostComposer = memo(function PostComposer({
+  styles,
+  placeholderColor,
+  onFocus,
+}: PostComposerProps) {
+  const [textPost, setTextPost] = useState("");
+
+  return (
+    <View style={styles.textInputWrapper}>
+      <TextInput
+        style={styles.textInput}
+        multiline
+        numberOfLines={4}
+        onChangeText={setTextPost}
+        onFocus={onFocus}
+        value={textPost}
+        maxLength={POST_MAX_LENGTH}
+        placeholderTextColor={placeholderColor}
+        placeholder={t(LocalizedStrings.groups.writeSomething)}
+      />
+      <Text style={styles.letterCount}>
+        {textPost.length}/{POST_MAX_LENGTH}
+      </Text>
+      <View style={styles.postIcons}>
+        <TouchableOpacity>
+          <IconImage />
+        </TouchableOpacity>
+        <TouchableOpacity>
+          <IconPoll />
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+});
+
+// ─── Group details ────────────────────────────────────────────────────────────
+
+interface GroupDetailsProps {
+  group: GroupResponse | null;
+  styles: GroupStyles;
+  onJoinLeave: () => void;
+}
+
+const GroupDetails = memo(function GroupDetails({ group, styles, onJoinLeave }: GroupDetailsProps) {
+  const joinedBy = useMemo(() => getJoinedBy(group), [group]);
+
+  return (
+    <>
+      <View style={styles.groupWrapper}>
+        <Text style={styles.groupTitle}>{group?.groupName}</Text>
+        <View style={styles.groupMembers}>
+          <IconMembers />
+          <Text style={styles.memberCount}>{group?.membersCount}</Text>
+        </View>
+      </View>
+
+      <Text style={styles.groupDescription}>{group?.groupDescription}</Text>
+      <View style={styles.groupJoin}>
+        <Text style={styles.memberCount}>{t(LocalizedStrings.groups.joinedBy)}</Text>
+        <Text style={[styles.memberCount, styles.strong]}>{joinedBy}</Text>
+      </View>
+      <View style={styles.infoWrapper}>
+        <View style={styles.info}>
+          <Text style={styles.memberCount}>
+            {t(LocalizedStrings.common.since)}: {getYear(group?.createdAt)}
+          </Text>
+          <View style={styles.dot} />
+          <Text style={styles.memberCount}>
+            {t(LocalizedStrings.groups.lastActivity)}: {getLastActivity(group?.updatedAt)}
+          </Text>
+        </View>
+        <Button
+          fullWidth={false}
+          size="small"
+          textStyle={styles.joinButtonText}
+          title={
+            group?.isMember
+              ? t(LocalizedStrings.groups.leaveGroup)
+              : t(LocalizedStrings.groups.joinGroup)
+          }
+          onPress={onJoinLeave}
+          disabled={group?.userRole === "SuperAdmin"}
+        />
+      </View>
+    </>
+  );
+});
+
+// ─── Screen ───────────────────────────────────────────────────────────────────
 
 export default function SingleGroupScreen() {
   const theme = useTheme();
   const alert = useAlert();
   const router = useRouter();
-  const [textPost, setTextPost] = useState("");
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
-  const { fetchGroupById, group, joinGroup, leaveGroup, fetchRecommendedGroups, isLoading } =
-    useGroupStore();
-
-  useEffect(() => {
-    fetchGroupDetails();
-  }, [groupId]);
-
+  const fetchGroupById = useGroupStore((s) => s.fetchGroupById);
+  const group = useGroupStore((s) => s.group);
+  const joinGroup = useGroupStore((s) => s.joinGroup);
+  const leaveGroup = useGroupStore((s) => s.leaveGroup);
+  const fetchRecommendedGroups = useGroupStore((s) => s.fetchRecommendedGroups);
+  const isLoading = useGroupStore((s) => s.isLoading);
   const styles = useMemo(() => createStyles(theme), [theme]);
+
+  const scrollRef = useRef<ScrollView>(null);
+  const composerFocusedRef = useRef(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+
+  // ── Keyboard handling ──
+  // Edge-to-edge is on (app.config.ts), so on Android the window no longer resizes for
+  // the keyboard and KeyboardAvoidingView("height") doesn't reliably help — and the
+  // parallax hero is an absolute overlay on top of the scroll content anyway. So the
+  // keyboard is handled directly: collapse the hero, add the keyboard's height as
+  // bottom padding (scroll room), then scroll the composer into view above it.
+  useEffect(() => {
+    const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+    const showSub = Keyboard.addListener(showEvent, (e) => {
+      setKeyboardHeight(e.endCoordinates.height);
+    });
+    const hideSub = Keyboard.addListener(hideEvent, () => {
+      setKeyboardHeight(0);
+      composerFocusedRef.current = false;
+    });
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
+  // Once the new padding / collapsed header have laid out, bring the composer up.
+  useEffect(() => {
+    if (keyboardHeight > 0 && composerFocusedRef.current) {
+      const timer = setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 50);
+      return () => clearTimeout(timer);
+    }
+  }, [keyboardHeight]);
+
+  const handleComposerFocus = useCallback(() => {
+    composerFocusedRef.current = true;
+    // Keyboard already open (e.g. refocus) — the keyboardHeight effect won't re-fire.
+    if (Keyboard.isVisible()) {
+      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 50);
+    }
+  }, []);
+
+  // ── Data ──
   const fetchGroupDetails = useCallback(async () => {
     try {
       await fetchGroupById(groupId);
     } catch (error) {
-      alert.show(AlertPresets.error(t(LocalizedStrings.common.error), error.message));
+      alert.show(AlertPresets.error(t(LocalizedStrings.common.error), getErrorMessage(error)));
     }
-  }, [groupId]);
+  }, [groupId, fetchGroupById, alert]);
 
-  const joinedBy = useMemo(() => {
-    // 1. Safety check for the specific structure of your JSON
-    if (!group?.members || group.members.length === 0) return "";
-
-    const members = group.members;
-    // Fallback to array length if membersCount isn't provided
-    const totalCount = group.membersCount ?? members.length;
-
-    // Helper to extract name safely from the nested user object
-    const getName = (member: GroupMember) => member.user?.firstName || "";
-
-    // 2. Logic for 2 or fewer total members
-    if (totalCount <= 2) {
-      return members.map(getName).filter(Boolean).join(", ");
-    }
-
-    // 3. Logic for more than 2 members
-    const firstTwo = members.slice(0, 2).map(getName).filter(Boolean).join(", ");
-
-    const remaining = totalCount - 2;
-
-    const andText = t(LocalizedStrings.auth.signup.legal.and);
-    const label =
-      remaining === 1 ? t(LocalizedStrings.common.other) : t(LocalizedStrings.common.others);
-
-    return `${firstTwo} ${andText} ${remaining} ${label}`;
-  }, [group, t]);
+  useEffect(() => {
+    fetchGroupDetails();
+  }, [fetchGroupDetails]);
 
   const handleJoinLeaveGroup = useCallback(async () => {
     try {
@@ -94,151 +262,133 @@ export default function SingleGroupScreen() {
 
       alert.show(AlertPresets.success(t(LocalizedStrings.common.success), message));
     } catch (error) {
-      alert.show(AlertPresets.error(t(LocalizedStrings.common.error), error.message));
+      alert.show(AlertPresets.error(t(LocalizedStrings.common.error), getErrorMessage(error)));
     }
-  }, [group?.isMember, groupId]);
+  }, [group?.isMember, groupId, joinGroup, leaveGroup, fetchRecommendedGroups, alert]);
+
+  // fetchGroupById clears `group` while loading, so no group + loading = first load.
+  // (join/leave also toggle isLoading but keep the group, so they don't flash the skeleton.)
+  const showSkeleton = isLoading && !group;
+
+  // ── Parallax header ──
+  const heroImage = useMemo(
+    () => (group?.uploadGroupPhoto ? { uri: group.uploadGroupPhoto } : Images.authStart),
+    [group?.uploadGroupPhoto],
+  );
+
+  const renderHeader = useCallback<RenderHeader>(
+    ({ scrollY, headerScrollDistance, headerHeight }) => {
+      const imageScale = scrollY.interpolate({
+        inputRange: [-headerHeight, headerScrollDistance, headerScrollDistance],
+        outputRange: [1.5, 1, 1],
+        extrapolateLeft: "extend",
+        extrapolateRight: "clamp",
+      });
+
+      const collapseTranslateY = scrollY.interpolate({
+        inputRange: [0, headerScrollDistance],
+        outputRange: [0, headerScrollDistance / 2],
+        extrapolate: "clamp",
+      });
+
+      const centeringTranslateY = Animated.multiply(
+        Animated.subtract(imageScale, 1),
+        -headerHeight / 2,
+      );
+
+      const imageTranslateY = Animated.add(collapseTranslateY, centeringTranslateY);
+
+      const overlayOpacity = scrollY.interpolate({
+        inputRange: [0, 0],
+        outputRange: [0, 0],
+        extrapolate: "clamp",
+      });
+
+      const topRowTranslateY = scrollY.interpolate({
+        inputRange: [0, headerScrollDistance],
+        outputRange: [0, headerScrollDistance],
+        extrapolate: "clamp",
+      });
+
+      return (
+        <GroupDetailsHero
+          imageUri={heroImage}
+          heroSlidesLabel={"d"}
+          onBack={router.back}
+          imageScale={imageScale}
+          imageTranslateY={imageTranslateY}
+          overlayOpacity={overlayOpacity}
+          topRowTranslateY={topRowTranslateY}
+        />
+      );
+    },
+    [heroImage, router.back],
+  );
+
+  const contentContainerStyle = useMemo(
+    () => [
+      styles.scrollContent,
+      {
+        paddingTop: HEADER_MAX_HEIGHT,
+        // Keyboard height as extra scroll room so the composer can move above it.
+        paddingBottom: verticalScale(40) + keyboardHeight,
+        backgroundColor: theme.colors.background.default,
+        borderRadius: 20,
+      },
+    ],
+    [styles.scrollContent, keyboardHeight, theme.colors.background.default],
+  );
+
+  const scrollViewProps = useMemo(
+    () => ({
+      showsVerticalScrollIndicator: false,
+      keyboardShouldPersistTaps: "handled" as const,
+      keyboardDismissMode: "interactive" as const,
+    }),
+    [],
+  );
 
   return (
-    <KeyboardAvoidingView
-      style={[styles.safeArea, { backgroundColor: theme.colors.background.default }]}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 80 : 0}
+    <SafeAreaScreen
+      withBackground={false}
+      edges={["left", "right", "bottom"]}
+      style={[styles.screen, { backgroundColor: theme.colors.background.default }]}
     >
-      <SafeAreaScreen
-        showLoader={isLoading}
-        withBackground={false}
-        edges={["left", "right", "bottom"]}
-        style={[styles.screen, { backgroundColor: theme.colors.background.default }]}
+      <ThemeStatusBar style="light" />
+      <ParallaxScrollView
+        scrollRef={scrollRef}
+        headerHeight={HEADER_MAX_HEIGHT}
+        headerMinHeight={keyboardHeight > 0 ? HEADER_MIN_HEIGHT_KEYBOARD : HEADER_MIN_HEIGHT}
+        contentOverlapsHeader={false}
+        contentContainerStyle={contentContainerStyle}
+        scrollViewProps={scrollViewProps}
+        renderHeader={renderHeader}
       >
-        <ThemeStatusBar style="light" />
-        <ParallaxScrollView
-          headerHeight={HEADER_MAX_HEIGHT}
-          headerMinHeight={HEADER_MIN_HEIGHT}
-          contentOverlapsHeader={false}
-          contentContainerStyle={[
-            styles.scrollContent,
-            {
-              paddingTop: HEADER_MAX_HEIGHT,
-              backgroundColor: theme.colors.background.default,
-              borderRadius: 20,
-            },
-          ]}
-          scrollViewProps={{ showsVerticalScrollIndicator: false }}
-          renderHeader={({ scrollY, headerScrollDistance, headerHeight }) => {
-            const imageScale = scrollY.interpolate({
-              inputRange: [-headerHeight, headerScrollDistance, headerScrollDistance],
-              outputRange: [1.5, 1, 1],
-              extrapolateLeft: "extend",
-              extrapolateRight: "clamp",
-            });
-
-            const collapseTranslateY = scrollY.interpolate({
-              inputRange: [0, headerScrollDistance],
-              outputRange: [0, headerScrollDistance / 2],
-              extrapolate: "clamp",
-            });
-
-            const centeringTranslateY = Animated.multiply(
-              Animated.subtract(imageScale, 1),
-              -headerHeight / 2,
-            );
-
-            const imageTranslateY = Animated.add(collapseTranslateY, centeringTranslateY);
-
-            const overlayOpacity = scrollY.interpolate({
-              inputRange: [0, 0],
-              outputRange: [0, 0],
-              extrapolate: "clamp",
-            });
-
-            const topRowTranslateY = scrollY.interpolate({
-              inputRange: [0, headerScrollDistance],
-              outputRange: [0, headerScrollDistance],
-              extrapolate: "clamp",
-            });
-
-            return (
-              <GroupDetailsHero
-                imageUri={
-                  group?.uploadGroupPhoto ? { uri: group?.uploadGroupPhoto } : Images.authStart
-                }
-                heroSlidesLabel={"d"}
-                onBack={router.back}
-                imageScale={imageScale}
-                imageTranslateY={imageTranslateY}
-                overlayOpacity={overlayOpacity}
-                topRowTranslateY={topRowTranslateY}
-              />
-            );
-          }}
-        >
-          <View style={styles.contentWrapper}>
-            <View style={styles.parallaxInner}>
-              <View style={styles.groupWrapper}>
-                <Text style={styles.groupTitle}>{group?.groupName}</Text>
-                <View style={styles.groupMembers}>
-                  <IconMembers />
-                  <Text style={styles.memberCount}>{group?.membersCount}</Text>
-                </View>
-              </View>
-
-              <Text style={styles.groupDescription}>{group?.groupDescription}</Text>
-              <View style={styles.groupJoin}>
-                <Text style={styles.memberCount}>{t(LocalizedStrings.groups.joinedBy)}</Text>
-                <Text style={[styles.memberCount, styles.strong]}>{joinedBy}</Text>
-              </View>
-              <View style={styles.infoWrapper}>
-                <View style={styles.info}>
-                  <Text style={styles.memberCount}>
-                    {t(LocalizedStrings.common.since)}: {getFullYear(group?.createdAt ?? "")}
-                  </Text>
-                  <View style={styles.dot} />
-                  <Text style={styles.memberCount}>
-                    {t(LocalizedStrings.groups.lastActivity)}:{" "}
-                    {group?.updatedAt
-                      ? formatDistanceToNow(new Date(group.updatedAt), { addSuffix: true })
-                      : t(LocalizedStrings.device.compartments.noActivity)}
-                  </Text>
-                </View>
-                <Button
-                  fullWidth={false}
-                  size="small"
-                  textStyle={{ fontSize: moderateScale(14) }}
-                  title={
-                    group?.isMember
-                      ? t(LocalizedStrings.groups.leaveGroup)
-                      : t(LocalizedStrings.groups.joinGroup)
-                  }
-                  onPress={handleJoinLeaveGroup}
-                  disabled={group?.userRole === "SuperAdmin"}
+        <View style={styles.contentWrapper}>
+          <View style={styles.parallaxInner}>
+            {/* Stable wrapper — only its contents swap between skeleton and details. */}
+            <View>
+              {showSkeleton ? (
+                <GroupDetailsSkeleton />
+              ) : (
+                <GroupDetails group={group} styles={styles} onJoinLeave={handleJoinLeaveGroup} />
+              )}
+            </View>
+            {/* Posting is for members only. Stable wrapper: joining/leaving only swaps
+                its contents instead of mounting/unmounting a sibling view. */}
+            <View>
+              {!showSkeleton && group?.isMember ? (
+                <PostComposer
+                  styles={styles}
+                  placeholderColor={theme.colors.text.secondary}
+                  onFocus={handleComposerFocus}
                 />
-              </View>
-              <View style={styles.textInputWrapper}>
-                <TextInput
-                  style={styles.textInput}
-                  multiline
-                  numberOfLines={4}
-                  onChangeText={setTextPost}
-                  value={textPost}
-                  maxLength={250}
-                  placeholderTextColor={theme.colors.text.secondary}
-                  placeholder={t(LocalizedStrings.groups.writeSomething)}
-                />
-                <Text style={styles.letterCount}>{textPost.length}/250</Text>
-                <View style={styles.postIcons}>
-                  <TouchableOpacity>
-                    <IconImage />
-                  </TouchableOpacity>
-                  <TouchableOpacity>
-                    <IconPoll />
-                  </TouchableOpacity>
-                </View>
-              </View>
+              ) : null}
             </View>
           </View>
-        </ParallaxScrollView>
-      </SafeAreaScreen>
-    </KeyboardAvoidingView>
+        </View>
+      </ParallaxScrollView>
+    </SafeAreaScreen>
   );
 }
 
@@ -261,6 +411,9 @@ const createStyles = (theme: Theme) =>
       fontFamily: fontFamily.gascogneSerial.regular,
       color: theme.colors.text.primary,
       margin: 0,
+    },
+    joinButtonText: {
+      fontSize: moderateScale(14),
     },
     scrollContent: {
       paddingBottom: verticalScale(40),

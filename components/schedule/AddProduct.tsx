@@ -46,6 +46,7 @@ interface CounterFieldProps {
 const CounterField = memo(
   ({ label, value, unit, onIncrement, onDecrement, theme }: CounterFieldProps) => {
     const themedStyles = createStyles(theme);
+    const { t } = useTranslation();
 
     return (
       <View style={themedStyles.counterBlock}>
@@ -62,7 +63,7 @@ const CounterField = memo(
               style={themedStyles.counterButton}
               activeOpacity={0.7}
               accessibilityRole="button"
-              accessibilityLabel={`Decrease ${label}`}
+              accessibilityLabel={t(LocalizedStrings.accessibility.decrease, { label })}
             >
               <Ionicons name="remove" size={moderateScale(16)} color={theme.colors.divider} />
             </TouchableOpacity>
@@ -71,7 +72,7 @@ const CounterField = memo(
               style={[themedStyles.counterButton, themedStyles.counterButtonAccent]}
               activeOpacity={0.7}
               accessibilityRole="button"
-              accessibilityLabel={`Increase ${label}`}
+              accessibilityLabel={t(LocalizedStrings.accessibility.increase, { label })}
             >
               <Ionicons name="add" size={moderateScale(16)} color={theme.colors.text.primary} />
             </TouchableOpacity>
@@ -198,7 +199,7 @@ const AddProduct: React.FC<AddProductProps> = ({
         <Input
           control={control}
           name="description"
-          label="Description"
+          label={t(LocalizedStrings.logs.description)}
           placeholder={t(LocalizedStrings.logs.description)}
           multiline
         />
@@ -231,7 +232,7 @@ const createStyles = (theme: Theme) =>
     productName: {
       color: theme.colors.text.primary,
       fontFamily: fontFamily.manrope.bold,
-      lineHeight: verticalScale(5),
+      lineHeight: verticalScale(24),
       fontSize: moderateScale(20),
       fontWeight: "bold",
     },

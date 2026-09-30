@@ -68,7 +68,7 @@ const OnboardingLayout: React.FC<OnboardingLayoutProps> = ({
               onPress={onBack}
               style={[styles.backBtn, { backgroundColor: theme.colors.primary.main }]}
               accessibilityRole="button"
-              accessibilityLabel="Go back"
+              accessibilityLabel={t(LocalizedStrings.common.goBack)}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
               <SvgIcon name="leftCaret" size={16} color={theme.colors.black} />

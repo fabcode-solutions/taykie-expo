@@ -45,21 +45,28 @@ const CommentsBottomDrawerComponent: React.FC<CommentsBottomDrawerProps> = ({
   const [activeCommentId, setActiveCommentId] = useState<string | null>(null);
   const inputRef = useRef<TextInput>(null);
 
-  const {
-    postComments,
-    fetchCommentReplies,
-    addCommentToPost,
-    replyToCommmentWithId,
-    isLoadingComments: loadingComments,
-  } = usePostStore();
+  // Per-field selectors: every PostCard mounts one of these drawers, so subscribing to
+  // the whole post store made every feed update re-render N drawers.
+  const postComments = usePostStore((s) => s.postComments);
+  const fetchCommentReplies = usePostStore((s) => s.fetchCommentReplies);
+  const addCommentToPost = usePostStore((s) => s.addCommentToPost);
+  const replyToCommmentWithId = usePostStore((s) => s.replyToCommmentWithId);
+  const loadingComments = usePostStore((s) => s.isLoadingComments);
 
   const user = useAuthStore((s) => s.user);
-  const { sendNotification, isLoading } = useNotificationStore();
+  const sendNotification = useNotificationStore((s) => s.sendNotification);
+  const isLoading = useNotificationStore((s) => s.isLoading);
 
   // CLEANUP: Reset only when the drawer is fully closed to avoid
-  // Hermes TypeError during animation
+  // Hermes TypeError during animation. Only on an actual open -> closed transition:
+  // running it on mount (isVisible starts false) made every card in the feed write
+  // to the post store ~400ms after the posts arrived — N store writes, each
+  // re-rendering the whole feed.
+  const wasVisibleRef = useRef(isVisible);
   useEffect(() => {
-    if (!isVisible) {
+    const wasVisible = wasVisibleRef.current;
+    wasVisibleRef.current = isVisible;
+    if (wasVisible && !isVisible) {
       const timeout = setTimeout(() => {
         usePostStore.setState({ postComments: [] });
         setReplyToCommentId(undefined);
@@ -178,7 +185,9 @@ const CommentsBottomDrawerComponent: React.FC<CommentsBottomDrawerProps> = ({
           inputRef={inputRef}
           parentCommentId={replyToCommentId}
           placeholder={
-            replyToCommentId ? "Write a reply..." : t(LocalizedStrings.community.post.whatYouThink)
+            replyToCommentId
+              ? t(LocalizedStrings.community.post.write_reply)
+              : t(LocalizedStrings.community.post.whatYouThink)
           }
           onCommentCreated={handleCommentSubmit}
         />

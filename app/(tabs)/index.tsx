@@ -35,6 +35,7 @@ import AddProductLogModal from "@/components/medication/AddProductLog";
 import { useNotificationStore } from "@/stores/notificationStore";
 import { AlertPresets } from "@/utils/alert";
 import { useAlert } from "@/provider/AlertProvider";
+import TipsRow from "@/components/tips/TipsRow";
 
 type SegmentKey = "morning" | "afternoon" | "evening" | "night";
 
@@ -165,7 +166,11 @@ export default function HomeScreen() {
     (async () => {
       try {
         await fetchNotifications(true);
-        await Promise.allSettled([fetchUpcomingReminder(), fetchPublicProducts(), fetchUserStreak()]);
+        await Promise.allSettled([
+          fetchUpcomingReminder(),
+          fetchPublicProducts(),
+          fetchUserStreak(),
+        ]);
       } catch (error: any) {
         if (!cancelled) {
           alert.show(AlertPresets.error(t(LocalizedStrings.common.error), error?.message));
@@ -386,6 +391,13 @@ export default function HomeScreen() {
             )}
           </View>
         </ThemeView>
+
+        {/* Health tips from Taykie admins — only for users who opted in during
+            onboarding (TipsRow renders nothing otherwise). Stable wrapper, same
+            rationale as the sections above. */}
+        <View style={themedStyles.tipsSection}>
+          <TipsRow horizontalInset={theme.spacing.lg} />
+        </View>
       </ScrollView>
 
       {task && (
@@ -421,6 +433,12 @@ const createStyles = (theme: Theme) =>
       paddingHorizontal: theme.spacing.lg,
       paddingTop: theme.spacing.xl,
       paddingBottom: theme.spacing.xxxl * 2.5,
+    },
+    // Bleeds to the screen edges (cancels contentContainer's padding) so the
+    // horizontal tip cards scroll edge-to-edge; TipsRow re-applies the inset.
+    tipsSection: {
+      marginTop: theme.spacing.xl,
+      marginHorizontal: -theme.spacing.lg,
     },
     card: {
       marginTop: verticalScale(28),

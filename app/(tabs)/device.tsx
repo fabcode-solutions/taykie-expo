@@ -3,7 +3,6 @@
 import React, { useCallback, useEffect } from "react";
 import {
   ActivityIndicator,
-  FlatList,
   ScrollView,
   StyleSheet,
   TouchableOpacity,
@@ -22,7 +21,6 @@ import {
   useBLEStore,
   useBLEDeviceData,
   useBLEConnection,
-  useBLEScanning,
   useBLEPermissions,
   useBLECompartments,
 } from "@/stores/bleStore";
@@ -56,12 +54,85 @@ const ACTIONS: DeviceAction[] = [
   { key: "password", label: "Change Device Password", icon: "lock-closed" },
 ];
 
+const TONE_PREVIEW_DEBOUNCE_MS = 250;
+const COMPARTMENT_DAY_LABELS = ["S", "M", "T", "W", "T", "F", "S"]; // bit0=Sun .. bit6=Sat
+
+// Relative time, used for both "last opened" and "last synced".
+const formatRelativeTime = (isoTimestamp: string) => {
+  const date = new Date(isoTimestamp);
+  if (Number.isNaN(date.getTime())) return "--";
+  const diffMs = Date.now() - date.getTime();
+  const diffMin = Math.floor(diffMs / 60000);
+  if (diffMin < 1) return t(LocalizedStrings.device.time.justNow);
+  if (diffMin < 60) return t(LocalizedStrings.device.time.minutesAgo, { count: diffMin });
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return t(LocalizedStrings.device.time.hoursAgo, { count: diffHr });
+  const diffDay = Math.floor(diffHr / 24);
+  return t(LocalizedStrings.device.time.daysAgo, { count: diffDay });
+};
+// "Today, 10:42 AM" style — matches the design's Last Sync tile.
+const formatSyncTime = (isoTimestamp: string) => {
+  const date = new Date(isoTimestamp);
+  if (Number.isNaN(date.getTime())) return "--";
+  const isToday = date.toDateString() === new Date().toDateString();
+  const time = date.toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+  return isToday ? t(LocalizedStrings.device.time.todayAt, { time }) : `${date.toLocaleDateString()}, ${time}`;
+};
+
+// Helper to parse day bitmask. Per protocol: bit0 = Sunday .. bit6 = Saturday.
+const formatDays = (bitmask: number) => {
+  if (bitmask === 0x7f) return t(LocalizedStrings.device.days.everyDay);
+  if (bitmask === 0x3e) return t(LocalizedStrings.device.days.weekdays); // Mon-Fri: bits 1-5
+  if (bitmask === 0x41) return t(LocalizedStrings.device.days.weekends); // Sat+Sun: bits 6,0
+  if (bitmask === 0x00) return t(LocalizedStrings.device.days.noDays);
+
+  const days = [
+    t(LocalizedStrings.device.days.short.sun),
+    t(LocalizedStrings.device.days.short.mon),
+    t(LocalizedStrings.device.days.short.tue),
+    t(LocalizedStrings.device.days.short.wed),
+    t(LocalizedStrings.device.days.short.thu),
+    t(LocalizedStrings.device.days.short.fri),
+    t(LocalizedStrings.device.days.short.sat),
+  ];
+  const active = days.filter((_, i) => bitmask & (1 << i));
+  return active.join(", ");
+};
+
+// On-device schedule slots store a plain 24h hour/minute (no Date/ISO
+// value to hand to Intl), so this formats those two numbers directly as
+// e.g. "01:00PM" rather than reusing formatEventTime.
+const formatScheduleTime = (hour?: number, minute?: number) => {
+  const h = hour ?? 0;
+  const m = minute ?? 0;
+  const period = h >= 12 ? "PM" : "AM";
+  const hour12 = h % 12 === 0 ? 12 : h % 12;
+  return `${hour12.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}${period}`;
+};
+
+// Formats a compartment-activity timestamp as e.g. "Sep 3, 2:32 PM"
+const formatEventTime = (isoTimestamp: string) => {
+  const date = new Date(isoTimestamp);
+  if (Number.isNaN(date.getTime())) return isoTimestamp;
+  return date.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+};
+
+
 export default function DeviceScreen() {
   const theme = useTheme();
   const alert = useAlert();
 
   // Store selectors
-  const { isScanning, scannedDevices } = useBLEScanning();
   const { connectionStatus } = useBLEConnection();
   const {
     batteryLevel,
@@ -84,7 +155,6 @@ export default function DeviceScreen() {
   // setDeviceVolume call means only the tap the user settles on reaches the
   // device, while `pendingToneIndex`/`pendingVolumeLevel` keep the pill
   // highlight feeling instant on every tap regardless.
-  const TONE_PREVIEW_DEBOUNCE_MS = 250;
   const [pendingToneIndex, setPendingToneIndex] = React.useState<number | null>(null);
   const [pendingVolumeLevel, setPendingVolumeLevel] = React.useState<number | null>(null);
   const toneDebounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -99,20 +169,16 @@ export default function DeviceScreen() {
     };
   }, []);
   const { historyRecords, refreshCompartmentActivity } = useBLECompartments();
-  const {
-    scanDevices,
-    stopScan,
-    connectedDevice,
-    connectToDevice,
-    disconnectDevice,
-    initBLE,
-    startHistorySync,
-    dismissAlert,
-    setDeviceVolume,
-    setDeviceTone,
-    toggleScheduleSlot,
-    eraseHistory,
-  } = useBLEStore();
+  const scanDevices = useBLEStore((s) => s.scanDevices);
+  const stopScan = useBLEStore((s) => s.stopScan);
+  const disconnectDevice = useBLEStore((s) => s.disconnectDevice);
+  const initBLE = useBLEStore((s) => s.initBLE);
+  const startHistorySync = useBLEStore((s) => s.startHistorySync);
+  const dismissAlert = useBLEStore((s) => s.dismissAlert);
+  const setDeviceVolume = useBLEStore((s) => s.setDeviceVolume);
+  const setDeviceTone = useBLEStore((s) => s.setDeviceTone);
+  const toggleScheduleSlot = useBLEStore((s) => s.toggleScheduleSlot);
+  const eraseHistory = useBLEStore((s) => s.eraseHistory);
   const toneAck = useBLEStore((s) => s.toneAck);
   const volumeAck = useBLEStore((s) => s.volumeAck);
   const { hasPermissions, isBluetoothEnabled } = useBLEPermissions();
@@ -168,38 +234,13 @@ export default function DeviceScreen() {
   // state shows "Charging" as the value itself rather than a number. With
   // no reading at all yet, show a plain "--" (not "--%").
   const displayBattery = isCharging
-    ? "Charging"
+    ? t(LocalizedStrings.device.connection.charging)
     : batteryLevel !== null
       ? `${batteryLevel}%`
       : "--";
   const batteryWidth = batteryLevel !== null ? `${batteryLevel}%` : "0%";
   // console.log("batteryLevel=======", batteryLevel, lastSyncedAt);
 
-  // Relative time, used for both "last opened" and "last synced".
-  const formatRelativeTime = (isoTimestamp: string) => {
-    const date = new Date(isoTimestamp);
-    if (Number.isNaN(date.getTime())) return "--";
-    const diffMs = Date.now() - date.getTime();
-    const diffMin = Math.floor(diffMs / 60000);
-    if (diffMin < 1) return "Just now";
-    if (diffMin < 60) return `${diffMin}m ago`;
-    const diffHr = Math.floor(diffMin / 60);
-    if (diffHr < 24) return `${diffHr}h ago`;
-    const diffDay = Math.floor(diffHr / 24);
-    return `${diffDay}d ago`;
-  };
-  // "Today, 10:42 AM" style — matches the design's Last Sync tile.
-  const formatSyncTime = (isoTimestamp: string) => {
-    const date = new Date(isoTimestamp);
-    if (Number.isNaN(date.getTime())) return "--";
-    const isToday = date.toDateString() === new Date().toDateString();
-    const time = date.toLocaleTimeString(undefined, {
-      hour: "numeric",
-      minute: "2-digit",
-      hour12: true,
-    });
-    return isToday ? `Today, ${time}` : `${date.toLocaleDateString()}, ${time}`;
-  };
   const displayLastSync = lastSyncedAt ? formatSyncTime(lastSyncedAt) : "--";
   // "Lid" here doesn't mean live open/closed — the protocol has no confirmed
   // field for that (F3 status doesn't report it; whether F6's "reserved"
@@ -213,19 +254,22 @@ export default function DeviceScreen() {
   const CONNECTION_STATS = [
     {
       key: "status",
-      label: "Connection",
-      value: connectionStatus === "connected" ? "Online" : "Offline",
+      label: t(LocalizedStrings.device.connection.title),
+      value:
+        connectionStatus === "connected"
+          ? t(LocalizedStrings.device.connection.online)
+          : t(LocalizedStrings.device.connection.offline),
       icon: "bluetooth",
     },
     {
       key: "battery",
-      label: isCharging ? "Battery (Charging)" : "Battery",
+      label: isCharging ? t(LocalizedStrings.device.connection.batteryCharging) : t(LocalizedStrings.device.connection.battery),
       value: displayBattery,
       icon: isCharging ? "battery-charging" : "battery-full",
     },
     {
       key: "lastSync",
-      label: "Last Sync",
+      label: t(LocalizedStrings.device.connection.lastSync),
       value: displayLastSync,
       icon: "sync-outline",
     },
@@ -238,7 +282,6 @@ export default function DeviceScreen() {
   // is derived purely from the active schedule: each of up to 10 schedule
   // slots is a "row" (a single dose time), and its weekday bitmask marks
   // which day-columns it covers.
-  const COMPARTMENT_DAY_LABELS = ["S", "M", "T", "W", "T", "F", "S"]; // bit0=Sun .. bit6=Sat
   const COMPARTMENT_ROW_COUNT = dose_frequency;
   const enabledScheduleSlots = React.useMemo(
     () =>
@@ -247,7 +290,10 @@ export default function DeviceScreen() {
         .sort((a, b) => a.hour * 60 + a.minute - (b.hour * 60 + b.minute)),
     [schedules],
   );
-  const compartmentGridRows = enabledScheduleSlots.slice(0, COMPARTMENT_ROW_COUNT);
+  const compartmentGridRows = React.useMemo(
+    () => enabledScheduleSlots.slice(0, COMPARTMENT_ROW_COUNT),
+    [enabledScheduleSlots, COMPARTMENT_ROW_COUNT],
+  );
   const overflowScheduleCount = Math.max(0, enabledScheduleSlots.length - COMPARTMENT_ROW_COUNT);
   // Highlight today's compartment: Date.getDay() already uses the same
   // 0=Sunday..6=Saturday convention as the protocol's weekday bitmask, so
@@ -255,65 +301,6 @@ export default function DeviceScreen() {
   const todayDayIndex = new Date().getDay();
   const todayRowIndex = compartmentGridRows.findIndex(
     (slot) => (slot.weekdayBitmask & (1 << todayDayIndex)) !== 0,
-  );
-
-  // Helper to parse day bitmask. Per protocol: bit0 = Sunday .. bit6 = Saturday.
-  const formatDays = (bitmask: number) => {
-    if (bitmask === 0x7f) return "Every day";
-    if (bitmask === 0x3e) return "Weekdays"; // Mon-Fri: bits 1-5
-    if (bitmask === 0x41) return "Weekends"; // Sat+Sun: bits 6,0
-    if (bitmask === 0x00) return "No days";
-
-    const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-    const active = days.filter((_, i) => bitmask & (1 << i));
-    return active.join(", ");
-  };
-
-  // On-device schedule slots store a plain 24h hour/minute (no Date/ISO
-  // value to hand to Intl), so this formats those two numbers directly as
-  // e.g. "01:00PM" rather than reusing formatEventTime.
-  const formatScheduleTime = (hour?: number, minute?: number) => {
-    const h = hour ?? 0;
-    const m = minute ?? 0;
-    const period = h >= 12 ? "PM" : "AM";
-    const hour12 = h % 12 === 0 ? 12 : h % 12;
-    return `${hour12.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}${period}`;
-  };
-
-  // Formats a compartment-activity timestamp as e.g. "Sep 3, 2:32 PM"
-  const formatEventTime = (isoTimestamp: string) => {
-    const date = new Date(isoTimestamp);
-    if (Number.isNaN(date.getTime())) return isoTimestamp;
-    return date.toLocaleString(undefined, {
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-      hour12: true,
-    });
-  };
-
-  const handleConnectToDevice = useCallback(
-    async (deviceId: string) => {
-      // Guard against a second tap firing a concurrent connect attempt
-      // while one is already in flight (the earlier attempt would get torn
-      // down mid-handshake by BLEService.connectToDevice's own
-      // disconnect-then-reconnect logic, surfacing as a spurious "device
-      // disconnected" error).
-      if (connectionStatus !== "disconnected") return;
-      try {
-        await connectToDevice(deviceId);
-        // Per Delivered_Feature_Description.md §1 ("Warm white light —
-        // connection test method"): tapping the device name is what should
-        // trigger the confirmation blink, not just the standalone "Find My
-        // Taykie" action — this is the same pattern, just fired at the
-        // point of connecting instead of on demand.
-        findTaykieDevice();
-      } catch (error) {
-        alert.show(AlertPresets.error(t(LocalizedStrings.common.error), error.message));
-      }
-    },
-    [connectionStatus],
   );
 
   const handleDisconnect = useCallback(() => {
@@ -340,6 +327,25 @@ export default function DeviceScreen() {
     );
   }, []);
 
+  const handleAction = useCallback(
+    (key: DeviceActionKey) => {
+      if (key === "history") {
+        startHistorySync().catch((error) => {
+          alert.show(AlertPresets.error(t(LocalizedStrings.common.error), error.message));
+        });
+      } else if (key === "dismiss") dismissAlert();
+      else if (key === "unconfirmed") router.push("/lid-events" as Href);
+      else if (key === "rename") router.push("/device/rename-device");
+      else if (key === "find") {
+        findTaykieDevice();
+        router.push("/device/pair-device");
+      } else if (key === "password") {
+        router.push("/device/change-device-password");
+      }
+    },
+    [startHistorySync, dismissAlert, alert],
+  );
+
   const handleRefreshCompartments = useCallback(async () => {
     setIsRefreshingCompartments(true);
     try {
@@ -359,11 +365,9 @@ export default function DeviceScreen() {
     const alertId = alert.show(
       new AlertBuilder()
         .type("warning")
-        .title("Erase Device History?")
-        .message(
-          "This permanently wipes all compartment history stored on the device. Only do this for testing.",
-        )
-        .action("Erase", async () => {
+        .title(t(LocalizedStrings.device.erase.title))
+        .message(t(LocalizedStrings.device.erase.message))
+        .action(t(LocalizedStrings.device.erase.confirm), async () => {
           alert.hide(alertId);
           try {
             await eraseHistory();
@@ -457,13 +461,8 @@ export default function DeviceScreen() {
                   onPress={() =>
                     alert.show(
                       AlertPresets.info(
-                        "Device LED Colors",
-                        "Your Taykie's light ring reflects its state automatically — this isn't controlled by the app:\n\n" +
-                          "⚪ White — Connected\n" +
-                          "🔴 Red — Low battery\n" +
-                          "🟢 Green — Fully charged\n" +
-                          "🔵 Blue — Medication reminder active\n" +
-                          "🟡 Warm Yellow — Charging",
+                        t(LocalizedStrings.device.ledColors.title),
+                        t(LocalizedStrings.device.ledColors.message),
                       ),
                     )
                   }
@@ -518,7 +517,9 @@ export default function DeviceScreen() {
                       variant="manrope.subtitle"
                       style={[
                         themedStyles.statValue,
-                        stat.value === "Online" && themedStyles.onlineText,
+                        stat.key === "status" &&
+                          connectionStatus === "connected" &&
+                          themedStyles.onlineText,
                       ]}
                     >
                       {stat.value}
@@ -546,7 +547,7 @@ export default function DeviceScreen() {
                     variant="manrope.body1Bold"
                     style={{ color: theme.colors.primary.main }}
                   >
-                    {displayVolumeLevel === 0 ? "Mute" : `${displayVolumeLevel}%`}
+                    {displayVolumeLevel === 0 ? t(LocalizedStrings.device.mute) : `${displayVolumeLevel}%`}
                   </ThemeText>
                   {renderAckIndicator(volumeAck, displayVolumeLevel, theme.colors.primary.main)}
                 </View>
@@ -556,20 +557,7 @@ export default function DeviceScreen() {
                 minimumValue={0}
                 maximumValue={100}
                 step={1}
-                onValueChange={(level) => {
-                  // Debounced — see handleSelectVolume. setDeviceVolume
-                  // (once it actually fires) already triggers the
-                  // device's speaker itself as its preview mechanism —
-                  // calling triggerDeviceSoundForReminder() here too
-                  // fired a second, duplicate F4 SoundControl write for
-                  // every tap (confirmed in device logs), which is a
-                  // likely contributor to devices dropping mid-write.
-                  // The debounce matters even more here than for the old
-                  // buttons — a drag can cross several steps per second,
-                  // and only the value the user settles on should actually
-                  // reach the device.
-                  handleSelectVolume(level);
-                }}
+                onValueChange={handleSelectVolume}
                 trackColor="rgba(0,0,0,0.08)"
                 thumbColor={theme.colors.primary.main}
                 style={themedStyles.volumeSlider}
@@ -602,7 +590,7 @@ export default function DeviceScreen() {
                   >
                     <View style={{ flexDirection: "row", alignItems: "center" }}>
                       <ThemeText style={themedStyles.textDark}>
-                        {capitalizeText(tone.label)}
+                        {tone.value === 0 ? t(LocalizedStrings.device.mute) : capitalizeText(tone.label)}
                       </ThemeText>
                       {renderAckIndicator(toneAck, tone.value, theme.colors.text.primary)}
                     </View>
@@ -621,13 +609,12 @@ export default function DeviceScreen() {
                 </ThemeText>
                 <TouchableOpacity onPress={() => router.push("/device/schedule-sync")}>
                   <ThemeText variant="manrope.body2" style={{ color: theme.colors.primary.dark }}>
-                    Manage
+                    {t(LocalizedStrings.common.manage)}
                   </ThemeText>
                 </TouchableOpacity>
               </View>
               <ThemeText variant="manrope.caption" style={themedStyles.scheduleCardSubtitle}>
-                These fire directly from the device's own clock, even when your phone isn't
-                connected.
+                {t(LocalizedStrings.device.schedulesSubtitle)}
               </ThemeText>
               <View style={themedStyles.schedulesContainer}>
                 {schedules?.map((schedule, index) => (
@@ -669,7 +656,7 @@ export default function DeviceScreen() {
           {connectionStatus === "connected" && (
             <ThemeView style={themedStyles.card} backgroundColor={theme.colors.white} rounded="lg">
               <ThemeText variant="manrope.h4" style={themedStyles.cardTitle}>
-                Compartments
+                {t(LocalizedStrings.device.compartments.title)}
               </ThemeText>
 
               <View style={themedStyles.compartmentGrid}>
@@ -698,20 +685,20 @@ export default function DeviceScreen() {
 
               {displayLastOpened && (
                 <ThemeText variant="manrope.caption" style={themedStyles.compartmentEmptyText}>
-                  Last opened {displayLastOpened}
+                  {t(LocalizedStrings.device.compartments.lastOpenedAt, { time: displayLastOpened })}
                 </ThemeText>
               )}
               {compartmentGridRows.length === 0 && (
                 <ThemeText variant="manrope.caption" style={themedStyles.compartmentEmptyText}>
-                  No active schedule yet — set up to {COMPARTMENT_ROW_COUNT} dose time
-                  {COMPARTMENT_ROW_COUNT > 1 ? "s" : ""} to fill the compartment layout.
+                  {t(LocalizedStrings.device.compartments.noSchedule, { count: COMPARTMENT_ROW_COUNT })}
                 </ThemeText>
               )}
               {overflowScheduleCount > 0 && (
                 <ThemeText variant="manrope.caption" style={themedStyles.compartmentEmptyText}>
-                  +{overflowScheduleCount} more scheduled time(s) beyond your{" "}
-                  {COMPARTMENT_ROW_COUNT}
-                  -dose-per-day plan (change this under Settings › Dosage & Compartments).
+                  {t(LocalizedStrings.device.compartments.overflow, {
+                    count: overflowScheduleCount,
+                    perDay: COMPARTMENT_ROW_COUNT,
+                  })}
                 </ThemeText>
               )}
             </ThemeView>
@@ -722,7 +709,7 @@ export default function DeviceScreen() {
             <ThemeView style={themedStyles.card} backgroundColor={theme.colors.white} rounded="lg">
               <View style={themedStyles.compartmentHeader}>
                 <ThemeText variant="manrope.h4" style={themedStyles.cardTitle}>
-                  Compartment Activity
+                  {t(LocalizedStrings.device.compartments.activity)}
                 </ThemeText>
                 <View style={themedStyles.compartmentHeaderActions}>
                   <TouchableOpacity
@@ -734,7 +721,7 @@ export default function DeviceScreen() {
                       variant="manrope.caption"
                       style={themedStyles.compartmentEraseButtonText}
                     >
-                      Erase (Test)
+                      {t(LocalizedStrings.device.erase.button)}
                     </ThemeText>
                   </TouchableOpacity>
                   <TouchableOpacity
@@ -761,7 +748,7 @@ export default function DeviceScreen() {
                     color={theme.colors.text.secondary}
                   />
                   <ThemeText variant="manrope.caption" style={themedStyles.compartmentEmptyText}>
-                    No compartment activity recorded yet. Tap refresh to check the device.
+                    {t(LocalizedStrings.device.compartments.noActivityYet)}
                   </ThemeText>
                 </View>
               ) : (
@@ -773,7 +760,9 @@ export default function DeviceScreen() {
                       color={theme.colors.primary.main}
                     />
                     <ThemeText variant="manrope.body1Bold" style={themedStyles.compartmentLastText}>
-                      Last accessed {formatEventTime(historyRecords[0].timestamp)}
+                      {t(LocalizedStrings.device.compartments.lastAccessed, {
+                        time: formatEventTime(historyRecords[0].timestamp),
+                      })}
                     </ThemeText>
                   </View>
                   <View style={themedStyles.compartmentList}>
@@ -809,18 +798,7 @@ export default function DeviceScreen() {
             <View style={themedStyles.actionsList}>
               {ACTIONS.map((action) => (
                 <TouchableOpacity
-                  onPress={() => {
-                    if (action.key === "history") startHistorySync();
-                    else if (action.key === "dismiss") dismissAlert();
-                    else if (action.key === "unconfirmed") router.push("/lid-events" as Href);
-                    else if (action.key === "rename") router.push("/device/rename-device");
-                    else if (action.key === "find") {
-                      findTaykieDevice();
-                      router.push("/device/pair-device");
-                    } else if (action.key === "password") {
-                      router.push("/device/change-device-password");
-                    }
-                  }}
+                  onPress={() => handleAction(action.key)}
                   key={action.key}
                   activeOpacity={0.9}
                   style={themedStyles.actionRow}

@@ -13,6 +13,8 @@ import { useBannerStore } from "@/stores/bannerStore";
 import { useBLEStore } from "@/stores/bleStore";
 import { router } from "expo-router";
 import { moderateScale, scale, verticalScale } from "@/utils/scale";
+import { useTranslation } from "react-i18next";
+import { LocalizedStrings } from "@/i18n/LocalizedStrings";
 import { playTone, stopTone, toneLabelForIndex, DEFAULT_VOLUME_LEVEL } from "@/utils/toneAudio";
 import {
   isDosageReminder,
@@ -27,6 +29,7 @@ const SWIPE_DISMISS_DISTANCE = 40; // px dragged up
 const SWIPE_DISMISS_VELOCITY = 500; // px/s upward flick
 
 export function InAppBanner() {
+  const { t } = useTranslation();
   const { message, isVisible, hideBanner } = useBannerStore();
   const insets = useSafeAreaInsets();
   const translateY = useSharedValue(-150); // Start off-screen
@@ -125,7 +128,7 @@ export function InAppBanner() {
 
   if (!message && !isVisible) return null;
 
-  const title = message?.notification?.title || "New Notification";
+  const title = message?.notification?.title || t(LocalizedStrings.common.newNotification);
   const body = message?.notification?.body || "";
 
   return (

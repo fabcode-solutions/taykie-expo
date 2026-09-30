@@ -1,4 +1,6 @@
 import { AlertConfig, AlertType } from "@/types/alert";
+import { t } from "i18next";
+import { LocalizedStrings } from "@/i18n/LocalizedStrings";
 
 /**
  * Utility class for creating common alert configurations
@@ -105,15 +107,15 @@ export const AlertPresets = {
   networkError: () =>
     new AlertBuilder()
       .type("error")
-      .title("Network Error")
-      .message("Please check your internet connection")
+      .title(t(LocalizedStrings.alerts.networkError.title))
+      .message(t(LocalizedStrings.alerts.networkError.message))
       .duration(5000)
       .build(),
 
-  authError: (message: string = "Authentication failed") =>
+  authError: (message: string = t(LocalizedStrings.alerts.authError.message)) =>
     new AlertBuilder()
       .type("error")
-      .title("Authentication Error")
+      .title(t(LocalizedStrings.alerts.authError.title))
       .message(message)
       .duration(5000)
       .build(),
@@ -121,33 +123,41 @@ export const AlertPresets = {
   loginSuccess: (userName?: string) =>
     new AlertBuilder()
       .type("success")
-      .title("Welcome back!")
-      .message(userName ? `Logged in as ${userName}` : "Login successful")
+      .title(t(LocalizedStrings.alerts.loginSuccess.title))
+      .message(
+        userName
+          ? t(LocalizedStrings.alerts.loginSuccess.loggedInAs, { name: userName })
+          : t(LocalizedStrings.alerts.loginSuccess.message),
+      )
       .duration(3000)
       .build(),
 
   signupSuccess: () =>
     new AlertBuilder()
       .type("success")
-      .title("Account created!")
-      .message("Welcome to Pocket")
+      .title(t(LocalizedStrings.alerts.signupSuccess.title))
+      .message(t(LocalizedStrings.alerts.signupSuccess.message))
       .duration(3000)
       .build(),
 
   saveSuccess: (itemName?: string) =>
     new AlertBuilder()
       .type("success")
-      .title("Saved!")
-      .message(itemName ? `"${itemName}" has been saved` : "Item saved successfully")
+      .title(t(LocalizedStrings.alerts.saveSuccess.title))
+      .message(
+        itemName
+          ? t(LocalizedStrings.alerts.saveSuccess.itemSaved, { name: itemName })
+          : t(LocalizedStrings.alerts.saveSuccess.message),
+      )
       .duration(3000)
       .build(),
 
   deleteWarning: (onConfirm: () => void) =>
     new AlertBuilder()
       .type("warning")
-      .title("Delete Item?")
-      .message("This action cannot be undone")
-      .action("Delete", onConfirm)
+      .title(t(LocalizedStrings.alerts.deleteWarning.title))
+      .message(t(LocalizedStrings.alerts.deleteWarning.message))
+      .action(t(LocalizedStrings.common.delete), onConfirm)
       .dismissible(true)
       .duration(0) // Don't auto-dismiss
       .build(),

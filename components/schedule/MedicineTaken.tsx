@@ -260,27 +260,21 @@ const MedicineTaken = ({ task, onClose, onEditComplete }: MedicineTakenProp) => 
             {task.dosage}, {task.strength}
           </Text>
 
-          {task.status !== "taken" && (
-            <View style={themedStyles.contentBtnStyle}>
+          <View style={themedStyles.contentBtnStyle}>
+            {task.status !== "taken" && (
               <Button
                 loading={isLoading}
                 btnText={t(LocalizedStrings.home.tasks.status.taken)}
                 className="!bg-primary"
                 onPress={markScheduleAsTaken}
               />
-              <Button
-                btnText={t(LocalizedStrings.common.edit)}
-                onPress={() => setAddProductVisible(true)}
-              />
-              <Button btnText={t(LocalizedStrings.common.editTime)} onPress={handleEditTime} />
-            </View>
-          )}
-
-          {task.status === "taken" && (
-            <View style={themedStyles.contentBtnStyle}>
-              <Button btnText={t(LocalizedStrings.home.extras.goBack)} onPress={onClose} />
-            </View>
-          )}
+            )}
+            <Button
+              btnText={t(LocalizedStrings.common.edit)}
+              onPress={() => setAddProductVisible(true)}
+            />
+            <Button btnText={t(LocalizedStrings.common.editTime)} onPress={handleEditTime} />
+          </View>
         </Animated.View>
       )}
 
@@ -295,24 +289,23 @@ const MedicineTaken = ({ task, onClose, onEditComplete }: MedicineTakenProp) => 
           <Text style={themedStyles.contentInfoHeadingStyle}>
             {t(LocalizedStrings.home.extras.benefitsOf)} {task.product?.name}
           </Text>
-          <Text style={themedStyles.contentTextListStyle}>People often use them for: </Text>
           <Text style={themedStyles.contentTextListStyle}>
-            ✔ Energy Support B12 helps convert food into energy. Deficiency causes tiredness and
-            weakness.
+            {t(LocalizedStrings.home.extras.benefits.intro)}
           </Text>
           <Text style={themedStyles.contentTextListStyle}>
-            ✔ Improved Mood & Brain Function Supports neurotransmitters and may help with memory or
-            mood regulation.
+            {t(LocalizedStrings.home.extras.benefits.energy)}
           </Text>
           <Text style={themedStyles.contentTextListStyle}>
-            ✔ Healthy Nerves Important for the nervous system and preventing nerve damage symptoms
-            like tingling.
+            {t(LocalizedStrings.home.extras.benefits.mood)}
           </Text>
           <Text style={themedStyles.contentTextListStyle}>
-            ✔ Red Blood Cell Production Prevents megaloblastic anemia.
+            {t(LocalizedStrings.home.extras.benefits.nerves)}
           </Text>
           <Text style={themedStyles.contentTextListStyle}>
-            ✔ Good for Vegans & Vegetarians Plant-based diets often lack natural B12 sources.
+            {t(LocalizedStrings.home.extras.benefits.redBloodCells)}
+          </Text>
+          <Text style={themedStyles.contentTextListStyle}>
+            {t(LocalizedStrings.home.extras.benefits.vegan)}
           </Text>
         </Animated.View>
       )}

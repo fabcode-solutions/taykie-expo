@@ -28,7 +28,7 @@ const GroupCard = ({ item }: { item: GroupResponse }) => {
       style={styles.parent}
     >
       <View style={styles.view}>
-        {item.uploadGroupPhoto && (
+        {!!item.uploadGroupPhoto && (
           <View style={styles.recGroupIcon}>
             <Image
               style={styles.child}
@@ -41,7 +41,7 @@ const GroupCard = ({ item }: { item: GroupResponse }) => {
         <View style={styles.frameParent}>
           <View style={styles.vitalBoostTribeParent}>
             <Text style={styles.vitalBoostTribe}>{item.groupName}</Text>
-            {item.groupDescription && (
+            {!!item.groupDescription && (
               <Text style={[styles.aCommunityFor, styles.textClr]}>{item.groupDescription}</Text>
             )}
           </View>
@@ -98,7 +98,7 @@ const GroupCard = ({ item }: { item: GroupResponse }) => {
   );
 };
 
-export default GroupCard;
+export default React.memo(GroupCard);
 
 const createStyles = (theme: Theme) =>
   StyleSheet.create({

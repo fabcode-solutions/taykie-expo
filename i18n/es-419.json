@@ -362,5 +362,14 @@
     "loadFailed": "No se pudo cargar esta apertura.",
     "saveFailed": "No se pudo guardar tu respuesta. Inténtalo de nuevo.",
     "unconfirmedRow": "Aperturas sin confirmar"
+  },
+  "tips": {
+    "title": "Consejos de salud",
+    "tip": "Consejo",
+    "readMore": "Leer más",
+    "publishedOn": "Publicado el {{date}}",
+    "byAuthor": "Por {{name}}",
+    "notFound": "Este consejo ya no está disponible.",
+    "loadFailed": "No se pudo cargar este consejo."
   }
 }

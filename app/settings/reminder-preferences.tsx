@@ -113,9 +113,9 @@ export default function ReminderSettingsScreen() {
       // },
       {
         leftIcon: <IconInformation stroke={theme.colors.slateCharcoal} />,
-        heading: "Early Reminder Alert",
+        heading: t(LocalizedStrings.settings.reminderSettings.earlyReminder.title),
         action: "earlyReminder",
-        description: "An alert before your Product is due.",
+        description: t(LocalizedStrings.settings.reminderSettings.earlyReminder.description),
         rightIcon: (
           <Switch
             style={styles.switch}
@@ -127,9 +127,9 @@ export default function ReminderSettingsScreen() {
       },
       {
         leftIcon: <IconNotifications stroke={theme.colors.slateCharcoal} />,
-        heading: "Missed Dose Notifications",
+        heading: t(LocalizedStrings.settings.reminderSettings.missedNotification.title),
         action: "missedNotification",
-        description: "If a dose isn’t marked within 30 mint.",
+        description: t(LocalizedStrings.settings.reminderSettings.missedNotification.description),
         rightIcon: (
           <Switch
             style={styles.switch}
@@ -141,9 +141,9 @@ export default function ReminderSettingsScreen() {
       },
       {
         leftIcon: <IconClock stroke={theme.colors.slateCharcoal} />,
-        heading: "Reminder Sound",
+        heading: t(LocalizedStrings.settings.reminderSettings.reminderSound.title),
         action: "reminderSound",
-        description: "Audio alert via your device speaker",
+        description: t(LocalizedStrings.settings.reminderSettings.reminderSound.description),
         rightIcon: (
           <Switch
             style={styles.switch}
@@ -155,9 +155,9 @@ export default function ReminderSettingsScreen() {
       },
       {
         leftIcon: <IconTorch stroke={theme.colors.slateCharcoal} />,
-        heading: "Reminder Light",
+        heading: t(LocalizedStrings.settings.reminderSettings.reminderLight.title),
         action: "reminderLight",
-        description: "Activates the LED on your Taykie device",
+        description: t(LocalizedStrings.settings.reminderSettings.reminderLight.description),
         rightIcon: (
           <Switch
             style={styles.switch}
@@ -178,6 +178,7 @@ export default function ReminderSettingsScreen() {
       handleReminders,
       lightEnabled,
       handleToggleLight,
+      t,
     ],
   );
 

@@ -6,6 +6,7 @@ import IconPill from "../icons/IconPill";
 import { moderateScale, scale, verticalScale } from "@/utils/scale";
 import { NotificationData } from "@/stores/notificationStore";
 import { formatDate } from "@/utils/formatter";
+import { useTranslation } from "react-i18next";
 import IconComment from "../icons/IconComment";
 import IconHeart from "../icons/IconHeart";
 
@@ -23,6 +24,7 @@ const NotificationCard = ({
   onPress,
 }: { item: NotificationData } & { onPress?: () => void }) => {
   const theme = useTheme();
+  const { t } = useTranslation();
   const styles = useMemo(() => createStyles(theme), [theme]);
   return (
     <Pressable style={styles.notiWrapper} onPress={() => onPress?.()}>
@@ -34,7 +36,9 @@ const NotificationCard = ({
         {!item.isRead && <View style={styles.dot}></View>}
       </View>
       <View>
-        <Text style={styles.subHeading}>{item.type}</Text>
+        <Text style={styles.subHeading}>
+          {t(`settings.notifications.filter.${item.type}`, { defaultValue: item.type })}
+        </Text>
         <Text style={styles.heading}>{item.title}</Text>
         <Text style={styles.content}>{item.message}</Text>
         <Text style={styles.time}>{formatDate(item.createdAt)}</Text>
@@ -43,7 +47,9 @@ const NotificationCard = ({
   );
 };
 
-export default NotificationCard;
+// Memoized: the list re-renders on every store update (read/unread, pagination), and
+// only the rows whose item or handler changed need to re-render.
+export default React.memo(NotificationCard);
 
 const createStyles = (theme: Theme) =>
   StyleSheet.create({

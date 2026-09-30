@@ -47,6 +47,13 @@ export const PostCard = memo<PostCardProps>(
     const commentsDrawer = useBottomDrawer();
     const [selectedOptionId, setSelectedOptionId] = useState<string | null>(null);
     const post = initialPost;
+    // API data is not always shaped like the types say; a non-array here used to throw
+    // during render (".map is not a function"), which kills the app in a release build.
+    const polls = useMemo(() => (Array.isArray(post?.polls) ? post.polls : []), [post?.polls]);
+    const hashtags = useMemo(
+      () => (Array.isArray(post?.hashtags) ? post.hashtags : []),
+      [post?.hashtags],
+    );
 
     const getInitials = (name: string) => {
       if (!name) return "?"; // Fallback if name is also missing
@@ -59,7 +66,7 @@ export const PostCard = memo<PostCardProps>(
       () => [
         {
           key: "report",
-          label: "Report User",
+          label: t(LocalizedStrings.report.reportUser),
           navigateTo: "/report/report",
           disabled: user?.id === post.userId,
         },
@@ -68,26 +75,26 @@ export const PostCard = memo<PostCardProps>(
     );
 
     const votedOption = useMemo(() => {
-      if (!post?.polls || !user?.id) return null;
-      return post?.polls?.find(
+      if (polls.length === 0 || !user?.id) return null;
+      return polls.find(
         (poll) =>
           poll?.votes &&
           Array.isArray(poll.votes) &&
           poll.votes.some((vote: any) => vote?.userId === user.id),
       );
-    }, [post?.polls, user?.id]);
+    }, [polls, user?.id]);
 
     const hasUserVoted = !!votedOption;
 
     useEffect(() => {
-      if (!initialPost?.polls || !user?.id) return;
+      if (polls.length === 0 || !user?.id) return;
 
       if (votedOption) {
         setSelectedOptionId(votedOption.id);
       } else {
         setSelectedOptionId(null);
       }
-    }, [initialPost, user?.id, votedOption]); // Added votedOption to dependencies
+    }, [polls, user?.id, votedOption]);
 
     const handleLike = useCallback(() => {
       onApiLike?.(post?.id, post?.isLiked ?? false, post?.userId);
@@ -132,7 +139,9 @@ export const PostCard = memo<PostCardProps>(
           onPress={handleAuthorPress}
           activeOpacity={0.7}
           accessibilityRole="button"
-          accessibilityLabel={`${t(LocalizedStrings.common.view)} ${post?.user?.firstName || "user"}'s profile`}
+          accessibilityLabel={t(LocalizedStrings.accessibility.viewProfile, {
+            name: post?.user?.firstName || t(LocalizedStrings.accessibility.user),
+          })}
         >
           {/* Avatar circle */}
           <View style={styles.avatarContainer}>
@@ -150,7 +159,9 @@ export const PostCard = memo<PostCardProps>(
           </View>
 
           <View style={styles.authorInfo}>
-            <ThemeText style={styles.authorName}>{post?.user?.firstName || "No Name"}</ThemeText>
+            <ThemeText style={styles.authorName}>
+              {post?.user?.firstName || t(LocalizedStrings.community.post.noName)}
+            </ThemeText>
             <ThemeText style={styles.timestamp}>{getTimeAgo(post?.createdAt ?? "")}</ThemeText>
           </View>
         </TouchableOpacity>
@@ -160,7 +171,7 @@ export const PostCard = memo<PostCardProps>(
           style={styles.menuButton}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           accessibilityRole="button"
-          accessibilityLabel="More options"
+          accessibilityLabel={t(LocalizedStrings.community.post.moreOptions)}
         >
           <Ionicons
             name="ellipsis-horizontal"
@@ -171,28 +182,34 @@ export const PostCard = memo<PostCardProps>(
       </View>
     );
 
+    // `!!` on every conditional: `"" && <X />` evaluates to "", and a bare string inside a
+    // <View> throws "Text strings must be rendered within a <Text> component" — a fatal
+    // crash in release builds. Posts with an empty text/image string triggered it.
     const renderContent = () => (
       <View style={styles.contentSection}>
-        {post?.text && <ThemeText style={styles.title}>{post?.text}</ThemeText>}
-        {post?.type && <ThemeText style={styles.description}>{post?.type}</ThemeText>}
+        {!!post?.text && <ThemeText style={styles.title}>{post.text}</ThemeText>}
+        {!!post?.type && <ThemeText style={styles.description}>{post.type}</ThemeText>}
       </View>
     );
 
     const renderPollOptions = () => {
-      if (!post?.polls) return null;
+      if (polls.length === 0) return null;
 
       const isPollActive = post?.type === PostType.POLL;
       const isPollResults = hasUserVoted;
+      // option.value is a raw vote COUNT from the API, not a percentage.
+      const totalVotes = polls.reduce((sum, option) => sum + (Number(option?.value) || 0), 0);
 
       return (
         <View style={styles.pollOptionsContainer}>
-          {post?.polls?.map((option) => (
+          {polls.map((option) => (
             <PollOptionCom
               key={option.id}
               option={option}
               isActive={isPollActive}
               isSelected={selectedOptionId === option.id}
               showResults={isPollResults}
+              totalVotes={totalVotes}
               onSelect={() => handlePollOptionSelect(option.id)}
             />
           ))}
@@ -202,7 +219,7 @@ export const PostCard = memo<PostCardProps>(
                 style={styles.pollButtonOutline}
                 onPress={handlePollCancel}
                 accessibilityRole="button"
-                accessibilityLabel="Cancel poll"
+                accessibilityLabel={t(LocalizedStrings.community.post.cancelPoll)}
               >
                 <ThemeText style={styles.pollButtonOutlineText}>
                   {t(LocalizedStrings.common.cancel)}
@@ -212,7 +229,7 @@ export const PostCard = memo<PostCardProps>(
                 style={styles.pollButtonFilled}
                 onPress={handlePollSubmit}
                 accessibilityRole="button"
-                accessibilityLabel="Submit poll response"
+                accessibilityLabel={t(LocalizedStrings.community.post.submitPoll)}
                 disabled={!selectedOptionId}
               >
                 <ThemeText style={styles.pollButtonFilledText}>
@@ -230,12 +247,12 @@ export const PostCard = memo<PostCardProps>(
         <View style={styles.card}>
           {renderHeader()}
           {/* Image for image posts */}
-          {post?.type === PostType.IMAGE && post?.image && (
+          {post?.type === PostType.IMAGE && !!post?.image && (
             <Image
               source={{ uri: post?.image }}
               style={styles.postImage}
               resizeMode="cover"
-              accessibilityLabel="Post image"
+              accessibilityLabel={t(LocalizedStrings.community.post.postImage)}
             />
           )}
           {renderContent()}
@@ -244,32 +261,17 @@ export const PostCard = memo<PostCardProps>(
             post?.type === PostType.ACTIVE ||
             post?.type === PostType.RESULTS) &&
             renderPollOptions()}
-          {(post.hashtags?.length ?? 0) > 0 && (
-            <View
-              style={{
-                flexDirection: "row",
-                flexWrap: "wrap",
-              }}
-            >
-              {post.hashtags?.map((tag, index) => (
-                <ThemeText
-                  key={index}
-                  style={{
-                    backgroundColor: theme.colors.background.default,
-                    fontSize: moderateScale(12),
-                    borderRadius: 999,
-                    paddingHorizontal: scale(10),
-                    paddingVertical: verticalScale(4),
-                    marginRight: scale(6),
-                    marginBottom: verticalScale(6),
-                  }}
-                >
-                  {tag}
+          {hashtags.length > 0 && (
+            <View style={styles.hashtagRow}>
+              {hashtags.map((tag, index) => (
+                <ThemeText key={index} style={styles.hashtag}>
+                  {/* String(): an object tag would throw "Objects are not valid as a React child" */}
+                  {String(tag)}
                 </ThemeText>
               ))}
             </View>
           )}
-          {post.group && <GroupCard item={post.group} />}
+          {!!post.group && <GroupCard item={post.group} />}
           {/* Engagement section */}
           <UserEngagement
             likes={post?.likesCount}
@@ -350,28 +352,34 @@ interface PollOptionProps {
   isActive?: boolean;
   showResults?: boolean;
   isSelected?: boolean;
+  /** Sum of every option's vote count, to turn this option's count into a share. */
+  totalVotes: number;
   onSelect?: () => void;
 }
 
 const PollOptionCom = memo<PollOptionProps>(
-  ({ option, isActive, showResults, isSelected, onSelect }) => {
+  ({ option, isActive, showResults, isSelected, totalVotes, onSelect }) => {
     const theme = useTheme();
     const styles = useMemo(() => createStyles(theme), [theme]);
 
     const progressAnim = useMemo(() => new Animated.Value(0), []);
     const showCheckmark = isSelected;
+    // Animated.timing needs a real number; a string/null count from the API threw.
+    const votes = Number(option?.value);
+    const hasPercent = option?.value != null && Number.isFinite(votes);
+    const percent = hasPercent && totalVotes > 0 ? Math.round((votes / totalVotes) * 100) : 0;
 
     useEffect(() => {
-      if (showResults && option?.value !== undefined) {
+      if (showResults && hasPercent) {
         Animated.timing(progressAnim, {
-          toValue: option.value,
+          toValue: percent,
           duration: 800,
           useNativeDriver: false,
         }).start();
       } else {
         progressAnim.setValue(0);
       }
-    }, [showResults, option?.value, progressAnim]);
+    }, [showResults, hasPercent, percent, progressAnim]);
 
     const progressWidth = progressAnim.interpolate({
       inputRange: [0, 100],
@@ -386,9 +394,9 @@ const PollOptionCom = memo<PollOptionProps>(
         activeOpacity={0.7}
         accessibilityRole={isActive ? "radio" : "text"}
         accessibilityState={{ checked: isSelected }}
-        accessibilityLabel={`${option?.label}${showResults ? `, ${option?.value}%` : ""}`}
+        accessibilityLabel={`${option?.label}${showResults ? `, ${percent}%` : ""}`}
       >
-        {showResults && option?.value !== undefined && (
+        {showResults && hasPercent && (
           <Animated.View style={[styles.pollProgressBar, { width: progressWidth }]} />
         )}
 
@@ -401,9 +409,9 @@ const PollOptionCom = memo<PollOptionProps>(
           <ThemeText style={styles.pollOptionText}>{option?.label}</ThemeText>
         </View>
 
-        {showResults && option?.value !== undefined && (
+        {showResults && hasPercent && (
           <ThemeText style={[styles.pollPercentage, isSelected && styles.pollPercentageSelected]}>
-            {option?.value}%
+            {percent}%
           </ThemeText>
         )}
       </TouchableOpacity>
@@ -455,7 +463,7 @@ const UserEngagement = memo<UserEngagementProps>(
           onPress={onLike}
           hitSlop={{ top: 5, bottom: 5, left: 5, right: 5 }}
           accessibilityRole="button"
-          accessibilityLabel={`${likes || 0} likes`}
+          accessibilityLabel={t(LocalizedStrings.accessibility.likes, { count: likes || 0 })}
         >
           <IconHeart filled={isLiked} />
           <ThemeText style={[styles.engagementText, isLiked && { color: theme.colors.error.main }]}>
@@ -468,7 +476,7 @@ const UserEngagement = memo<UserEngagementProps>(
           onPress={onComment}
           hitSlop={{ top: 5, bottom: 5, left: 5, right: 5 }}
           accessibilityRole="button"
-          accessibilityLabel={`${comments || 0} comments`}
+          accessibilityLabel={t(LocalizedStrings.accessibility.comments, { count: comments || 0 })}
         >
           <IconComment />
           <ThemeText style={styles.engagementText}>{formatCount(comments)}</ThemeText>
@@ -479,7 +487,7 @@ const UserEngagement = memo<UserEngagementProps>(
           onPress={onShare}
           hitSlop={{ top: 5, bottom: 5, left: 5, right: 5 }}
           accessibilityRole="button"
-          accessibilityLabel={`${shares || 0} shares`}
+          accessibilityLabel={t(LocalizedStrings.accessibility.shares, { count: shares || 0 })}
         >
           <IconBookmarked filled={isBookmarked} color={theme.colors.text.secondary} />
         </TouchableOpacity>
@@ -561,6 +569,19 @@ const createStyles = (theme: Theme) =>
       fontSize: moderateScale(12),
       color: theme.colors.slateCharcoal,
       lineHeight: verticalScale(18),
+    },
+    hashtagRow: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+    },
+    hashtag: {
+      backgroundColor: theme.colors.background.default,
+      fontSize: moderateScale(12),
+      borderRadius: 999,
+      paddingHorizontal: scale(10),
+      paddingVertical: verticalScale(4),
+      marginRight: scale(6),
+      marginBottom: verticalScale(6),
     },
     tagsContainer: {
       flexDirection: "row",

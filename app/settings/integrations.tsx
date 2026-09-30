@@ -85,7 +85,7 @@ export default function IntegrationsScreen() {
         leftIcon: <IconApple />,
         heading: "Apple Health",
         action: "appleHealth",
-        description: "Sync Products, heart rate, and steps",
+        description: t(LocalizedStrings.settings.integrations.appleHealth.description),
         rightIcon: (
           <Switch
             style={styles.switch}
@@ -99,7 +99,7 @@ export default function IntegrationsScreen() {
         leftIcon: <IconGoogleFit />,
         heading: "Google Fit",
         action: "googleFit",
-        description: "Track your activity and sleep automatically",
+        description: t(LocalizedStrings.settings.integrations.googleFit.description),
         rightIcon: (
           <Switch
             style={styles.switch}
@@ -110,7 +110,7 @@ export default function IntegrationsScreen() {
         ),
       },
     ],
-    [styles.switch, integrations.appleHealth, integrations.googleFit],
+    [styles.switch, integrations.appleHealth, integrations.googleFit, t],
   );
   const [activeDevice, setActiveDevice] = useState({
     "Fitbit": false,
@@ -124,32 +124,32 @@ export default function IntegrationsScreen() {
         leftIcon: <IconFitbit />,
         heading: "Fitbit",
         action: "fitbit",
-        description: "Sync sleeps & activity data",
+        description: t(LocalizedStrings.settings.integrations.fitbit.description),
         rightIcon: null,
       },
       {
         leftIcon: <IconGarmin />,
         heading: "Garmin",
         action: "garmin",
-        description: "Track activity insights",
+        description: t(LocalizedStrings.settings.integrations.garmin.description),
         rightIcon: null,
       },
       {
         leftIcon: <IconWatch />,
         heading: "Galaxy Watch",
         action: "galaxyWatch",
-        description: "Sync vitals & reminders",
+        description: t(LocalizedStrings.settings.integrations.galaxyWatch.description),
         rightIcon: null,
       },
       {
         leftIcon: <IconRing />,
         heading: "Oura Ring",
         action: "ouraRing",
-        description: "Connect for sleep & readiness data",
+        description: t(LocalizedStrings.settings.integrations.ouraRing.description),
         rightIcon: null,
       },
     ],
-    [],
+    [t],
   );
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.colors.background.default }]}>

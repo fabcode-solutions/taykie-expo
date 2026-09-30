@@ -49,7 +49,7 @@ export default function PasswordReset() {
 
   const onSubmit = async () => {
     if (code.some((digit) => digit === "")) {
-      setError("Please enter all digits of the code.");
+      setError(t(LocalizedStrings.auth.passwordreset.codeIncomplete));
       return;
     }
     try {

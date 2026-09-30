@@ -6468,6 +6468,17 @@ __metadata:
   languageName: node
   linkType: hard
 
+"expo-local-authentication@npm:~16.0.5":
+  version: 16.0.5
+  resolution: "expo-local-authentication@npm:16.0.5"
+  dependencies:
+    invariant: ^2.2.4
+  peerDependencies:
+    expo: "*"
+  checksum: a7c2a70d5d88b94bb6a2168e077ee7286b63a9718cc4cb2b211fa2b837c23c9581b01363088df4e149e922389b981ced533ffbbcd8ce856f1ad82aeb671aeff9
+  languageName: node
+  linkType: hard
+
 "expo-localization@npm:~16.1.5":
   version: 16.1.6
   resolution: "expo-localization@npm:16.1.6"
@@ -10807,7 +10818,17 @@ __metadata:
   languageName: node
   linkType: hard
 
-"react-native-is-edge-to-edge@npm:^1.1.6, react-native-is-edge-to-edge@npm:^1.1.7, react-native-is-edge-to-edge@npm:^1.2.1":
+"react-native-is-edge-to-edge@npm:1.1.7":
+  version: 1.1.7
+  resolution: "react-native-is-edge-to-edge@npm:1.1.7"
+  peerDependencies:
+    react: "*"
+    react-native: "*"
+  checksum: 4cdf2b2fb5b131f2015c26d2cb7688b4a0c5f3c8474b1bf0ddfa9eabb0263df440c87262ae8f812a6ecab0d5310df0373bddad4b51f53dabb2ffee01e9ef0f44
+  languageName: node
+  linkType: hard
+
+"react-native-is-edge-to-edge@npm:^1.1.6, react-native-is-edge-to-edge@npm:^1.1.7":
   version: 1.2.1
   resolution: "react-native-is-edge-to-edge@npm:1.2.1"
   peerDependencies:
@@ -10842,18 +10863,27 @@ __metadata:
   languageName: node
   linkType: hard
 
-"react-native-reanimated@npm:^4.0.0":
-  version: 4.1.5
-  resolution: "react-native-reanimated@npm:4.1.5"
+"react-native-reanimated@npm:~3.17.4":
+  version: 3.17.5
+  resolution: "react-native-reanimated@npm:3.17.5"
   dependencies:
-    react-native-is-edge-to-edge: ^1.2.1
-    semver: 7.7.2
+    "@babel/plugin-transform-arrow-functions": ^7.0.0-0
+    "@babel/plugin-transform-class-properties": ^7.0.0-0
+    "@babel/plugin-transform-classes": ^7.0.0-0
+    "@babel/plugin-transform-nullish-coalescing-operator": ^7.0.0-0
+    "@babel/plugin-transform-optional-chaining": ^7.0.0-0
+    "@babel/plugin-transform-shorthand-properties": ^7.0.0-0
+    "@babel/plugin-transform-template-literals": ^7.0.0-0
+    "@babel/plugin-transform-unicode-regex": ^7.0.0-0
+    "@babel/preset-typescript": ^7.16.7
+    convert-source-map: ^2.0.0
+    invariant: ^2.2.4
+    react-native-is-edge-to-edge: 1.1.7
   peerDependencies:
     "@babel/core": ^7.0.0-0
     react: "*"
     react-native: "*"
-    react-native-worklets: ">=0.5.0"
-  checksum: 5439c2f5c27af9590719a4c412f3cb8415c626e346885821898ae50c7e3cdf00bc21058a1bc29cafa1366231f414c6979fae852acf0713ba7bdc7e5ba351827c
+  checksum: fe667e4764f691b2e752eaedb7527fd8ac251637ae9e7dd9ab124abae85627839b5daea064befc5e09ca710ef673d5501ed11286eb39dfcb04f5d57b2d47e49c
   languageName: node
   linkType: hard
 
@@ -10935,29 +10965,6 @@ __metadata:
     react: "*"
     react-native: "*"
   checksum: cfc8295e6137ef9d29d569269da44b47efb7f2a2555d8f3cb79acbdf7d139526ef55df3f368ca1bcbcf76eee7e5ca7816035ae252763aba102ffa3aa1a928196
-  languageName: node
-  linkType: hard
-
-"react-native-worklets@npm:^0.5.0":
-  version: 0.5.2
-  resolution: "react-native-worklets@npm:0.5.2"
-  dependencies:
-    "@babel/plugin-transform-arrow-functions": ^7.0.0-0
-    "@babel/plugin-transform-class-properties": ^7.0.0-0
-    "@babel/plugin-transform-classes": ^7.0.0-0
-    "@babel/plugin-transform-nullish-coalescing-operator": ^7.0.0-0
-    "@babel/plugin-transform-optional-chaining": ^7.0.0-0
-    "@babel/plugin-transform-shorthand-properties": ^7.0.0-0
-    "@babel/plugin-transform-template-literals": ^7.0.0-0
-    "@babel/plugin-transform-unicode-regex": ^7.0.0-0
-    "@babel/preset-typescript": ^7.16.7
-    convert-source-map: ^2.0.0
-    semver: 7.7.2
-  peerDependencies:
-    "@babel/core": ^7.0.0-0
-    react: "*"
-    react-native: "*"
-  checksum: 1157ffa67034684b21eb69d697c27cf5093af4ed7acf0a917036d5ecaca840e98e71c7b7d9c5b2b7ada4d7c44ff2251e9a57debd53610e38ef25944463d7ea7e
   languageName: node
   linkType: hard
 
@@ -11517,21 +11524,21 @@ __metadata:
   languageName: node
   linkType: hard
 
-"semver@npm:7.7.2, semver@npm:^7.1.3, semver@npm:^7.3.5, semver@npm:^7.5.3, semver@npm:^7.5.4, semver@npm:^7.6.0, semver@npm:^7.7.1":
-  version: 7.7.2
-  resolution: "semver@npm:7.7.2"
-  bin:
-    semver: bin/semver.js
-  checksum: dd94ba8f1cbc903d8eeb4dd8bf19f46b3deb14262b6717d0de3c804b594058ae785ef2e4b46c5c3b58733c99c83339068203002f9e37cfe44f7e2cc5e3d2f621
-  languageName: node
-  linkType: hard
-
 "semver@npm:^6.3.0, semver@npm:^6.3.1":
   version: 6.3.1
   resolution: "semver@npm:6.3.1"
   bin:
     semver: bin/semver.js
   checksum: ae47d06de28836adb9d3e25f22a92943477371292d9b665fb023fae278d345d508ca1958232af086d85e0155aee22e313e100971898bbb8d5d89b8b1d4054ca2
+  languageName: node
+  linkType: hard
+
+"semver@npm:^7.1.3, semver@npm:^7.3.5, semver@npm:^7.5.3, semver@npm:^7.5.4, semver@npm:^7.6.0, semver@npm:^7.7.1":
+  version: 7.7.2
+  resolution: "semver@npm:7.7.2"
+  bin:
+    semver: bin/semver.js
+  checksum: dd94ba8f1cbc903d8eeb4dd8bf19f46b3deb14262b6717d0de3c804b594058ae785ef2e4b46c5c3b58733c99c83339068203002f9e37cfe44f7e2cc5e3d2f621
   languageName: node
   linkType: hard
 
@@ -12377,6 +12384,7 @@ __metadata:
     expo-image-picker: ~16.1.4
     expo-linear-gradient: ~14.1.5
     expo-linking: ~7.1.4
+    expo-local-authentication: ~16.0.5
     expo-localization: ~16.1.5
     expo-notifications: ~0.31.5
     expo-print: ~14.1.4
@@ -12403,13 +12411,12 @@ __metadata:
     react-native-gesture-handler: ~2.24.0
     react-native-mmkv: 3.3.0
     react-native-paper: ^5.14.5
-    react-native-reanimated: ^4.0.0
+    react-native-reanimated: ~3.17.4
     react-native-safe-area-context: 5.4.0
     react-native-screens: ~4.11.1
     react-native-svg: 15.11.2
     react-native-toast-message: ^2.3.3
     react-native-ui-datepicker: ^3.1.2
-    react-native-worklets: ^0.5.0
     react-test-renderer: 18.3.1
     tailwindcss: ^3.4.17
     typescript: ~5.8.3

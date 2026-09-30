@@ -1,15 +1,18 @@
 import { Stack } from "expo-router";
+import { useTranslation } from "react-i18next";
 import { useTheme } from "@/theme";
 import { AlertProvider } from "@/provider/AlertProvider";
+import { LocalizedStrings } from "@/i18n/LocalizedStrings";
 
 export default function AuthLayout() {
   const theme = useTheme();
+  const { t } = useTranslation();
   return (
     <AlertProvider>
       <Stack
         screenOptions={{
           headerShown: true,
-          headerBackTitle: "Back",
+          headerBackTitle: t(LocalizedStrings.navigation.back),
           headerStyle: {
             backgroundColor: theme.colors.background.paper,
           },
@@ -19,49 +22,49 @@ export default function AuthLayout() {
         <Stack.Screen
           name="welcome-screen"
           options={{
-            title: "Welcome Screen",
+            title: t(LocalizedStrings.navigation.screens.welcome),
             headerShown: false,
           }}
         />
         <Stack.Screen
           name="auth-start"
           options={{
-            title: "Auth Start",
+            title: t(LocalizedStrings.navigation.screens.authStart),
             headerShown: false,
           }}
         />
         <Stack.Screen
           name="signup"
           options={{
-            title: "Create Account",
+            title: t(LocalizedStrings.navigation.screens.createAccount),
             headerShown: false,
           }}
         />
         <Stack.Screen
           name="login"
           options={{
-            title: "Sign In",
+            title: t(LocalizedStrings.navigation.screens.signIn),
             headerShown: false,
           }}
         />
         <Stack.Screen
           name="forget-password"
           options={{
-            title: "Forget Password",
+            title: t(LocalizedStrings.navigation.screens.forgetPassword),
             headerShown: false,
           }}
         />
         <Stack.Screen
           name="password-reset"
           options={{
-            title: "Password Reset",
+            title: t(LocalizedStrings.navigation.screens.passwordReset),
             headerShown: false,
           }}
         />
         <Stack.Screen
           name="new-password"
           options={{
-            title: "Password Reset",
+            title: t(LocalizedStrings.navigation.screens.passwordReset),
             headerShown: false,
           }}
         />
@@ -69,7 +72,7 @@ export default function AuthLayout() {
         <Stack.Screen
           name="terms-and-conditions"
           options={{
-            title: "Terms & Conditions",
+            title: t(LocalizedStrings.navigation.screens.termsAndConditions),
             headerShown: false,
           }}
         />
@@ -77,7 +80,7 @@ export default function AuthLayout() {
         <Stack.Screen
           name="privacy-policy"
           options={{
-            title: "Privacy Policy",
+            title: t(LocalizedStrings.navigation.screens.privacyPolicy),
             headerShown: false,
           }}
         />

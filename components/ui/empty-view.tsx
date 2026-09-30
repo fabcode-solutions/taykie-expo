@@ -21,7 +21,7 @@ const EmptyView = ({
   showIcon = true,
   title,
   message,
-  buttonTitle = "Create",
+  buttonTitle = t(LocalizedStrings.common.create),
   showButton = false,
   onPressButton,
 }: EmptyViewProps) => {

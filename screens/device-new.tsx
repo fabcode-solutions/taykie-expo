@@ -4,6 +4,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { SafeAreaScreen, ThemeStatusBar, ThemeText, ThemeView } from "@/components";
 import { fontFamily, useTheme, type Theme } from "@/theme";
 import { useTranslation } from "react-i18next";
+import { LocalizedStrings } from "@/i18n/LocalizedStrings";
 import AppHeader from "@/components/AppHeader";
 import IconSearch from "@/components/icons/IconSearch";
 import IconRefresh from "@/components/icons/IconRefresh";
@@ -84,7 +85,7 @@ export default function DeviceScreen() {
         t("device.permissions.message", {
           defaultValue: "This app needs Bluetooth permissions to connect to your Taykie device.",
         }),
-        [{ text: "OK" }],
+        [{ text: t(LocalizedStrings.common.ok) }],
       );
     }
 
@@ -103,7 +104,7 @@ export default function DeviceScreen() {
         t("device.bluetooth.enableMessage", {
           defaultValue: "Please enable Bluetooth to connect to your device.",
         }),
-        [{ text: "OK" }],
+        [{ text: t(LocalizedStrings.common.ok) }],
       );
     }
 
@@ -124,7 +125,7 @@ export default function DeviceScreen() {
               t("device.permissions.bluetoothRequired", {
                 defaultValue: "Bluetooth permissions are required to scan for devices.",
               }),
-              [{ text: "OK" }],
+              [{ text: t(LocalizedStrings.common.ok) }],
             );
             return;
           }
@@ -134,7 +135,7 @@ export default function DeviceScreen() {
               t("device.bluetooth.enableToScan", {
                 defaultValue: "Please enable Bluetooth to scan for devices.",
               }),
-              [{ text: "OK" }],
+              [{ text: t(LocalizedStrings.common.ok) }],
             );
             return;
           }
@@ -148,7 +149,7 @@ export default function DeviceScreen() {
               t("device.connectFirst", {
                 defaultValue: "Please connect to your device first.",
               }),
-              [{ text: "OK" }],
+              [{ text: t(LocalizedStrings.common.ok) }],
             );
             return;
           }
@@ -172,7 +173,7 @@ export default function DeviceScreen() {
                           ? t("common.success", { defaultValue: "Success" })
                           : t("common.error", { defaultValue: "Error" }),
                         result.message,
-                        [{ text: "OK" }],
+                        [{ text: t(LocalizedStrings.common.ok) }],
                       );
                       if (result.success) {
                         refetchDeviceData();
@@ -192,7 +193,7 @@ export default function DeviceScreen() {
               t("device.connectFirst", {
                 defaultValue: "Please connect to your device first.",
               }),
-              [{ text: "OK" }],
+              [{ text: t(LocalizedStrings.common.ok) }],
             );
             return;
           }
@@ -216,7 +217,7 @@ export default function DeviceScreen() {
                             ? t("common.success", { defaultValue: "Success" })
                             : t("common.error", { defaultValue: "Error" }),
                           result.message,
-                          [{ text: "OK" }],
+                          [{ text: t(LocalizedStrings.common.ok) }],
                         );
                         if (result.success) {
                           refetchDeviceData();
@@ -251,7 +252,7 @@ export default function DeviceScreen() {
     crossPlatformAlert(
       t("common.success", { defaultValue: "Success" }),
       t("device.connected", { defaultValue: "Device connected successfully!" }),
-      [{ text: "OK" }],
+      [{ text: t(LocalizedStrings.common.ok) }],
     );
   }, [t]);
 

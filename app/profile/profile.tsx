@@ -28,8 +28,10 @@ import IconProduct from "@/components/icons/IconProduct";
 import IconLogs from "@/components/icons/IconLogs";
 import Tabs from "@/components/shared/tabs/Tabs";
 import GroupCard from "@/components/groups/GroupCard";
-import PostCard from "@/components/social/PostCard";
 import EmptyView from "@/components/ui/empty-view";
+import ProfilePostItem from "@/components/profile/ProfilePostItem";
+import { GroupListSkeleton } from "@/components/groups/GroupSkeletons";
+import { PostCardSkeleton } from "@/components/social/PostCardSkeleton";
 import { Button } from "@/components/ui/button";
 
 // Stores & Types
@@ -48,27 +50,37 @@ import IconGrid from "@/components/icons/settings/IconGrid";
 import IconCapture from "@/components/icons/settings/IconCapture";
 import IconBookmarked from "@/components/icons/IconBookmarked";
 
+const getErrorMessage = (error: unknown) =>
+  error instanceof Error ? error.message : String(error);
+
+const postKeyExtractor = (item: GroupResponse | CommunityPost) => item.id.toString();
+
+type Segment = "posts" | "groups" | "saved";
+
 export default function ProfileScreen() {
   const { t } = useTranslation();
   const alert = useAlert();
   const theme = useTheme();
   const router = useRouter();
-  const [activeSegment, setActiveSegment] = useState<"posts" | "groups" | "saved">("posts");
+  const [activeSegment, setActiveSegment] = useState<Segment>("posts");
   const [searchVisible, setSearchVisible] = useState(false);
-  const { user, stats } = useAuthStore();
-  const {
-    fetchBookmarkedPosts,
-    bookmarkedPost,
-    fetchUserPosts,
-    userPosts,
-    unBookmarkPost,
-    bookmarkPost,
-    likePost,
-    unLikePost,
-    fetchPostComments,
-  } = usePostStore();
-  const { sendNotification } = useNotificationStore();
-  const { userGroups, fetchUserGroups } = useGroupStore();
+  // Per-field selectors so unrelated store updates do not re-render the whole profile.
+  const user = useAuthStore((s) => s.user);
+  const stats = useAuthStore((s) => s.stats);
+  const fetchBookmarkedPosts = usePostStore((s) => s.fetchBookmarkedPosts);
+  const bookmarkedPost = usePostStore((s) => s.bookmarkedPost);
+  const fetchUserPosts = usePostStore((s) => s.fetchUserPosts);
+  const userPosts = usePostStore((s) => s.userPosts);
+  const unBookmarkPost = usePostStore((s) => s.unBookmarkPost);
+  const bookmarkPost = usePostStore((s) => s.bookmarkPost);
+  const likePost = usePostStore((s) => s.likePost);
+  const unLikePost = usePostStore((s) => s.unLikePost);
+  const fetchPostComments = usePostStore((s) => s.fetchPostComments);
+  const sendNotification = useNotificationStore((s) => s.sendNotification);
+  const userGroups = useGroupStore((s) => s.userGroups);
+  const fetchUserGroups = useGroupStore((s) => s.fetchUserGroups);
+  const isPostLoading = usePostStore((s) => s.isLoading);
+  const isGroupLoading = useGroupStore((s) => s.isLoading);
 
   const displayName = useMemo(() => {
     if (!user) return null;
@@ -99,7 +111,7 @@ export default function ProfileScreen() {
           await fetchBookmarkedPosts();
         }
       } catch (error) {
-        alert.show(AlertPresets.error(t(LocalizedStrings.common.error), error.message));
+        alert.show(AlertPresets.error(t(LocalizedStrings.common.error), getErrorMessage(error)));
       }
     },
     [bookmarkPost, unBookmarkPost, activeSegment, fetchBookmarkedPosts, t],
@@ -127,7 +139,7 @@ export default function ProfileScreen() {
         }
         await sendNotification(request);
       } catch (error) {
-        alert.show(AlertPresets.error(t(LocalizedStrings.common.error), error.message));
+        alert.show(AlertPresets.error(t(LocalizedStrings.common.error), getErrorMessage(error)));
       }
     },
     [likePost, unLikePost, sendNotification, user?.id, user?.firstName, t],
@@ -138,38 +150,34 @@ export default function ProfileScreen() {
       try {
         await fetchPostComments(postId);
       } catch (error) {
-        alert.show(AlertPresets.error(t(LocalizedStrings.common.error), error.message));
+        alert.show(AlertPresets.error(t(LocalizedStrings.common.error), getErrorMessage(error)));
       }
     },
     [fetchPostComments, t],
   );
 
+  const handleAuthorPress = useCallback(
+    (authorId: string) =>
+      router.push({ pathname: "/profile/public-profile", params: { userId: authorId } }),
+    [router],
+  );
+
   const renderSection = useCallback(
     ({ item }: { item: GroupResponse | CommunityPost }) => {
-      switch (activeSegment) {
-        case "groups":
-          return <GroupCard item={item as GroupResponse} />;
-        case "posts":
-        case "saved":
-          return (
-            <PostCard
-              post={item as CommunityPost}
-              onApiShare={handleApiShare}
-              onApiLike={(postId, isLiked) => handleLike(postId, isLiked, item?.user?.id)}
-              onApiComment={handleApiComment}
-              onAuthorPress={(authorId) =>
-                router.push({
-                  pathname: "/profile/public-profile",
-                  params: {
-                    userId: authorId,
-                  },
-                })
-              }
-            />
-          );
+      if (activeSegment === "groups") {
+        return <GroupCard item={item as GroupResponse} />;
       }
+      return (
+        <ProfilePostItem
+          post={item as CommunityPost}
+          onShare={handleApiShare}
+          onLike={handleLike}
+          onComment={handleApiComment}
+          onAuthorPress={handleAuthorPress}
+        />
+      );
     },
-    [activeSegment, handleApiShare],
+    [activeSegment, handleApiShare, handleLike, handleApiComment, handleAuthorPress],
   );
 
   const loadData = useCallback(async () => {
@@ -178,7 +186,7 @@ export default function ProfileScreen() {
       else if (activeSegment === "groups") await fetchUserGroups();
       else if (activeSegment === "saved") await fetchBookmarkedPosts();
     } catch (error) {
-      alert.show(AlertPresets.error(t(LocalizedStrings.common.error), error.message));
+      alert.show(AlertPresets.error(t(LocalizedStrings.common.error), getErrorMessage(error)));
     }
   }, [activeSegment, fetchUserPosts, fetchUserGroups, fetchBookmarkedPosts, t]);
 
@@ -199,6 +207,10 @@ export default function ProfileScreen() {
     }
   }, [userGroups, userPosts, bookmarkedPost, activeSegment]);
 
+  // Nothing to show yet for the active tab and its store is still fetching.
+  const isListLoading =
+    (activeSegment === "groups" ? isGroupLoading : isPostLoading) && currentData.length === 0;
+
   const handleViewAllAction = useCallback(() => {
     switch (activeSegment) {
       case "posts":
@@ -211,7 +223,46 @@ export default function ProfileScreen() {
         router.push("/(screens)/bookmarked");
         break;
     }
-  }, [activeSegment]);
+  }, [activeSegment, router]);
+
+  const segments = useMemo(
+    () => [
+      {
+        icon: <IconGrid size={moderateScale(14)} />,
+        label: t(LocalizedStrings.profile.filter.posts),
+        key: "posts",
+      },
+      {
+        icon: <IconCapture size={moderateScale(14)} />,
+        label: t(LocalizedStrings.profile.filter.groups),
+        key: "groups",
+      },
+      {
+        icon: <IconBookmarked size={moderateScale(14)} />,
+        label: t(LocalizedStrings.profile.filter.saved),
+        key: "saved",
+      },
+    ],
+    [t],
+  );
+
+  const handleSelectSegment = useCallback((key: string | string[]) => {
+    setActiveSegment(key as Segment);
+  }, []);
+  const handleOpenSettings = useCallback(() => router.push("/(tabs)/settings"), [router]);
+  const handleEditProfile = useCallback(() => router.push("/profile/edit-profile"), [router]);
+  const handleOpenFollowing = useCallback(
+    () => router.push({ pathname: "/profile/follow", params: { type: "Following" } }),
+    [router],
+  );
+  const handleOpenFollowers = useCallback(
+    () => router.push({ pathname: "/profile/follow", params: { type: "Followers" } }),
+    [router],
+  );
+  const handleOpenAdd = useCallback(() => setSearchVisible(true), []);
+  const handleCloseAdd = useCallback(() => setSearchVisible(false), []);
+  const handleOpenProducts = useCallback(() => router.push("/profile/product-list"), [router]);
+  const handleOpenLogs = useCallback(() => router.push("/profile/logs"), [router]);
 
   useEffect(() => {
     loadData();
@@ -237,10 +288,7 @@ export default function ProfileScreen() {
           <ThemeText variant="manrope.h2" style={styles.header}>
             {t(LocalizedStrings.settings.profile.title)}
           </ThemeText>
-          <TouchableOpacity
-            style={styles.rightIcons}
-            onPress={() => router.push("/(tabs)/settings")}
-          >
+          <TouchableOpacity style={styles.rightIcons} onPress={handleOpenSettings}>
             <IconSettings />
           </TouchableOpacity>
         </View>
@@ -257,10 +305,7 @@ export default function ProfileScreen() {
           <View style={styles.nameOuterWrapper}>
             <View style={styles.nameWrapper}>
               <Text style={styles.name}>{displayName}</Text>
-              <TouchableOpacity
-                style={styles.editButton}
-                onPress={() => router.push("/profile/edit-profile")}
-              >
+              <TouchableOpacity style={styles.editButton} onPress={handleEditProfile}>
                 <Text style={styles.editButtonText}>{t(LocalizedStrings.common.edit)}</Text>
               </TouchableOpacity>
             </View>
@@ -272,21 +317,11 @@ export default function ProfileScreen() {
               </View>
             )}
             <View style={styles.followWrapper}>
-              <Pressable
-                onPress={() =>
-                  router.push({ pathname: "/profile/follow", params: { type: "Following" } })
-                }
-                style={styles.followInnerWrapper}
-              >
+              <Pressable onPress={handleOpenFollowing} style={styles.followInnerWrapper}>
                 <Text style={styles.followCount}>{stats?.followingCount || 0}</Text>
                 <Text style={styles.followText}>{t(LocalizedStrings.follow.following)}</Text>
               </Pressable>
-              <Pressable
-                onPress={() =>
-                  router.push({ pathname: "/profile/follow", params: { type: "Followers" } })
-                }
-                style={styles.followInnerWrapper}
-              >
+              <Pressable onPress={handleOpenFollowers} style={styles.followInnerWrapper}>
                 <Text style={styles.followCount}>{stats?.followersCount || 0}</Text>
                 <Text style={styles.followText}>{t(LocalizedStrings.follow.followers)}</Text>
               </Pressable>
@@ -309,19 +344,19 @@ export default function ProfileScreen() {
           <ActionRow
             icon={<IconAdd />}
             label={t(LocalizedStrings.profile.action_menu.add_new)}
-            onPress={() => setSearchVisible(true)}
+            onPress={handleOpenAdd}
             styles={styles}
           />
           <ActionRow
             icon={<IconProduct color={theme.colors.icon} />}
             label={t(LocalizedStrings.product.myProducts)}
-            onPress={() => router.push("/profile/product-list")}
+            onPress={handleOpenProducts}
             styles={styles}
           />
           <ActionRow
             icon={<IconLogs />}
             label={t(LocalizedStrings.profile.action_menu.my_schedule_logs)}
-            onPress={() => router.push("/profile/logs")}
+            onPress={handleOpenLogs}
             styles={styles}
           />
         </View>
@@ -330,31 +365,28 @@ export default function ProfileScreen() {
         <View style={styles.tabView}>
           <Tabs
             backgroundColor={theme.colors.background.elevated}
-            segments={[
-              {
-                icon: <IconGrid size={moderateScale(14)} />,
-                label: t(LocalizedStrings.profile.filter.posts),
-                key: "posts",
-              },
-              {
-                icon: <IconCapture size={moderateScale(14)} />,
-                label: t(LocalizedStrings.profile.filter.groups),
-                key: "groups",
-              },
-              {
-                icon: <IconBookmarked size={moderateScale(14)} />,
-                label: t(LocalizedStrings.profile.filter.saved),
-                key: "saved",
-              },
-            ]}
-            onSelect={(e) => setActiveSegment(e as any)}
+            segments={segments}
+            onSelect={handleSelectSegment}
           />
 
           <FlatList
             data={currentData}
             renderItem={renderSection}
-            keyExtractor={(item) => item.id.toString()}
-            ListEmptyComponent={<EmptyView message={t(LocalizedStrings.profile.no_data_found)} />}
+            keyExtractor={postKeyExtractor}
+            ListEmptyComponent={
+              isListLoading ? (
+                activeSegment === "groups" ? (
+                  <GroupListSkeleton count={2} />
+                ) : (
+                  <View>
+                    <PostCardSkeleton />
+                    <PostCardSkeleton />
+                  </View>
+                )
+              ) : (
+                <EmptyView message={t(LocalizedStrings.profile.no_data_found)} />
+              )
+            }
             scrollEnabled={false}
             initialNumToRender={5}
             maxToRenderPerBatch={10}
@@ -373,22 +405,27 @@ export default function ProfileScreen() {
           )}
         </View>
       </ScrollView>
-      <ScheduleModals
-        visible={searchVisible}
-        onClose={() => setSearchVisible(false)}
-        showAddButton={false}
-      />
+      <ScheduleModals visible={searchVisible} onClose={handleCloseAdd} showAddButton={false} />
     </SafeAreaScreen>
   );
 }
 
 // Helper component for cleaner code
-const ActionRow = ({ icon, label, onPress, styles }: any) => (
-  <TouchableOpacity style={styles.addInfoSectionAction} onPress={onPress}>
-    <View style={styles.addInfoIcon}>{icon}</View>
-    <Text style={styles.addInfoText}>{label}</Text>
-  </TouchableOpacity>
-);
+interface ActionRowProps {
+  icon: React.ReactNode;
+  label: string;
+  onPress: () => void;
+  styles: ReturnType<typeof createStyles>;
+}
+
+const ActionRow = React.memo(function ActionRow({ icon, label, onPress, styles }: ActionRowProps) {
+  return (
+    <TouchableOpacity style={styles.addInfoSectionAction} onPress={onPress}>
+      <View style={styles.addInfoIcon}>{icon}</View>
+      <Text style={styles.addInfoText}>{label}</Text>
+    </TouchableOpacity>
+  );
+});
 
 const createStyles = (theme: Theme) =>
   StyleSheet.create({

@@ -1,5 +1,7 @@
 import React from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { t } from "i18next";
+import { LocalizedStrings } from "@/i18n/LocalizedStrings";
 
 interface Props {
   children: React.ReactNode;
@@ -34,10 +36,10 @@ export class ErrorBoundary extends React.Component<Props, State> {
     if (this.state.error) {
       return (
         <View style={styles.container}>
-          <Text style={styles.title}>Something went wrong</Text>
+          <Text style={styles.title}>{t(LocalizedStrings.errors.boundary.title)}</Text>
           <Text style={styles.message}>{this.state.error.message}</Text>
           <TouchableOpacity style={styles.button} onPress={this.reset}>
-            <Text style={styles.buttonText}>Try Again</Text>
+            <Text style={styles.buttonText}>{t(LocalizedStrings.common.retry)}</Text>
           </TouchableOpacity>
         </View>
       );

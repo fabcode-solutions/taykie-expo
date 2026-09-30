@@ -87,7 +87,7 @@ export default function SearchModal({
         setSearchResults(results);
       } catch (err) {
         console.error("Search error:", err);
-        setError(err instanceof Error ? err.message : "Search failed");
+        setError(err instanceof Error ? err.message : t(LocalizedStrings.schedule.searchFailed));
         setSearchResults([]);
       } finally {
         setIsLoading(false);
@@ -124,7 +124,7 @@ export default function SearchModal({
         onPress={() => handleSelectItem(item)}
         activeOpacity={0.7}
         accessibilityRole="button"
-        accessibilityLabel={`Select ${item.name}`}
+        accessibilityLabel={t(LocalizedStrings.accessibility.selectItem, { name: item.name })}
       >
         <View style={themedStyles.listItemContent}>
           <Text style={themedStyles.itemName}>{item.name}</Text>

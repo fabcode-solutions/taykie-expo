@@ -38,13 +38,13 @@ const formatDisplay = (time: string): string => {
 
 const dayLabel = (key: string): string => {
   const labels: Record<string, string> = {
-    monday: "Monday",
-    tuesday: "Tuesday",
-    wednesday: "Wednesday",
-    thursday: "Thursday",
-    friday: "Friday",
-    saturday: "Saturday",
-    sunday: "Sunday",
+    monday: t(LocalizedStrings.common.days.monday),
+    tuesday: t(LocalizedStrings.common.days.tuesday),
+    wednesday: t(LocalizedStrings.common.days.wednesday),
+    thursday: t(LocalizedStrings.common.days.thursday),
+    friday: t(LocalizedStrings.common.days.friday),
+    saturday: t(LocalizedStrings.common.days.saturday),
+    sunday: t(LocalizedStrings.common.days.sunday),
   };
   return labels[key] ?? key;
 };
@@ -194,7 +194,7 @@ export default function RefillReminder() {
           display="spinner"
           onChange={(_, date) => date && setTimeDate(date)}
           style={styles.iosPicker}
-          accessibilityLabel="Select refill time"
+          accessibilityLabel={t(LocalizedStrings.onboarding.supplements.refill_taykie.select_time)}
         />
       ) : (
         <TouchableOpacity
@@ -207,7 +207,7 @@ export default function RefillReminder() {
           ]}
           onPress={() => setShowPicker(true)}
           accessibilityRole="button"
-          accessibilityLabel="Select refill time"
+          accessibilityLabel={t(LocalizedStrings.onboarding.supplements.refill_taykie.select_time)}
         >
           <Ionicons
             name="time-outline"

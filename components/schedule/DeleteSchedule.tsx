@@ -47,7 +47,7 @@ const DeleteSchedule = ({
   return (
     <BlurModal
       variant="alert"
-      heading="Search"
+      heading={t(LocalizedStrings.schedule.placeHolders.search)}
       visible={searchVisible}
       onRequestClose={() => setSearchVisible(false)}
     >

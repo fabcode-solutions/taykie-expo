@@ -99,10 +99,7 @@ export default function AccountSettingsScreen() {
                   color={theme.colors.primary.main}
                 />
                 <ThemeText style={styles.settingText}>
-                  {(() => {
-                    const label = t("settings.language");
-                    return label === "settings.language" ? "Idioma" : label;
-                  })()}
+                  {t(LocalizedStrings.settings.language)}
                 </ThemeText>
               </ThemeView>
               <ThemeText variant="manrope.body2" style={{ color: theme.colors.text.secondary }}>
@@ -160,7 +157,8 @@ export default function AccountSettingsScreen() {
                   color={theme.colors.error.main}
                 />
                 <ThemeText style={[styles.settingText, { color: theme.colors.error.main }]}>
-                  {isAccountExists ? t(LocalizedStrings.settings.deleteAccount) : "Restore Account"}
+                  {isAccountExists ? t(LocalizedStrings.settings.deleteAccount)
+                    : t(LocalizedStrings.settings.restoreAccount)}
                 </ThemeText>
               </ThemeView>
             </Pressable>

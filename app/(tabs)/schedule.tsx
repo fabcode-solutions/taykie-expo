@@ -5,10 +5,12 @@ import {
   FlatList,
   RefreshControl,
   ScrollView,
+  StyleProp,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
+  ViewStyle,
 } from "react-native";
 
 import { SafeAreaScreen, ThemeStatusBar, ThemeView } from "@/components";
@@ -21,7 +23,7 @@ import type { Theme } from "@/theme";
 import { useTheme } from "@/theme";
 import { addDays, format, startOfWeek } from "date-fns";
 import EmptyView from "@/components/ui/empty-view";
-import { Loader } from "@/components/shared/loader";
+import { TaskListSkeleton } from "@/components/schedule/TaskItemSkeleton";
 import { t } from "i18next";
 import { scale, verticalScale } from "@/utils/scale";
 import { LocalizedStrings } from "@/i18n/LocalizedStrings";
@@ -48,6 +50,45 @@ const VIEW_SEGMENTS: SegmentOption<"daily" | "weekly" | "monthly">[] = [
   { key: "monthly", label: "Monthly" },
 ];
 
+type ViewSegmentKey = "daily" | "weekly" | "monthly";
+
+const getErrorMessage = (error: unknown) =>
+  error instanceof Error ? error.message : String(error);
+
+const keyExtractor = (item: Schedule) => String(item.id);
+
+interface ScheduleRowProps {
+  item: Schedule;
+  statusLabel: string;
+  backgroundColor?: string;
+  style: StyleProp<ViewStyle>;
+  onSelect: (task: Schedule) => void;
+}
+
+// Memoized so TaskItem's own React.memo isn't defeated by a fresh inline
+// onPress closure on every parent render.
+const ScheduleRow = React.memo(function ScheduleRow({
+  item,
+  statusLabel,
+  backgroundColor,
+  style,
+  onSelect,
+}: ScheduleRowProps) {
+  const handlePress = useCallback(() => onSelect(item), [onSelect, item]);
+  return (
+    <ThemeView style={style} backgroundColor={backgroundColor}>
+      <TaskItem
+        id={String(item.id)}
+        status={item.status ?? "upcoming"}
+        statusLabel={statusLabel}
+        time={item.scheduleTime ?? ""}
+        title={item.product?.name ?? ""}
+        onPress={handlePress}
+      />
+    </ThemeView>
+  );
+});
+
 export const generateWeek = (reference: Date, formatStyle: string = "EE"): DayCell[] => {
   const start = startOfWeek(reference, { weekStartsOn: 1 });
 
@@ -65,7 +106,7 @@ export default function ScheduleScreen() {
   const theme = useTheme();
   const alert = useAlert();
   const weekDays = React.useMemo(() => generateWeek(new Date()), []);
-  const [viewSegment, setViewSegment] = React.useState<"daily" | "weekly" | "monthly">("daily");
+  const [viewSegment, setViewSegment] = React.useState<ViewSegmentKey>("daily");
   const [searchVisible, setSearchVisible] = React.useState(false);
   const [task, setTask] = React.useState<Schedule | null>(null);
   const [selectedDayIndex, setSelectedDayIndex] = React.useState(() => {
@@ -78,8 +119,12 @@ export default function ScheduleScreen() {
   const selectedDayName = format(weekDays[selectedDayIndex].date, "EEEE");
 
   // Destructure pagination states from your store
-  const { fetchUserSchedules, userSchedules, isLoading, isFetchingNextPage, hasMore } =
-    useScheduleStore();
+  // Individual selectors so unrelated store updates don't re-render the screen.
+  const fetchUserSchedules = useScheduleStore((s) => s.fetchUserSchedules);
+  const userSchedules = useScheduleStore((s) => s.userSchedules);
+  const isLoading = useScheduleStore((s) => s.isLoading);
+  const isFetchingNextPage = useScheduleStore((s) => s.isFetchingNextPage);
+  const hasMore = useScheduleStore((s) => s.hasMore);
 
   const themedStyles = React.useMemo(() => createStyles(theme), [theme]);
 
@@ -125,7 +170,7 @@ export default function ScheduleScreen() {
     try {
       await fetchUserSchedules(true);
     } catch (error) {
-      alert.show(AlertPresets.error(t(LocalizedStrings.common.error), error.message));
+      alert.show(AlertPresets.error(t(LocalizedStrings.common.error), getErrorMessage(error)));
     }
   }, [fetchUserSchedules]);
 
@@ -137,7 +182,7 @@ export default function ScheduleScreen() {
     try {
       await fetchUserSchedules(true);
     } catch (error) {
-      alert.show(AlertPresets.error(t(LocalizedStrings.common.error), error.message));
+      alert.show(AlertPresets.error(t(LocalizedStrings.common.error), getErrorMessage(error)));
     }
   }, [fetchUserSchedules]);
 
@@ -152,9 +197,45 @@ export default function ScheduleScreen() {
     setTask(null);
   }, []);
 
-  const handleTask = useCallback((task: Schedule) => {
-    setTask(task);
+  const handleTask = useCallback((selected: Schedule) => {
+    setTask(selected);
   }, []);
+
+  const handleSelectSegment = useCallback(
+    (key: string | string[]) => setViewSegment(key as ViewSegmentKey),
+    [],
+  );
+  const handleOpenSearch = useCallback(() => setSearchVisible(true), []);
+  const handleCloseSearch = useCallback(() => setSearchVisible(false), []);
+
+  const handleEditComplete = useCallback(
+    async (updatedSchedule: Schedule) => {
+      await fetchSchedulesInitial();
+      setTask(updatedSchedule);
+    },
+    [fetchSchedulesInitial],
+  );
+
+  const renderItem = useCallback(
+    ({ item }: { item: Schedule }) => (
+      <ScheduleRow
+        item={item}
+        statusLabel={statusLabels[item.status ?? "upcoming"]}
+        backgroundColor={theme.colors.white}
+        style={themedStyles.cardMiddle}
+        onSelect={handleTask}
+      />
+    ),
+    [statusLabels, theme.colors.white, themedStyles.cardMiddle, handleTask],
+  );
+
+  // First load with nothing cached: show skeleton rows instead of a spinner.
+  const isInitialLoading = isLoading && userSchedules.length === 0;
+
+  const refreshControl = React.useMemo(
+    () => <RefreshControl onRefresh={handleRefresh} refreshing={isLoading && !isInitialLoading} />,
+    [handleRefresh, isLoading, isInitialLoading],
+  );
 
   // --- SPLIT UI COMPONENTS ---
 
@@ -166,20 +247,13 @@ export default function ScheduleScreen() {
           <MedicineTaken
             task={task}
             onClose={handleCloseTask}
-            onEditComplete={async (updatedSchedule) => {
-              await fetchSchedulesInitial();
-              setTask(updatedSchedule);
-            }}
+            onEditComplete={handleEditComplete}
           />
         </InfoModal>
       )}
       {/* Top of the White Card */}
       <ThemeView style={themedStyles.cardTop} backgroundColor={theme.colors.white}>
-        <Tabs
-          onSelect={(e) => setViewSegment(e as "daily" | "weekly")}
-          segments={viewSegments}
-          fullWidth={false}
-        />
+        <Tabs onSelect={handleSelectSegment} segments={viewSegments} fullWidth={false} />
         {viewSegment === "weekly" && (
           <View style={themedStyles.dateRowWrapper}>
             <ScrollView
@@ -223,58 +297,45 @@ export default function ScheduleScreen() {
     /* Bottom of the White Card */
     <ThemeView style={themedStyles.cardBottom} backgroundColor={theme.colors.white}>
       {isFetchingNextPage && (
-        <View style={{ paddingVertical: verticalScale(16) }}>
-          <Loader fullScreen={false} />
+        <View style={{ paddingVertical: verticalScale(8) }}>
+          <TaskListSkeleton count={2} />
         </View>
       )}
     </ThemeView>
   );
 
   return (
-    <SafeAreaScreen
-      withBackground={false}
-      style={themedStyles.screen}
-      edges={["top"]}
-      showLoader={isLoading && userSchedules.length === 0}
-    >
+    <SafeAreaScreen withBackground={false} style={themedStyles.screen} edges={["top"]}>
       <ThemeStatusBar style={theme.mode === "dark" ? "light" : "dark"} />
 
       <FlatList
         showsVerticalScrollIndicator={false}
         contentContainerStyle={themedStyles.contentContainer}
         data={filteredSchedules}
-        extraData={filteredSchedules}
-        keyExtractor={(item) => item.id}
+        keyExtractor={keyExtractor}
         ListHeaderComponent={ListHeader}
         ListFooterComponent={ListFooter}
         onEndReached={handleLoadMore}
         onEndReachedThreshold={0.5}
-        refreshControl={<RefreshControl onRefresh={handleRefresh} refreshing={isLoading} />}
-        renderItem={({ item }) => (
-          <ThemeView style={themedStyles.cardMiddle} backgroundColor={theme.colors.white}>
-            <TaskItem
-              id={item.id}
-              status={item.status ?? "upcoming"}
-              statusLabel={statusLabels[item?.status ?? "upcoming"]}
-              time={item.scheduleTime ?? ""}
-              title={item.product?.name ?? ""}
-              onPress={() => handleTask(item)}
-            />
-          </ThemeView>
-        )}
+        refreshControl={refreshControl}
+        renderItem={renderItem}
         ListEmptyComponent={
           <ThemeView style={themedStyles.cardMiddle} backgroundColor={theme.colors.white}>
-            <EmptyView
-              showButton
-              message={t(LocalizedStrings.schedule.placeHolders.empty)}
-              buttonTitle={t(LocalizedStrings.schedule.create)}
-              onPressButton={() => setSearchVisible(true)}
-            />
+            {isInitialLoading ? (
+              <TaskListSkeleton count={4} />
+            ) : (
+              <EmptyView
+                showButton
+                message={t(LocalizedStrings.schedule.placeHolders.empty)}
+                buttonTitle={t(LocalizedStrings.schedule.create)}
+                onPressButton={handleOpenSearch}
+              />
+            )}
           </ThemeView>
         }
       />
 
-      <ScheduleModals visible={searchVisible} onClose={() => setSearchVisible(false)} />
+      <ScheduleModals visible={searchVisible} onClose={handleCloseSearch} />
     </SafeAreaScreen>
   );
 }

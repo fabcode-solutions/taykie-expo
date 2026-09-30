@@ -3,6 +3,8 @@ import { TouchableOpacity, StyleSheet, type StyleProp, type ViewStyle } from "re
 import { useTheme } from "@/theme";
 import { SvgIcon } from "@/components/SvgIcon";
 import { moderateScale, scale, verticalScale } from "@/utils/scale";
+import { useTranslation } from "react-i18next";
+import { LocalizedStrings } from "@/i18n/LocalizedStrings";
 
 export interface BackButtonProps {
   onPress?: () => void;
@@ -18,11 +20,12 @@ export const BackButton: React.FC<BackButtonProps> = ({
   iconSize = 16,
 }) => {
   const theme = useTheme();
+  const { t } = useTranslation();
 
   return (
     <TouchableOpacity
       accessibilityRole="button"
-      accessibilityLabel="Go back"
+      accessibilityLabel={t(LocalizedStrings.common.goBack)}
       onPress={onPress}
       style={[styles.button, { backgroundColor: theme.colors.primary.main }, style]}
       hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}

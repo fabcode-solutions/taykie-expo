@@ -2,6 +2,7 @@ import { verticalScale } from "@/utils/scale";
 import React, { useRef } from "react";
 import {
   Animated,
+  ScrollView,
   StyleSheet,
   View,
   type NativeScrollEvent,
@@ -35,6 +36,8 @@ interface ParallaxScrollViewProps {
    * Useful for layouts where a card needs to float above the hero section.
    */
   contentOverlapsHeader?: boolean;
+  /** Ref to the underlying scroll view (e.g. to scrollTo / scrollToEnd for a focused input). */
+  scrollRef?: React.Ref<ScrollView>;
 }
 
 export const ParallaxScrollView: React.FC<ParallaxScrollViewProps> = ({
@@ -47,6 +50,7 @@ export const ParallaxScrollView: React.FC<ParallaxScrollViewProps> = ({
   contentContainerStyle,
   scrollViewProps,
   contentOverlapsHeader = false,
+  scrollRef,
 }) => {
   const scrollY = useRef(new Animated.Value(0)).current;
   const headerScrollDistance = Math.max(headerHeight - headerMinHeight, 0);
@@ -78,6 +82,7 @@ export const ParallaxScrollView: React.FC<ParallaxScrollViewProps> = ({
     <View style={[styles.container, containerStyle]}>
       <Animated.ScrollView
         {...restScrollViewProps}
+        ref={scrollRef as React.Ref<any>}
         style={[scrollViewStyle, contentOverlapsHeader && styles.scrollAboveHeader]}
         pointerEvents={
           contentOverlapsHeader ? (scrollPointerEvents ?? "box-none") : scrollPointerEvents

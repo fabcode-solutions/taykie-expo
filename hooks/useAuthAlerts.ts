@@ -2,6 +2,8 @@ import { useEffect } from "react";
 import { useAuthStore } from "@/stores/authStore";
 import { useAlert } from "@/provider/AlertProvider";
 import { AlertPresets } from "@/utils/alert";
+import { t } from "i18next";
+import { LocalizedStrings } from "@/i18n/LocalizedStrings";
 
 /**
  * Hook that automatically shows alerts based on auth state changes
@@ -16,12 +18,12 @@ export const useAuthAlerts = () => {
       let errorMessage = authError;
 
       if (authError.toLowerCase().includes("unauthorized")) {
-        errorMessage = "Invalid email or password";
+        errorMessage = t(LocalizedStrings.errors.invalidLogin);
       } else if (authError.toLowerCase().includes("network")) {
         alert.show(AlertPresets.networkError());
         return;
       } else if (authError.toLowerCase().includes("exists")) {
-        errorMessage = "An account with this email already exists";
+        errorMessage = t(LocalizedStrings.errors.accountExists);
       }
 
       alert.show(AlertPresets.authError(errorMessage));

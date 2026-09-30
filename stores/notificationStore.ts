@@ -15,6 +15,8 @@ import {
   updateNotificationSettings,
 } from "@/services/api/notification";
 import { User } from "./authStore";
+import { t } from "i18next";
+import { LocalizedStrings } from "@/i18n/LocalizedStrings";
 
 // models/NotificationUpdateRequestModel.ts
 export type NotificationType = "Follow" | "Like" | "Comment" | "System" | "Group";
@@ -58,7 +60,8 @@ export interface NotificationData {
   title: string;
   message: string;
   action: string;
-  resourceId: null;
+  // Entity the notification points at (e.g. a tip id for "new tip" System notifications).
+  resourceId: string | null;
   isRead: false;
   readAt: string | null;
   createdAt: string;
@@ -173,7 +176,7 @@ export const useNotificationStore = create<State & Actions>()(
             };
           });
         } catch (error) {
-          const message = getErrorMessage(error, "Fetch User Notifications failed");
+          const message = getErrorMessage(error, t(LocalizedStrings.errors.api.fetchNotifications));
           set({ isLoading: false, isFetchingNextPage: false, error: message });
         }
       },
@@ -197,7 +200,10 @@ export const useNotificationStore = create<State & Actions>()(
             ),
             unreadCount: state.unreadCount + 1,
           }));
-          const message = getErrorMessage(error, "Mark notification as Read failed");
+          const message = getErrorMessage(
+            error,
+            t(LocalizedStrings.errors.api.markNotificationRead),
+          );
           set({ error: message });
           throw new Error(message);
         }
@@ -220,7 +226,7 @@ export const useNotificationStore = create<State & Actions>()(
               notifications: [deleted, ...state.notifications],
             }));
           }
-          const message = getErrorMessage(error, "Delete User notification failed");
+          const message = getErrorMessage(error, t(LocalizedStrings.errors.api.deleteNotification));
           set({ error: message });
           throw new Error(message);
         }
@@ -241,7 +247,10 @@ export const useNotificationStore = create<State & Actions>()(
         } catch (error) {
           // Revert on failure
           set({ notifications: previousNotifications });
-          const message = getErrorMessage(error, "Mark All notification as Read failed");
+          const message = getErrorMessage(
+            error,
+            t(LocalizedStrings.errors.api.markAllNotificationsRead),
+          );
           set({ error: message });
           throw new Error(message);
         }
@@ -255,7 +264,10 @@ export const useNotificationStore = create<State & Actions>()(
           set({ isLoading: false });
           return response.message;
         } catch (error) {
-          const message = getErrorMessage(error, "Update Notification Settings failed");
+          const message = getErrorMessage(
+            error,
+            t(LocalizedStrings.errors.api.updateNotificationSettings),
+          );
           set({
             isLoading: false,
             error: message,
@@ -269,7 +281,10 @@ export const useNotificationStore = create<State & Actions>()(
           const response = await getNotificationSettings();
           set({ isLoading: false, notificationSettings: response.data });
         } catch (error) {
-          const message = getErrorMessage(error, "Fetch Notification Settings failed");
+          const message = getErrorMessage(
+            error,
+            t(LocalizedStrings.errors.api.fetchNotificationSettings),
+          );
           set({
             isLoading: false,
             error: message,
@@ -283,7 +298,7 @@ export const useNotificationStore = create<State & Actions>()(
           const response = await registerFcmToken(token);
           set({ isLoading: false, fcmToken: response.data });
         } catch (error) {
-          const message = getErrorMessage(error, "Fetch FCM Token failed");
+          const message = getErrorMessage(error, t(LocalizedStrings.errors.api.fetchFcmToken));
           set({
             isLoading: false,
             error: message,
@@ -299,7 +314,7 @@ export const useNotificationStore = create<State & Actions>()(
           set({ isLoading: false });
           return response.message;
         } catch (error) {
-          const message = getErrorMessage(error, "Send Notification failed");
+          const message = getErrorMessage(error, t(LocalizedStrings.errors.api.sendNotification));
           set({
             isLoading: false,
             error: message,

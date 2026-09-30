@@ -335,6 +335,8 @@ import {
 import { queryClient } from "@/hooks/queries/queryClient";
 import { lidEventKeys } from "@/hooks/queries/lidEvents";
 import { notifyNewLidEvents } from "@/services/notifications.service";
+import { t } from "i18next";
+import { LocalizedStrings } from "@/i18n/LocalizedStrings";
 
 interface BLEState {
   // Scanning state
@@ -951,7 +953,7 @@ export const useBLEStore = create<BLEState & BLEAction>()(
         } catch (error: any) {
           console.error("Connection failed:", error);
           set({ connectionStatus: "disconnected" });
-          const errorMessage = error?.message || "An unknown connection error occurred";
+          const errorMessage = error?.message || t(LocalizedStrings.errors.api.unknownConnection);
           throw new Error(errorMessage);
         }
       },
@@ -1110,7 +1112,7 @@ export const useBLEStore = create<BLEState & BLEAction>()(
         try {
           await bleService.setSchedule(updatedSchedules);
           const applied = await verifyScheduleApplied(updatedSchedules);
-          if (!applied) throw new Error("Device did not accept the schedule update.");
+          if (!applied) throw new Error(t(LocalizedStrings.errors.device.scheduleUpdateRejected));
           set({ schedules: updatedSchedules });
         } catch (error) {
           console.error("Failed to toggle schedule:", error);
@@ -1143,7 +1145,7 @@ export const useBLEStore = create<BLEState & BLEAction>()(
         await bleService.setSchedule(slots);
         const applied = await verifyScheduleApplied(slots);
         if (!applied) {
-          throw new Error("Device didn't accept the schedule sync. Please try again.");
+          throw new Error(t(LocalizedStrings.errors.device.scheduleSyncRejected));
         }
         set({ schedules: slots });
         return result;
@@ -1219,7 +1221,7 @@ export const useBLEStore = create<BLEState & BLEAction>()(
           // Backend's own device id (UUID) — see onStatusUpdated's comment for
           // why connectedDevice.id (the BLE address) can't be used here.
           const currentDeviceId = get().pairedDeviceId;
-          if (!currentDeviceId) throw new Error("No active device connected.");
+          if (!currentDeviceId) throw new Error(t(LocalizedStrings.errors.device.noActiveDevice));
 
           // The backend session can't be opened yet — it needs the real record
           // count (totalRecords), which we only learn once the device replies.
@@ -1231,15 +1233,15 @@ export const useBLEStore = create<BLEState & BLEAction>()(
           // bleService.onHistoryReceived above.
           await bleService.queryHistory();
         } catch (error) {
-          console.error("Failed to start history sync:", error);
           set({ isSyncingHistory: false, syncSessionId: null });
+          throw error;
         }
       },
 
       refreshCompartmentActivity: async () => {
         try {
           const currentDeviceId = get().connectedDevice?.id;
-          if (!currentDeviceId) throw new Error("No active device connected.");
+          if (!currentDeviceId) throw new Error(t(LocalizedStrings.errors.device.noActiveDevice));
           // No backend session set here — onHistoryReceived above still
           // populates historyRecords for the UI, it just skips the upload path.
           await bleService.queryHistory();
@@ -1255,7 +1257,7 @@ export const useBLEStore = create<BLEState & BLEAction>()(
       // decode unambiguously. Requires explicit UI confirmation before calling.
       eraseHistory: async () => {
         const currentDeviceId = get().connectedDevice?.id;
-        if (!currentDeviceId) throw new Error("No active device connected.");
+        if (!currentDeviceId) throw new Error(t(LocalizedStrings.errors.device.noActiveDevice));
         await bleService.eraseHistoryFlash();
         await new Promise((resolve) => setTimeout(resolve, 200));
         await bleService.queryHistory();
@@ -1266,10 +1268,10 @@ export const useBLEStore = create<BLEState & BLEAction>()(
       // blePeripheralId with a new name, which the backend treats as an update.
       renameDevice: async (name: string) => {
         const device = get().connectedDevice;
-        if (!device) throw new Error("No active device connected.");
+        if (!device) throw new Error(t(LocalizedStrings.errors.device.noActiveDevice));
 
         const trimmed = name.trim();
-        if (!trimmed) throw new Error("Device name can't be empty.");
+        if (!trimmed) throw new Error(t(LocalizedStrings.errors.device.nameEmpty));
 
         const pairResponse = await pairDevice({ name: trimmed, blePeripheralId: device.id });
         set({
@@ -1280,11 +1282,11 @@ export const useBLEStore = create<BLEState & BLEAction>()(
 
       changeDevicePassword: async (currentPassword: string, newPassword: string) => {
         if (get().connectionStatus !== "connected") {
-          throw new Error("Connect to your Taykie device first.");
+          throw new Error(t(LocalizedStrings.errors.device.connectFirst));
         }
         const { verified, changed } = await bleService.changePassword(currentPassword, newPassword);
-        if (!verified) throw new Error("Current password is incorrect.");
-        if (!changed) throw new Error("Device rejected the new password. Please try again.");
+        if (!verified) throw new Error(t(LocalizedStrings.errors.device.wrongPassword));
+        if (!changed) throw new Error(t(LocalizedStrings.errors.device.passwordRejected));
         set({ devicePassword: newPassword });
       },
 

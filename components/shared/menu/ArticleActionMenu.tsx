@@ -6,6 +6,7 @@ import crossPlatformAlert from "@/utils/crossPlatformAlert";
 import { useTranslation } from "react-i18next";
 import { useRouter } from "expo-router";
 import { scale } from "@/utils/scale";
+import { LocalizedStrings } from "@/i18n/LocalizedStrings";
 
 interface ArticleActionMenuProps {
   item: any;
@@ -47,7 +48,7 @@ const ArticleActionMenu: React.FC<ArticleActionMenuProps> = ({
 
       // Prepare share content
       setTimeout(async () => {
-        const title = item.title ?? "Article";
+        const title = item.title ?? t(LocalizedStrings.common.article);
         const url = item.url;
 
         await Share.share({

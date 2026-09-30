@@ -51,7 +51,9 @@
     "member": "member",
     "members": "members",
     "join": "Join",
-    "joined": "Joined"
+    "joined": "Joined",
+    "suggestedGroups": "Suggested groups",
+    "seeAll": "See all"
   },
   "navigation": {
     "tabs": {
@@ -61,6 +63,19 @@
       "community": "Community",
       "device": "Device",
       "insights": "Insights"
+    },
+    "back": "Back",
+    "screens": {
+      "welcome": "Welcome Screen",
+      "authStart": "Auth Start",
+      "createAccount": "Create Account",
+      "signIn": "Sign In",
+      "forgetPassword": "Forget Password",
+      "passwordReset": "Password Reset",
+      "termsAndConditions": "Terms & Conditions",
+      "privacyPolicy": "Privacy Policy",
+      "createPost": "Create post",
+      "bookmarked": "Bookmarked"
     }
   },
   "common": {
@@ -103,7 +118,23 @@
     "next": "Next",
     "supply": "supply",
     "none": "None",
-    "Every": "Every"
+    "Every": "Every",
+    "manage": "Manage",
+    "goBack": "Go back",
+    "close": "Close",
+    "newNotification": "New Notification",
+    "article": "Article",
+    "days": {
+      "monday": "Monday",
+      "tuesday": "Tuesday",
+      "wednesday": "Wednesday",
+      "thursday": "Thursday",
+      "friday": "Friday",
+      "saturday": "Saturday",
+      "sunday": "Sunday"
+    },
+    "saved": "Saved",
+    "saving": "Saving..."
   },
   "auth": {
     "login": {
@@ -137,7 +168,10 @@
         "agreement": "By signing up, you agree to our",
         "termsOfService": "Terms of Service",
         "and": "and",
-        "privacyPolicy": "Privacy Policy"
+        "privacyPolicy": "Privacy Policy",
+        "agreePrefix": "I agree to the",
+        "terms": "Terms",
+        "mustAccept": "You must accept Terms & Privacy Policy"
       }
     },
     "showPassword": "Show Password",
@@ -178,7 +212,8 @@
       "subtitle": "Enter 5 digit code that mentioned in the email",
       "resend": "Resend",
       "button": "Verify Code",
-      "invalidCode": "Invalid Code"
+      "invalidCode": "Invalid Code",
+      "codeIncomplete": "Please enter all digits of the code."
     },
     "newpassword": {
       "title": "Reset Password",
@@ -220,12 +255,119 @@
       "confirmPassword": {
         "required": "Please confirm your password",
         "mismatch": "Passwords do not match"
+      },
+      "username": {
+        "pattern": "Only letters, numbers, and underscores allowed"
+      },
+      "phone": {
+        "invalid": "Enter a valid phone number"
+      },
+      "mobile": {
+        "required": "Mobile number is required"
       }
     },
     "image_not_selected": "You did not select any image.",
     "limitReached": "Limit Reached",
     "tag_add_error": "You can only add up to 5 tags.",
-    "no_notifications": "There are currently no notifications. New updates will appear here when available."
+    "no_notifications": "There are currently no notifications. New updates will appear here when available.",
+    "boundary": {
+      "title": "Something went wrong"
+    },
+    "api": {
+      "requestFailed": "Request failed",
+      "searchPosts": "Search User Posts failed",
+      "saveOnboarding": "Save Onboarding failed",
+      "registration": "Registration failed",
+      "votePost": "Vote on Post failed",
+      "verification": "Verification failed",
+      "updateSchedule": "Update Schedule failed",
+      "updateProduct": "Update Product failed",
+      "updatePost": "Update Post failed",
+      "updateNotificationSettings": "Update Notification Settings failed",
+      "updateGroup": "Update Group failed",
+      "unlikePost": "Unlike Post failed",
+      "unbookmarkPost": "Unbookmark Post failed",
+      "sendNotification": "Send Notification failed",
+      "reset": "Reset failed",
+      "replyPost": "Reply on Post failed",
+      "removeComment": "Remove Comment from Post failed",
+      "markNotificationRead": "Mark notification as Read failed",
+      "markMedicineTaken": "Mark Medicine as Taken failed",
+      "markAllNotificationsRead": "Mark All notification as Read failed",
+      "login": "Login failed",
+      "likePost": "Like Post failed",
+      "leaveGroup": "Leave Group failed",
+      "joinGroup": "Join Group failed",
+      "invalidOtp": "Invalid OTP",
+      "fetchStreak": "Fetching User Streak failed",
+      "fetchLogs": "Fetching User Logs failed",
+      "fetchUpcomingReminder": "Fetching Upcoming Reminder failed",
+      "fetchSchedules": "Fetching Schedules failed",
+      "fetchUserSchedules": "Fetch User Schedules failed",
+      "fetchNotifications": "Fetch User Notifications failed",
+      "fetchUserGroups": "Fetch User Groups failed",
+      "fetchTodaySchedule": "Fetch Today's Schedule failed",
+      "fetchTodayGroups": "Fetch Today's Groups failed",
+      "fetchRecommendedGroups": "Fetch Recommended Groups failed",
+      "fetchPublicProducts": "Fetch Public Products failed",
+      "fetchProduct": "Fetch Product By ID failed",
+      "fetchPostComments": "Fetch Post Comments failed",
+      "fetchPost": "Fetch Post By ID failed",
+      "fetchOnboarding": "Fetch Onboarding failed",
+      "fetchNotificationSettings": "Fetch Notification Settings failed",
+      "fetchGroupMembers": "Fetch Group Members failed",
+      "fetchGroupFriends": "Fetch Group Friends failed",
+      "fetchFcmToken": "Fetch FCM Token failed",
+      "fetchReplies": "Fetch Comment Replies failed",
+      "fetchBookmarkedPosts": "Fetch Bookmarked Post failed",
+      "fetchAllGroups": "Fetch All Groups failed",
+      "deleteNotification": "Delete User notification failed",
+      "deleteSchedule": "Delete Schedule failed",
+      "deleteProduct": "Delete Product failed",
+      "deletePost": "Delete Post failed",
+      "deleteLog": "Delete Log failed",
+      "deleteGroup": "Delete Group failed",
+      "createSnooze": "Create Snooze failed",
+      "createSchedule": "Create Schedule failed",
+      "createProduct": "Create Product failed",
+      "createProductLog": "Create Product Log failed",
+      "createPost": "Create Post failed",
+      "createGroup": "Create Group failed",
+      "completeOnboarding": "Complete Onboarding failed",
+      "bookmarkPost": "Bookmark Post failed",
+      "unknownConnection": "An unknown connection error occurred",
+      "addComment": "Add Comment to Post failed",
+      "credentialsRequired": "Email and password are required"
+    },
+    "device": {
+      "noActiveDevice": "No active device connected.",
+      "scheduleUpdateRejected": "Device did not accept the schedule update.",
+      "scheduleSyncRejected": "Device didn't accept the schedule sync. Please try again.",
+      "nameEmpty": "Device name can't be empty.",
+      "connectFirst": "Connect to your Taykie device first.",
+      "wrongPassword": "Current password is incorrect.",
+      "passwordRejected": "Device rejected the new password. Please try again.",
+      "handshakeDisconnected": "Device disconnected during initial handshake",
+      "notConnected": "No Taykie device currently connected",
+      "connectionLost": "Taykie device connection was lost",
+      "connectionFailed": "Connection failed",
+      "disconnected": "Device disconnected successfully",
+      "disconnectFailed": "Disconnect failed",
+      "renamed": "Device renamed successfully",
+      "renameFailedShort": "Failed to rename device",
+      "renameFailed": "Rename failed",
+      "firmwareStarted": "Firmware update initiated",
+      "firmwareFailedToStart": "Failed to start firmware update",
+      "firmwareFailed": "Update failed"
+    },
+    "auth": {
+      "canceled": "Authentication canceled",
+      "appleUnavailable": "Apple Sign-In not available on this device",
+      "appleNoCredentials": "No Apple credentials returned"
+    },
+    "fcmToken": "❌ FCM Token Error",
+    "invalidLogin": "Invalid email or password",
+    "accountExists": "An account with this email already exists"
   },
   "notFound": {
     "title": "Oops!",
@@ -336,7 +478,16 @@
       },
       "appLock": {
         "title": "App Lock",
-        "description": "Use your device’s biometrics for access."
+        "description": "Use your device’s biometrics for access.",
+        "lockedTitle": "Taykie is locked",
+        "lockedMessage": "Unlock with your device's biometrics or passcode to continue.",
+        "unlock": "Unlock",
+        "unlockPrompt": "Unlock Taykie",
+        "enablePrompt": "Confirm to turn on App Lock",
+        "noHardwareTitle": "Biometrics not available",
+        "noHardwareMessage": "This device doesn't support Face ID, Touch ID or fingerprint unlock.",
+        "notEnrolledTitle": "Set up biometrics first",
+        "notEnrolledMessage": "Add a fingerprint or face, or set a device passcode, in your phone's settings, then try again."
       },
       "delete_account": {
         "title": "Delete My Account & Data",
@@ -344,7 +495,7 @@
       },
       "request_data": {
         "title": "Request My Data",
-        "description": ""
+        "description": "Download a copy of your account data."
       }
     },
     "helpSupport": {
@@ -352,15 +503,86 @@
       "description": "FAQ, Contact & Warranty",
       "faq": {
         "title": "Frequently Asked Questions",
-        "description": "Find answers to common questions."
+        "description": "Find answers to common questions.",
+        "items": {
+          "q1": {
+            "question": "How do I pair my Taykie device?",
+            "answer": "Make sure your Taykie is charged and nearby, turn on Bluetooth, then open the Device tab and tap Start searching. Press the button on top of the device to activate pairing."
+          },
+          "q2": {
+            "question": "Will my reminders work if my phone is off or out of range?",
+            "answer": "Yes, for schedules you sync to the device. Go to Device > On-Device Reminders and choose the times you want. The device rings from its own clock. Monthly schedules only work as phone reminders."
+          },
+          "q3": {
+            "question": "How many reminders can my device hold?",
+            "answer": "The device holds up to 10 reminder slots in total. If you reach the limit, remove another time first to make room."
+          },
+          "q4": {
+            "question": "What do the LED colors on my Taykie mean?",
+            "answer": "White means connected, red means low battery, green means fully charged, blue means a medication reminder is active, and warm yellow means charging. Tap the information icon on the Device tab to see this list."
+          },
+          "q5": {
+            "question": "I opened my Taykie but the app didn't register a dose. What now?",
+            "answer": "Go to Device > Unconfirmed opens and tell us what you did each time the device was opened, such as taking a dose or refilling the box."
+          },
+          "q6": {
+            "question": "What is the device password?",
+            "answer": "It is a 6-digit Bluetooth pairing PIN, separate from your account password. The factory default is 000000. You can change it from Device > Change Device Password."
+          },
+          "q7": {
+            "question": "How do I change how many times a day Taykie reminds me?",
+            "answer": "Open Settings > Dosage & Compartments and pick once, twice or three times a day, then save your changes."
+          },
+          "q8": {
+            "question": "How do I export or delete my data?",
+            "answer": "Open Settings > Data & Privacy to export your data or delete your account. A deleted account can be restored within 30 days, after which it is permanently removed."
+          },
+          "q9": {
+            "question": "How do I change the app language?",
+            "answer": "Open Settings > Account and choose your language."
+          }
+        },
+        "intro": "Quick answers to the questions we hear most.",
+        "stillNeedHelp": "Still need help?",
+        "contactCta": "Contact support"
       },
       "contact": {
         "title": "Contact Us",
-        "description": "Get in touch with our support team."
+        "description": "Get in touch with our support team.",
+        "intro": "Questions, feedback or a problem with your device? Our team is happy to help.",
+        "support": {
+          "title": "General support",
+          "description": "Help with the app, your account or your Taykie device."
+        },
+        "privacy": {
+          "title": "Privacy",
+          "description": "Questions about your data or your privacy rights."
+        },
+        "legal": {
+          "title": "Legal",
+          "description": "Questions about our Terms and Conditions."
+        },
+        "security": {
+          "title": "Security",
+          "description": "Report a security concern or a compromised account."
+        },
+        "emailSubject": "Taykie support request",
+        "sendEmail": "Send an email",
+        "openFailedTitle": "Couldn't open your email app",
+        "openFailedMessage": "Please write to us directly at {{email}}.",
+        "tip": "Tip: include your app version and a short description of what happened so we can help faster."
       },
       "policy": {
         "title": "Warranty & Policies",
-        "description": "View warranty information and terms."
+        "description": "View warranty information and terms.",
+        "warrantyTitle": "Device warranty",
+        "warrantyBody": "Your Taykie Smart Pill Box is covered by the separate hardware warranty terms provided when you purchased it. To make a warranty claim, contact support with your proof of purchase and a description of the issue.",
+        "notCoveredTitle": "What isn't covered",
+        "notCoveredBody": "Taykie is a wellness tool and not a medical device. We are not liable for missed doses resulting from device malfunction, connectivity issues or battery failure, and tampering with or modifying the device may void the warranty.",
+        "policiesTitle": "Policies",
+        "terms": "Terms and Conditions",
+        "privacy": "Privacy Policy",
+        "questions": "Questions about your warranty? Contact us and we'll help."
       }
     },
     "changePassword": {
@@ -402,6 +624,9 @@
       "title": "Dosage & Compartments",
       "description": "Change how many times a day Taykie reminds you.",
       "save": "Save Changes"
+    },
+    "snoozeDuration": {
+      "title": "Snooze Duration"
     }
   },
   "profile": {
@@ -453,7 +678,8 @@
       "bio": "Add Bio",
       "phone": "Add Phone Number",
       "username": "Add Username"
-    }
+    },
+    "joined": "Joined {{date}}"
   },
   "device": {
     "name": "Device Name",
@@ -491,7 +717,10 @@
       "offline": "Offline",
       "connecting": "Connecting...",
       "find": "Find Device",
-      "neverSynced": "Never"
+      "neverSynced": "Never",
+      "batteryCharging": "Battery (Charging)",
+      "charging": "Charging",
+      "disconnected": "Disconnected"
     },
     "compartments": {
       "title": "Compartments",
@@ -499,7 +728,14 @@
       "active": "Active",
       "empty": "Empty",
       "lastOpened": "Last opened {time}",
-      "noActivity": "No recent activity"
+      "noActivity": "No recent activity",
+      "lastOpenedAt": "Last opened {{time}}",
+      "noSchedule_one": "No active schedule yet — set up to {{count}} dose time to fill the compartment layout.",
+      "noSchedule_other": "No active schedule yet — set up to {{count}} dose times to fill the compartment layout.",
+      "overflow": "+{{count}} more scheduled time(s) beyond your {{perDay}}-dose-per-day plan (change this under Settings › Dosage & Compartments).",
+      "activity": "Compartment Activity",
+      "noActivityYet": "No compartment activity recorded yet. Tap refresh to check the device.",
+      "lastAccessed": "Last accessed {{time}}"
     },
     "actions": {
       "title": "Device Actions",
@@ -533,7 +769,13 @@
     },
     "rename": {
       "title": "Rename Device",
-      "message": "Enter a new name for your device"
+      "message": "Enter a new name for your device",
+      "aboutTitle": "About Device Name",
+      "aboutMessage": "This name only changes how your Taykie is labeled in the app — it isn't sent to the device itself, since the device has no way to store a custom name over Bluetooth.",
+      "heading": "Device Name",
+      "placeholder": "Device name",
+      "inAppOnly": "In-app only — this doesn't change anything on the physical device.",
+      "save": "Save Name"
     },
     "disconnect": {
       "title": "Disconnect Device",
@@ -552,7 +794,84 @@
     "volume_level": "Volume Level",
     "alert_tone": "Alert Tone",
     "active_schedules": "On-Device Reminders",
-    "no_schedules_loaded": "No schedules loaded."
+    "no_schedules_loaded": "No schedules loaded.",
+    "unnamed": "Unnamed Taykie Device",
+    "time": {
+      "justNow": "Just now",
+      "minutesAgo": "{{count}}m ago",
+      "hoursAgo": "{{count}}h ago",
+      "daysAgo": "{{count}}d ago",
+      "todayAt": "Today, {{time}}"
+    },
+    "days": {
+      "everyDay": "Every day",
+      "weekdays": "Weekdays",
+      "weekends": "Weekends",
+      "noDays": "No days",
+      "short": {
+        "sun": "Sun",
+        "mon": "Mon",
+        "tue": "Tue",
+        "wed": "Wed",
+        "thu": "Thu",
+        "fri": "Fri",
+        "sat": "Sat"
+      }
+    },
+    "ledColors": {
+      "title": "Device LED Colors",
+      "message": "Your Taykie's light ring reflects its state automatically — this isn't controlled by the app:\n\n⚪ White — Connected\n🔴 Red — Low battery\n🟢 Green — Fully charged\n🔵 Blue — Medication reminder active\n🟡 Warm Yellow — Charging"
+    },
+    "mute": "Mute",
+    "schedulesSubtitle": "These fire directly from the device's own clock, even when your phone isn't connected.",
+    "erase": {
+      "button": "Erase (Test)",
+      "title": "Erase Device History?",
+      "message": "This permanently wipes all compartment history stored on the device. Only do this for testing.",
+      "confirm": "Erase"
+    },
+    "password": {
+      "title": "Device Password",
+      "description": "This is your Taykie device's own 6-digit Bluetooth pairing PIN — separate from your account password. The factory default is 000000.",
+      "current": "Current Password",
+      "new": "New Password",
+      "confirm": "Confirm New Password",
+      "pinPlaceholder": "6-digit PIN",
+      "currentRequired": "Current password is required",
+      "newRequired": "New password is required",
+      "confirmRequired": "Please confirm your new password",
+      "mismatch": "Passwords don't match",
+      "sixDigits": "Must be exactly 6 digits.",
+      "notConnectedMessage": "Connect to your Taykie device first to change its password.",
+      "changed": "Password changed",
+      "changedMessage": "Your Taykie device's password has been updated.",
+      "submit": "Change Password"
+    },
+    "lastSynced": "Last Synced: {{time}}",
+    "pairing": {
+      "connecting": "Connecting to device...",
+      "searching": "Searching for nearby devices...",
+      "multipleFound": "Multiple devices found — tap one to connect",
+      "found": "Device found",
+      "noneFound": "No Taykie device found nearby",
+      "signal": "Signal: {{rssi}} dBm"
+    },
+    "sync": {
+      "title": "On-Device Reminders",
+      "description": "Schedules you select here ring directly from your Taykie device — using its own clock — even when your phone is off or out of range. If a reminder has multiple times, you can pick just the ones you want on-device.",
+      "slotsUsed": "{{used}}/{{total}} slots used",
+      "empty": "No daily or weekly schedules yet — create one from the Schedule tab first.",
+      "unavailableTitle": "Not available on-device",
+      "unavailableDescription": "Monthly schedules can't be synced — the device only understands day-of-week recurrence, not day-of-month. These still work as regular phone reminders.",
+      "slotLimitTitle": "Slot limit reached",
+      "slotLimitMessage": "Your Taykie device can only hold {{count}} reminder slots total. Remove another time first to make room.",
+      "notConnectedMessage": "Connect to your Taykie device first to sync schedules.",
+      "skippedTitle": "Some schedules were skipped",
+      "skippedMessage": "{{skipped}} selected schedule(s) couldn't fit or aren't supported on-device. {{used}}/{{total}} slots synced.",
+      "syncedTitle": "Synced",
+      "syncedMessage": "{{used}}/{{total}} reminder slots synced to your device.",
+      "week": "week"
+    }
   },
   "insights": {
     "title": "Insights",
@@ -570,7 +889,9 @@
       "json": "User data exported as JSON successfully!",
       "csv": "User data exported as CSV  successfully!",
       "pdf": "User data exported as PDF  successfully!",
-      "share": "Share with"
+      "share": "Share with",
+      "sharePdf": "Share PDF",
+      "failed": "Export failed"
     },
     "segments": {
       "day": "Day",
@@ -584,7 +905,12 @@
       "thisMonth": "This month",
       "date": "{{date}}",
       "range": "{{start}} - {{end}}"
-    }
+    },
+    "sharingNotAvailable": "Sharing not available",
+    "noDataAvailable": "No Data Available",
+    "mostMissed": "Most missed: {{period}} · {{hour}}",
+    "noSuggestions": "No suggestions right now",
+    "loadFailed": "Failed to load insights"
   },
   "schedule": {
     "create": "Create a Schedule",
@@ -612,14 +938,21 @@
         "push": "Push",
         "led": "Led",
         "sound": "Sound"
-      }
+      },
+      "removeTime": "Remove time"
     },
     "everyMonth": "1st day of every month",
     "placeHolders": {
       "search": "Search",
       "add": "Add",
       "empty": "Looks like your schedule is empty. New items will appear here when added."
-    }
+    },
+    "weekly": {
+      "noTasks": "No tasks scheduled",
+      "noData": "No tasks scheduled for this week"
+    },
+    "searchFailed": "Search failed",
+    "createNewProduct": "Create New Product"
   },
   "community": {
     "filters": {
@@ -650,7 +983,23 @@
       "loading_comments": " Loading comments...",
       "load_comments_failed": "Failed to load comments. Pull to refresh.",
       "new_comment": "New Comment",
-      "user_commented": "{{user}} commented on your post"
+      "user_commented": "{{user}} commented on your post",
+      "originalComment": "Original Comment",
+      "repliesCount": "Replies ({{count}})",
+      "no_replies_yet": "No replies yet. Be the first to reply!",
+      "loading_replies": "Loading replies...",
+      "load_replies_failed": "Failed to load replies. Pull to refresh.",
+      "write_reply": "Write a reply...",
+      "comment_id_required": "Comment ID is required",
+      "post_id_required": "Post ID is required",
+      "close_comments": "Close comments",
+      "noName": "No Name",
+      "moreOptions": "More options",
+      "cancelPoll": "Cancel poll",
+      "submitPoll": "Submit poll response",
+      "postImage": "Post image",
+      "postCreated": "Successfully Created!",
+      "write_comment": "Write a comment..."
     },
     "placeHolder": {
       "write": "Wite something...",
@@ -675,7 +1024,8 @@
       "night": "Night",
       "daily": "Daily",
       "weekly": "Weekly",
-      "monthly": "Monthly"
+      "monthly": "Monthly",
+      "midday": "Midday"
     },
     "tasks": {
       "status": {
@@ -705,7 +1055,15 @@
       "updateProduct": "Update Product",
       "tablet": "Tablet",
       "tablets": "Tablets",
-      "mg": "mg"
+      "mg": "mg",
+      "benefits": {
+        "intro": "People often use them for:",
+        "energy": "✔ Energy Support B12 helps convert food into energy. Deficiency causes tiredness and weakness.",
+        "mood": "✔ Improved Mood & Brain Function Supports neurotransmitters and may help with memory or mood regulation.",
+        "nerves": "✔ Healthy Nerves Important for the nervous system and preventing nerve damage symptoms like tingling.",
+        "redBloodCells": "✔ Red Blood Cell Production Prevents megaloblastic anemia.",
+        "vegan": "✔ Good for Vegans & Vegetarians Plant-based diets often lack natural B12 sources."
+      }
     }
   },
   "bookmarks": {
@@ -733,7 +1091,8 @@
       "no_following_desc": "You are not following anyone yet.",
       "no_followers": "No Followers Yet",
       "no_followers_desc": "People who follow you will appear here."
-    }
+    },
+    "messagingComingSoon": "Messaging feature coming soon!"
   },
   "logs": {
     "myLogs": "My Logs",
@@ -771,7 +1130,8 @@
       "safety_concern": "Mental health or safety concern"
     },
     "note": "Reports are kept private and help us maintain a safe community.",
-    "send": "Send Report"
+    "send": "Send Report",
+    "reportUser": "Report User"
   },
   "onboarding": {
     "taykie_is_ready": "Taykie is ready to go. Your first reminder is scheduled for",
@@ -838,7 +1198,14 @@
         "remind_me": "Remind me at:",
         "remind_in_running_low": "Remind me when I'm running low",
         "keep_at_least": "Keep at least",
-        "add_another": "Add another"
+        "add_another": "Add another",
+        "placeholders": {
+          "p1": "Protein powder",
+          "p2": "Collagen powder",
+          "p3": "Greens blend",
+          "p4": "Fish oil liquid",
+          "p5": "Creatine"
+        }
       },
       "refill_taykie": {
         "title": "Refill Taykie",
@@ -855,8 +1222,10 @@
           "sun": "Sun"
         },
         "select_one": "Please select at least one day.",
-        "wiil_remind_you": "We'll remind you every {{day}} at {{time}}"
-      }
+        "wiil_remind_you": "We'll remind you every {{day}} at {{time}}",
+        "select_time": "Select refill time"
+      },
+      "slot": "Slot {{number}}"
     },
     "reminder_style": {
       "title": "Reminder Style",
@@ -874,6 +1243,10 @@
       "osNote": {
         "ios": "Time-sensitive notifications on iO",
         "android": "Lock screen visibility on Android"
+      },
+      "mockup": {
+        "date": "Friday, March 20",
+        "message": "Time for your morning supplements 💊"
       }
     },
     "check_in": {
@@ -889,7 +1262,8 @@
         "less_than_three": "That's why you're here — Taykie will help you build a better routine.",
         "less_than_six": "Good start. Taykie will help you take it to the next level.",
         "default": "Impressive! Taykie will help you stay consistent."
-      }
+      },
+      "score_accessibility": "Adherence score 1 to 10"
     },
     "coaching_optin": {
       "title": "Coaching & Tips",
@@ -924,5 +1298,228 @@
     "loadFailed": "Could not load this lid event.",
     "saveFailed": "Could not save your answer. Please try again.",
     "unconfirmedRow": "Unconfirmed opens"
+  },
+  "accessibility": {
+    "scoreOutOf": "Score {{score}} out of 10",
+    "supplementName": "Supplement name for slot {{slot}}, item {{item}}",
+    "supplementDosage": "Dosage for slot {{slot}}, item {{item}}",
+    "avatarOf": "{{name}}'s avatar",
+    "viewProfile": "View {{name}}'s profile",
+    "user": "user",
+    "likes_one": "{{count}} like",
+    "likes_other": "{{count}} likes",
+    "comments_one": "{{count}} comment",
+    "comments_other": "{{count}} comments",
+    "shares_one": "{{count}} share",
+    "shares_other": "{{count}} shares",
+    "selectItem": "Select {{name}}",
+    "decrease": "Decrease {{label}}",
+    "increase": "Increase {{label}}",
+    "postReply": "Post reply",
+    "postComment": "Post comment",
+    "alertAnnouncement": "{{type}} alert: {{title}}. {{message}}"
+  },
+  "alerts": {
+    "networkError": {
+      "title": "Network Error",
+      "message": "Please check your internet connection"
+    },
+    "authError": {
+      "title": "Authentication Error",
+      "message": "Authentication failed"
+    },
+    "loginSuccess": {
+      "title": "Welcome back!",
+      "loggedInAs": "Logged in as {{name}}",
+      "message": "Login successful"
+    },
+    "signupSuccess": {
+      "title": "Account created!",
+      "message": "Welcome to Taykie"
+    },
+    "saveSuccess": {
+      "title": "Saved!",
+      "itemSaved": "\"{{name}}\" has been saved",
+      "message": "Item saved successfully"
+    },
+    "deleteWarning": {
+      "title": "Delete Item?",
+      "message": "This action cannot be undone"
+    },
+    "titleRequired": "Alert title is required",
+    "types": {
+      "error": "error",
+      "success": "success",
+      "warning": "warning",
+      "info": "info"
+    }
+  },
+  "menu": {
+    "deleteConfirmation": {
+      "title": "Delete item?",
+      "message": "This action cannot be undone.",
+      "cancel": "Cancel",
+      "confirm": "Delete"
+    },
+    "share": "Share",
+    "favorite": "Add to favorites",
+    "unfavorite": "Remove from favorites",
+    "editTags": "Edit tags",
+    "archive": "Archive",
+    "unarchive": "Unarchive",
+    "delete": "Delete"
+  },
+  "legal": {
+    "privacy": {
+      "title": "Privacy Policy",
+      "intro": "Effective Date: April 17, 2026\nLast Updated: April 17, 2026",
+      "sections": {
+        "s1": {
+          "heading": "Introduction",
+          "body": "Welcome to Taykie (\"we,\" \"our,\" or \"us\"). Taykie is a wellness supplement tracking platform that helps you manage your medication schedules, connect with a health community, and sync with your Taykie Smart Pill Box device.\nThis Privacy Policy explains what information we collect, how we use it, who we share it with, and the choices you have. By using Taykie, you agree to the practices described in this policy."
+        },
+        "s2": {
+          "heading": "Information We Collect",
+          "body": "Information you provide directly:\n\nAccount details: name, email address, password, username, profile photo\nOnboarding data: country, language, dose frequency, supplement names and dosages, refill preferences, reminder settings\nHealth and medication data: supplement names, dosages, schedules, dose history, adherence records, dose notes and logs\nCommunity content: posts, comments, poll votes, group memberships, likes, bookmarks\nCommunications: support requests, feedback, reports submitted about other users\n\nInformation collected automatically:\n\nDevice information: device type, operating system, app version\nUsage data: features used, screens visited, session duration, error logs\nPush notification tokens (FCM) for delivering reminders\nBLE device data: Smart Pill Box connection status, compartment state, sync sessions, medication history uploaded from the device\n\nInformation from third parties:\n\nIf you sign in with Google or Apple, we receive your name, email address, and a unique identifier from that provider. We do not receive your password from these providers."
+        },
+        "s3": {
+          "heading": "How We Use Your Information",
+          "body": "We use your information to:\n\nCreate and manage your account\nDeliver dose reminders, snooze notifications, refill alerts, and missed dose alerts\nSync data with your Taykie Smart Pill Box via Bluetooth\nDisplay your schedule history, streaks, adherence insights, and monthly calendar\nPower community features including posts, groups, comments, and suggested connections\nRecommend groups and users based on your activity and social connections\nGenerate your data export when requested\nRespond to support requests and investigate reported content\nImprove our product through anonymized analytics\nComply with legal obligations"
+        },
+        "s4": {
+          "heading": "Health Data",
+          "body": "Taykie collects and stores health-related information including supplement names, dosages, schedules, and adherence history. This data is:\n\nUsed only to provide the service to you\nNever sold to advertisers or third-party data brokers\nNever used to make automated decisions about your medical care\nStored securely and accessible only to you and authorized Taykie staff\n\nTaykie is not a medical device and does not provide medical advice. Always consult a healthcare professional regarding your medications and supplements."
+        },
+        "s5": {
+          "heading": "Sharing Your Information",
+          "body": "We do not sell your personal information. We may share it in the following circumstances:\nWith service providers: We use trusted third-party providers (cloud hosting, push notification services, analytics) who process data on our behalf under strict data processing agreements.\nWith other users: Your public profile, posts, group memberships, and community activity are visible to other Taykie users as part of the social features. You control what you post.\nFor legal reasons: We may disclose information if required by law, court order, or to protect the rights and safety of Taykie, our users, or the public.\nBusiness transfers: If Taykie is acquired or merges with another company, your information may be transferred as part of that transaction. We will notify you before this occurs."
+        },
+        "s6": {
+          "heading": "Data Retention",
+          "body": "We retain your data for as long as your account is active. If you delete your account:\n\nYour account is soft-deleted and enters a 30-day grace window during which you can restore it\nAfter 30 days your account and associated data are permanently deleted\nSome data may be retained in anonymized form for analytics purposes\nData required for legal compliance may be retained for longer periods"
+        },
+        "s7": {
+          "heading": "Your Rights",
+          "body": "Depending on your location, you may have the right to:\n\nAccess the personal data we hold about you (use the Export Data feature in Settings)\nCorrect inaccurate data (via Profile Settings)\nDelete your account and data (via Account Settings)\nWithdraw consent at any time where processing is based on consent\nLodge a complaint with a supervisory authority\n\nTo exercise any of these rights, contact us at privacy@taykie.com."
+        },
+        "s8": {
+          "heading": "Push Notifications",
+          "body": "We send push notifications for dose reminders, missed doses, snooze expiry, and community activity. You can manage notification preferences in the app under Settings → Notifications, or through your device's notification settings."
+        },
+        "s9": {
+          "heading": "BLE Device Data",
+          "body": "When you pair a Taykie Smart Pill Box, the app communicates with the device over Bluetooth Low Energy (BLE). Data synced from your device (compartment status, dose history) is stored securely in your account and subject to this policy. You can unpair your device at any time in Settings → Device."
+        },
+        "s10": {
+          "heading": "Children's Privacy",
+          "body": "Taykie is not intended for children under the age of 13. We do not knowingly collect personal information from children under 13. If you believe a child has provided us with personal information, please contact us and we will delete it promptly."
+        },
+        "s11": {
+          "heading": "Security",
+          "body": "We implement industry-standard security measures including encrypted data transmission (TLS), hashed passwords, access controls, and regular security reviews. No system is completely secure — if you believe your account has been compromised, contact us immediately at security@taykie.com."
+        },
+        "s12": {
+          "heading": "Changes to This Policy",
+          "body": "We may update this Privacy Policy from time to time. We will notify you of significant changes by sending a push notification or email before the changes take effect. Continued use of Taykie after the effective date constitutes acceptance of the updated policy."
+        },
+        "s13": {
+          "heading": "Contact Us",
+          "body": "Taykie\nprivacy@taykie.com\nsupport@taykie.com"
+        }
+      }
+    },
+    "terms": {
+      "title": "Terms and Conditions",
+      "intro": "Effective Date: April 17, 2026\nLast Updated: April 17, 2026",
+      "sections": {
+        "s1": {
+          "heading": "Acceptance of Terms",
+          "body": "By downloading, installing, or using the Taykie mobile application (\"App\"), you agree to be bound by these Terms and Conditions (\"Terms\"). If you do not agree, do not use the App.\nThese Terms constitute a legally binding agreement between you and Taykie (\"we,\" \"our,\" or \"us\")."
+        },
+        "s2": {
+          "heading": "Description of Service",
+          "body": "Taykie is a wellness supplement tracking platform that allows you to:\n• Create and manage supplement and medication schedules\n• Track dose adherence, streaks, and history\n• Connect and sync with the Taykie Smart Pill Box device via Bluetooth\n• Participate in a health-focused community (posts, groups, comments)\n• Receive push notifications for reminders and alerts\n\nTaykie is a wellness tool only and is not a medical device, does not provide medical advice, and is not a substitute for professional medical guidance."
+        },
+        "s3": {
+          "heading": "Eligibility",
+          "body": "You must be at least 13 years old to use Taykie. By using the App, you represent that you meet this age requirement. If you are between 13 and 18, you represent that you have parental or guardian consent."
+        },
+        "s4": {
+          "heading": "Account Registration",
+          "body": "To use Taykie you must create an account. You agree to:\n• Provide accurate and complete information\n• Keep your login credentials secure\n• Not share your account\n• Notify us at support@taykie.com if unauthorized access occurs\n\nYou are responsible for all activity under your account."
+        },
+        "s5": {
+          "heading": "Acceptable Use",
+          "body": "You agree not to:\n• Post harmful or misleading content\n• Harass or abuse others\n• Impersonate others\n• Upload malware\n• Access systems without permission\n• Use for unauthorized commercial purposes\n\nWe may suspend accounts violating these rules."
+        },
+        "s6": {
+          "heading": "Community Content",
+          "body": "You retain ownership of your content but grant Taykie a license to use it for operating the service.\nYou are solely responsible for the content you post. Do not share personal health information publicly that you would not want others to see.\nWe reserve the right to remove content that violates these Terms or our Community Guidelines."
+        },
+        "s7": {
+          "heading": "Health Disclaimer",
+          "body": "Taykie is not a medical device and does not provide medical advice. Always consult a qualified healthcare provider.\n\nThe supplement and medication information displayed in the app is entered by you and is not verified by medical professionals\nDose reminders are for personal tracking purposes only and are not a substitute for professional medical supervision\nNever ignore professional medical advice or delay seeking it because of something you read or tracked in Taykie\nAlways consult a qualified healthcare provider before starting, stopping, or changing any medication or supplement"
+        },
+        "s8": {
+          "heading": "Smart Pill Box Device",
+          "body": "Taykie is not liable for missed doses due to device issues.\n\nThe device is subject to separate hardware terms provided at purchase\nTaykie is not liable for missed doses resulting from device malfunction, connectivity issues, or battery failure\nKeep the device software updated for optimal performance and security\nDo not attempt to modify, reverse-engineer, or tamper with the device"
+        },
+        "s9": {
+          "heading": "Intellectual Property",
+          "body": "All platform content belongs to Taykie."
+        },
+        "s10": {
+          "heading": "Third-Party Services",
+          "body": "Use of Google, Apple, Firebase services is subject to their policies."
+        },
+        "s11": {
+          "heading": "Account Deletion",
+          "body": "You may delete your account at any time through Settings → Account → Delete Account. Upon deletion:\n\nYour account enters a 30-day grace period during which you can restore it\nAfter 30 days, your account and data are permanently and irreversibly deleted\nContent you posted in community spaces may remain in anonymized form"
+        },
+        "s12": {
+          "heading": "Termination",
+          "body": "We may suspend or terminate your account at any time, with or without notice, if we believe you have violated these Terms or if required by law.\nYou may also terminate your account at any time as described above. Upon termination, your right to use the App ceases immediately."
+        },
+        "s13": {
+          "heading": "Limitation of Liability",
+          "body": "To the fullest extent permitted by law, Taykie shall not be liable for:\n\nAny indirect, incidental, special, or consequential damages\nLoss of data, missed doses, or health outcomes arising from use or inability to use the App\nDamages resulting from unauthorized access to your account\nAny content posted by other users\n\nOur total liability to you for any claim arising out of these Terms shall not exceed the amount you paid us in the 12 months preceding the claim (or $100 if you have not paid anything)."
+        },
+        "s14": {
+          "heading": "Disclaimer of Warranties",
+          "body": "The App is provided \"as is\" and \"as available\" without warranties of any kind, express or implied, including but not limited to warranties of merchantability, fitness for a particular purpose, or non-infringement. We do not warrant that the App will be error-free, uninterrupted, or free of harmful components."
+        },
+        "s15": {
+          "heading": "Governing Law",
+          "body": "These Terms are governed by the laws of Australia, without regard to its conflict of law provisions. Any disputes shall be resolved in the courts of New South Wales, Australia."
+        },
+        "s16": {
+          "heading": "Changes to Terms",
+          "body": "We may update these Terms from time to time. We will notify you of material changes by push notification or email at least 7 days before the changes take effect. Continued use after the effective date constitutes your acceptance."
+        },
+        "s17": {
+          "heading": "Contact Us",
+          "body": "For questions about these Terms:\nTaykie legal@taykie.com\nsupport@taykie.com\nlegal@taykie.com"
+        }
+      }
+    }
+  },
+  "notifications": {
+    "channel": {
+      "sound": "Sound",
+      "silent": "Silent",
+      "vibrate": "Vibrate",
+      "noVibrate": "No Vibrate",
+      "lockScreen": "Lock Screen",
+      "hidden": "Hidden"
+    }
+  },
+  "tips": {
+    "title": "Health tips",
+    "tip": "Tip",
+    "readMore": "Read more",
+    "publishedOn": "Published {{date}}",
+    "byAuthor": "By {{name}}",
+    "notFound": "This tip is no longer available.",
+    "loadFailed": "Couldn't load this tip."
   }
 }

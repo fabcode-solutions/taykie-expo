@@ -1,13 +1,16 @@
 import { Stack } from "expo-router";
+import { useTranslation } from "react-i18next";
 import { useTheme } from "@/theme";
+import { LocalizedStrings } from "@/i18n/LocalizedStrings";
 
 export default function ScreenLayout() {
   const theme = useTheme();
+  const { t } = useTranslation();
   return (
     <Stack
       screenOptions={{
         headerShown: true,
-        headerBackTitle: "Back",
+        headerBackTitle: t(LocalizedStrings.navigation.back),
         headerStyle: {
           backgroundColor: theme.colors.background.paper,
         },
@@ -17,7 +20,7 @@ export default function ScreenLayout() {
       <Stack.Screen
         name="create-post"
         options={{
-          title: "Create post",
+          title: t(LocalizedStrings.navigation.screens.createPost),
           headerShown: false,
           animation: "slide_from_left",
           animationDuration: 250,
@@ -27,7 +30,7 @@ export default function ScreenLayout() {
       <Stack.Screen
         name="bookmarked"
         options={{
-          title: "Bookmarked",
+          title: t(LocalizedStrings.navigation.screens.bookmarked),
           headerShown: false,
           animation: "slide_from_left",
           animationDuration: 250,

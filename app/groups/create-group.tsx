@@ -23,12 +23,12 @@ import { Input } from "@/components/ui/TextInput/input";
 import { useForm } from "react-hook-form";
 import IconUpload from "@/components/icons/IconUpload";
 import IconSearch from "@/components/icons/IconSearch";
-import { ActivityIndicator } from "react-native-paper";
 import { Ionicons } from "@expo/vector-icons";
 import { useGroupStore } from "@/stores/groupStore";
 import { moderateScale, scale, verticalScale } from "@/utils/scale";
 import { CreateGroupRequest } from "@/types/groups.types";
 import { Loader } from "@/components/shared/loader";
+import { FriendListSkeleton } from "@/components/groups/GroupSkeletons";
 import { TagInput } from "@/components/TagInput";
 import { LocalizedStrings } from "@/i18n/LocalizedStrings";
 import { t } from "i18next";
@@ -52,7 +52,13 @@ export default function CreateGroupScreen() {
   const [image, setImage] = React.useState("");
 
   const [searchQuery, setSearchQuery] = useState("");
-  const { createGroup, isLoading, fetchFriends, groupFriends } = useGroupStore();
+  const createGroup = useGroupStore((s) => s.createGroup);
+  const isLoading = useGroupStore((s) => s.isLoading);
+  const fetchFriends = useGroupStore((s) => s.fetchFriends);
+  const groupFriends = useGroupStore((s) => s.groupFriends);
+  // isLoading is shared with fetchFriends, so track submit separately: the blocking
+  // overlay is only for submitting, while the friend list gets a skeleton.
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const handleClearSearch = useCallback(() => {
     setSearchQuery("");
   }, []);
@@ -98,6 +104,7 @@ export default function CreateGroupScreen() {
       ...(data.groupDescription && { groupDescription: data.groupDescription }),
       ...(image && { uploadGroupPhoto: image }),
     };
+    setIsSubmitting(true);
     try {
       const message = await createGroup(request);
 
@@ -108,7 +115,14 @@ export default function CreateGroupScreen() {
         },
       ]);
     } catch (error) {
-      showAlert.show(AlertPresets.error(t(LocalizedStrings.common.error), error.message));
+      showAlert.show(
+        AlertPresets.error(
+          t(LocalizedStrings.common.error),
+          error instanceof Error ? error.message : String(error),
+        ),
+      );
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -180,7 +194,7 @@ export default function CreateGroupScreen() {
 
   return (
     <>
-      {isLoading && <Loader />}
+      {isSubmitting && <Loader />}
       <KeyboardAvoidingView
         style={[styles.safeArea, { backgroundColor: theme.colors.background.default }]}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -274,6 +288,13 @@ export default function CreateGroupScreen() {
                 </TouchableOpacity>
               ))}
             </View>
+            {isLoading && !isSubmitting && groupFriends.length === 0 && (
+              <>
+                <View style={styles.divider}></View>
+                <Text style={styles.inputLabel}>{t(LocalizedStrings.groups.addMembers)}</Text>
+                <FriendListSkeleton />
+              </>
+            )}
             {groupFriends.length > 0 && (
               <>
                 <View style={styles.divider}></View>
@@ -285,9 +306,7 @@ export default function CreateGroupScreen() {
                     onChangeText={setSearchQuery}
                     leftIcon={<IconSearch />}
                     rightIcon={
-                      isLoading ? (
-                        <ActivityIndicator size="small" color={theme.colors.primary.main} />
-                      ) : searchQuery ? (
+                      searchQuery ? (
                         <TouchableOpacity onPress={handleClearSearch}>
                           <Ionicons
                             name="close-circle"
@@ -379,7 +398,7 @@ export default function CreateGroupScreen() {
             <Button
               title={t(LocalizedStrings.groups.createFirstGroup)}
               onPress={handleSubmit(onSubmit)}
-              loading={isLoading}
+              loading={isSubmitting}
               style={styles.button}
               textStyle={styles.btnTextStyle}
               rightIcon={null}

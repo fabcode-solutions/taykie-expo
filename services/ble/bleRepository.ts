@@ -1,4 +1,6 @@
 import { bleService, TaykieDevice, DeviceData } from "./BLEService";
+import { t } from "i18next";
+import { LocalizedStrings } from "@/i18n/LocalizedStrings";
 
 /**
  * BLE Repository
@@ -100,14 +102,14 @@ export const bleRepository = {
 
       return {
         success: true,
-        message: "Device connected successfully",
+        message: t(LocalizedStrings.device.connected),
         data,
       };
     } catch (error) {
       console.error("Connection error:", error);
       return {
         success: false,
-        message: error instanceof Error ? error.message : "Connection failed",
+        message: error instanceof Error ? error.message : t(LocalizedStrings.errors.device.connectionFailed),
       };
     }
   },
@@ -120,12 +122,12 @@ export const bleRepository = {
       await bleService.disconnect();
       return {
         success: true,
-        message: "Device disconnected successfully",
+        message: t(LocalizedStrings.errors.device.disconnected),
       };
     } catch (error) {
       return {
         success: false,
-        message: error instanceof Error ? error.message : "Disconnect failed",
+        message: error instanceof Error ? error.message : t(LocalizedStrings.errors.device.disconnectFailed),
       };
     }
   },
@@ -219,12 +221,12 @@ export const bleRepository = {
       const success = await bleService.writeDeviceName(newName);
       return {
         success,
-        message: success ? "Device renamed successfully" : "Failed to rename device",
+        message: success ? t(LocalizedStrings.errors.device.renamed) : t(LocalizedStrings.errors.device.renameFailedShort),
       };
     } catch (error) {
       return {
         success: false,
-        message: error instanceof Error ? error.message : "Rename failed",
+        message: error instanceof Error ? error.message : t(LocalizedStrings.errors.device.renameFailed),
       };
     }
   },
@@ -237,12 +239,12 @@ export const bleRepository = {
       const success = await bleService.triggerFirmwareUpdate();
       return {
         success,
-        message: success ? "Firmware update initiated" : "Failed to start firmware update",
+        message: success ? t(LocalizedStrings.errors.device.firmwareStarted) : t(LocalizedStrings.errors.device.firmwareFailedToStart),
       };
     } catch (error) {
       return {
         success: false,
-        message: error instanceof Error ? error.message : "Update failed",
+        message: error instanceof Error ? error.message : t(LocalizedStrings.errors.device.firmwareFailed),
       };
     }
   },

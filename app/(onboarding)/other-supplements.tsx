@@ -13,11 +13,11 @@ import { t } from "i18next";
 import { LocalizedStrings } from "@/i18n/LocalizedStrings";
 
 const PLACEHOLDERS = [
-  "Protein powder",
-  "Collagen powder",
-  "Greens blend",
-  "Fish oil liquid",
-  "Creatine",
+  LocalizedStrings.onboarding.supplements.other.placeholders.p1,
+  LocalizedStrings.onboarding.supplements.other.placeholders.p2,
+  LocalizedStrings.onboarding.supplements.other.placeholders.p3,
+  LocalizedStrings.onboarding.supplements.other.placeholders.p4,
+  LocalizedStrings.onboarding.supplements.other.placeholders.p5,
 ];
 
 const emptyItem = (): OtherSupplement => ({
@@ -178,7 +178,7 @@ export default function OtherSupplements() {
               <TextInput
                 value={item.name}
                 onChangeText={(v) => updateItem(idx, "name", v)}
-                placeholder={PLACEHOLDERS[idx % PLACEHOLDERS.length]}
+                placeholder={t(PLACEHOLDERS[idx % PLACEHOLDERS.length])}
                 placeholderTextColor={theme.colors.text.hint}
                 style={[
                   styles.input,
@@ -208,7 +208,7 @@ export default function OtherSupplements() {
                   },
                 ]}
                 maxLength={40}
-                accessibilityLabel="Serving size"
+                accessibilityLabel={t(LocalizedStrings.onboarding.supplements.other.serving_size)}
               />
 
               {/* Reminder slots checkboxes */}
@@ -274,7 +274,7 @@ export default function OtherSupplements() {
                     true: theme.colors.slateCharcoal,
                   }}
                   thumbColor={theme.colors.primary.main}
-                  accessibilityLabel="Restock reminder"
+                  accessibilityLabel={t(LocalizedStrings.onboarding.supplements.other.remind_in_running_low)}
                 />
               </View>
 

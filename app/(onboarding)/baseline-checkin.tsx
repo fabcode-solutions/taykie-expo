@@ -99,7 +99,7 @@ export default function BaselineCheckin() {
       <View
         style={styles.scoreRow}
         accessibilityRole="radiogroup"
-        accessibilityLabel="Adherence score 1 to 10"
+        accessibilityLabel={t(LocalizedStrings.onboarding.check_in.score_accessibility)}
       >
         {SCORES.map((val) => {
           const isSelected = score === val;
@@ -124,7 +124,7 @@ export default function BaselineCheckin() {
               onPress={() => handleSelect(val)}
               accessibilityRole="radio"
               accessibilityState={{ checked: isSelected }}
-              accessibilityLabel={`Score ${val} out of 10`}
+              accessibilityLabel={t(LocalizedStrings.accessibility.scoreOutOf, { score: val })}
             >
               <ThemeText
                 variant="manrope.body1Bold"

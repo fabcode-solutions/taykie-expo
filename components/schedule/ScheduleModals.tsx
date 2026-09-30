@@ -309,7 +309,7 @@ const ScheduleModals = ({
         heading={
           selectedItem !== null
             ? t(LocalizedStrings.schedule.addProduct.submit)
-            : "Create New Product"
+            : t(LocalizedStrings.schedule.createNewProduct)
         }
         visible={addProductVisible}
         onRequestClose={() => setAddProductVisible(false)}

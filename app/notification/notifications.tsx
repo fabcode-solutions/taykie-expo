@@ -6,8 +6,11 @@ import React, { useCallback, useEffect, useMemo } from "react";
 import BackButton from "@/components/BackButton";
 import Tabs from "@/components/shared/tabs/Tabs";
 import NotificationCard from "@/components/notifications/NotificationCard";
+import {
+  NotificationCardSkeleton,
+  NotificationListSkeleton,
+} from "@/components/notifications/NotificationCardSkeleton";
 import { NotificationData, useNotificationStore } from "@/stores/notificationStore";
-import { Loader } from "@/components/shared/loader";
 import { moderateScale, scale, verticalScale } from "@/utils/scale";
 import EmptyView from "@/components/ui/empty-view";
 import { t } from "i18next";
@@ -16,24 +19,73 @@ import { AlertPresets } from "@/utils/alert";
 import { useAlert } from "@/provider/AlertProvider";
 import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import { Ionicons } from "@expo/vector-icons";
+import { getTipIdFromNotification } from "@/services/api/tips";
+import { openTip } from "@/components/tips/TipsRow";
 
 type PostType = "All" | "Follow" | "Like" | "Comment" | "System";
+
+const getErrorMessage = (error: unknown) =>
+  error instanceof Error ? error.message : String(error);
+
+const keyExtractor = (item: NotificationData) => item.id;
+
+type ScreenStyles = ReturnType<typeof createStyles>;
+
+interface NotificationRowProps {
+  item: NotificationData;
+  onRead: (item: NotificationData) => void;
+  onDelete: (id: string) => void;
+  styles: ScreenStyles;
+  deleteIconColor: string;
+}
+
+// Memoized row: gives NotificationCard / the swipe action stable per-row handlers, so
+// marking one notification read re-renders only that row, not the whole list.
+const NotificationRow = React.memo(function NotificationRow({
+  item,
+  onRead,
+  onDelete,
+  styles,
+  deleteIconColor,
+}: NotificationRowProps) {
+  const handlePress = useCallback(() => onRead(item), [onRead, item]);
+  const handleDelete = useCallback(() => onDelete(item.id), [onDelete, item.id]);
+  const renderRightActions = useCallback(
+    () => (
+      <TouchableOpacity style={styles.deleteAction} onPress={handleDelete} activeOpacity={0.8}>
+        <Ionicons name="trash-outline" size={moderateScale(22)} color={deleteIconColor} />
+      </TouchableOpacity>
+    ),
+    [styles.deleteAction, handleDelete, deleteIconColor],
+  );
+
+  return (
+    <ReanimatedSwipeable friction={2} rightThreshold={40} renderRightActions={renderRightActions}>
+      <NotificationCard item={item} onPress={handlePress} />
+    </ReanimatedSwipeable>
+  );
+});
 
 export default function NotificationScreen() {
   const theme = useTheme();
   const alert = useAlert();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const [selectedType, setSelectedType] = React.useState<PostType>("All");
-  const {
-    fetchNotifications,
-    markAllAsRead,
-    markAsRead,
-    notifications: userNotifications,
-    isLoading,
-    isFetchingNextPage,
-    hasMore,
-    deleteNotification,
-  } = useNotificationStore();
+  // Per-field selectors so unrelated notification-store updates don't re-render the list.
+  const fetchNotifications = useNotificationStore((s) => s.fetchNotifications);
+  const markAllAsRead = useNotificationStore((s) => s.markAllAsRead);
+  const markAsRead = useNotificationStore((s) => s.markAsRead);
+  const userNotifications = useNotificationStore((s) => s.notifications);
+  const isLoading = useNotificationStore((s) => s.isLoading);
+  const isFetchingNextPage = useNotificationStore((s) => s.isFetchingNextPage);
+  const hasMore = useNotificationStore((s) => s.hasMore);
+  const deleteNotification = useNotificationStore((s) => s.deleteNotification);
+
+  // The store's isLoading is shared with sendNotification / registerFCMToken / settings
+  // calls, so the list's own loading states are tracked locally: skeletons for the
+  // first load, the native pull spinner for pull-to-refresh.
+  const [isInitialLoading, setIsInitialLoading] = React.useState(true);
+  const [isRefreshing, setIsRefreshing] = React.useState(false);
 
   const filteredNotification = useMemo(() => {
     if (selectedType === "All") {
@@ -48,18 +100,26 @@ export default function NotificationScreen() {
       try {
         await fetchNotifications(refresh);
       } catch (error) {
-        alert.show(AlertPresets.error(t(LocalizedStrings.common.error), error.message));
+        alert.show(AlertPresets.error(t(LocalizedStrings.common.error), getErrorMessage(error)));
       }
     },
-    [fetchNotifications],
+    [fetchNotifications, alert],
   );
 
   useEffect(() => {
-    fetchUserNotifications(true);
+    let active = true;
+    fetchUserNotifications(true).finally(() => {
+      if (active) setIsInitialLoading(false);
+    });
+    return () => {
+      active = false;
+    };
   }, [fetchUserNotifications]);
 
   const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true);
     await fetchUserNotifications(true);
+    setIsRefreshing(false);
   }, [fetchUserNotifications]);
 
   const handleLoadMore = useCallback(async () => {
@@ -67,25 +127,41 @@ export default function NotificationScreen() {
     if (hasMore && !isFetchingNextPage && !isLoading && filteredNotification.length > 0) {
       await fetchUserNotifications();
     }
-  }, [hasMore, isFetchingNextPage, isLoading, filteredNotification.length]);
+  }, [hasMore, isFetchingNextPage, isLoading, filteredNotification.length, fetchUserNotifications]);
 
   const markAllNotificationAsRead = useCallback(async () => {
     try {
       await markAllAsRead();
     } catch (error) {
-      alert.show(AlertPresets.error(t(LocalizedStrings.common.error), error.message));
+      alert.show(AlertPresets.error(t(LocalizedStrings.common.error), getErrorMessage(error)));
     }
-  }, [markAllAsRead]);
+  }, [markAllAsRead, alert]);
 
   const markNotificationAsRead = useCallback(
-    async (notificationId: string) => {
+    async (notification: NotificationData) => {
+      // "New tip" notifications open the tip; everything else just marks read.
+      const tipId = getTipIdFromNotification(notification);
+      if (tipId) openTip(tipId);
       try {
-        await markAsRead(notificationId);
+        await markAsRead(notification.id);
       } catch (error) {
-        alert.show(AlertPresets.error(t(LocalizedStrings.common.error), error.message));
+        alert.show(AlertPresets.error(t(LocalizedStrings.common.error), getErrorMessage(error)));
       }
     },
-    [markAsRead],
+    [markAsRead, alert],
+  );
+
+  const handleDeleteNotification = useCallback(
+    async (notificationId: string) => {
+      try {
+        await deleteNotification(notificationId);
+        // Background refresh: the list stays on screen (no skeleton, no overlay).
+        await fetchUserNotifications(true);
+      } catch (error) {
+        alert.show(AlertPresets.error(t(LocalizedStrings.common.error), getErrorMessage(error)));
+      }
+    },
+    [deleteNotification, fetchUserNotifications, alert],
   );
 
   // Tab segments
@@ -101,89 +177,93 @@ export default function NotificationScreen() {
   );
 
   // Handlers
-  const handleTabSelect = React.useCallback((key: string) => {
+  const handleTabSelect = React.useCallback((key: string | string[]) => {
     setSelectedType(key as PostType);
   }, []);
 
-  const ListHeader = (
-    <View style={{ paddingTop: verticalScale(30) }}>
-      <BackButton />
-      <View style={[styles.headerRow]}>
-        <ThemeText variant="manrope.h2" style={styles.header}>
-          {t(LocalizedStrings.settings.notifications.title)}
-        </ThemeText>
-        <TouchableOpacity onPress={markAllNotificationAsRead}>
-          <Text style={styles.ligther}>
-            {t(LocalizedStrings.settings.notifications.mark_all_read)}
-          </Text>
-        </TouchableOpacity>
+  const listHeader = useMemo(
+    () => (
+      <View style={styles.listHeader}>
+        <BackButton />
+        <View style={styles.headerRow}>
+          <ThemeText variant="manrope.h2" style={styles.header}>
+            {t(LocalizedStrings.settings.notifications.title)}
+          </ThemeText>
+          <TouchableOpacity onPress={markAllNotificationAsRead}>
+            <Text style={styles.ligther}>
+              {t(LocalizedStrings.settings.notifications.mark_all_read)}
+            </Text>
+          </TouchableOpacity>
+        </View>
+        <View style={styles.tabsWrapper}>
+          <Tabs variant="no-bg" segments={segments} onSelect={handleTabSelect} />
+        </View>
       </View>
-      <View style={{ marginTop: verticalScale(20) }}>
-        <Tabs variant="no-bg" segments={segments} onSelect={handleTabSelect} />
-      </View>
-    </View>
+    ),
+    [styles, markAllNotificationAsRead, segments, handleTabSelect],
   );
-
-  const handleDeleteNotification = useCallback(async (notificationId: string) => {
-    try {
-      await deleteNotification(notificationId);
-      await handleRefresh();
-    } catch (error) {
-      alert.show(AlertPresets.error(t(LocalizedStrings.common.error), error.message));
-    }
-  }, []);
 
   const renderItem = useCallback(
-    ({ item }: { item: NotificationData }) => {
-      const rightActions = RenderRightActions(() => handleDeleteNotification(item.id), theme);
-      return (
-        <ReanimatedSwipeable friction={2} rightThreshold={40} renderRightActions={rightActions}>
-          <NotificationCard item={item} onPress={() => markNotificationAsRead(item.id)} />
-        </ReanimatedSwipeable>
-      );
-    },
-    [theme, handleDeleteNotification, markNotificationAsRead],
+    ({ item }: { item: NotificationData }) => (
+      <NotificationRow
+        item={item}
+        onRead={markNotificationAsRead}
+        onDelete={handleDeleteNotification}
+        styles={styles}
+        deleteIconColor={theme.colors.white}
+      />
+    ),
+    [markNotificationAsRead, handleDeleteNotification, styles, theme.colors.white],
   );
 
-  return (
-    <SafeAreaView style={styles.safeArea}>
-      {isLoading && <Loader />}
-      <FlatList
-        showsVerticalScrollIndicator={false}
-        data={filteredNotification}
-        extraData={filteredNotification}
-        keyExtractor={(item) => item.id}
-        renderItem={renderItem}
-        ListHeaderComponent={ListHeader}
-        contentContainerStyle={{ gap: verticalScale(15), marginHorizontal: scale(16) }}
-        onEndReached={handleLoadMore}
-        onEndReachedThreshold={0.5}
-        refreshControl={<RefreshControl refreshing={isLoading} onRefresh={handleRefresh} />}
-        ListFooterComponent={isFetchingNextPage ? <Loader fullScreen={false} /> : <View />}
-        ListEmptyComponent={
+  // Footer and empty state are passed as stable ELEMENTS whose wrapper View is always
+  // mounted — only the contents swap. Mounting/unmounting views next to a list (and the
+  // old full-screen Loader toggling beside it) is the known trigger for the RN 0.79
+  // Fabric/Yoga crash seen on the community and home screens.
+  const footerElement = useMemo(
+    () => <View>{isFetchingNextPage ? <NotificationCardSkeleton /> : null}</View>,
+    [isFetchingNextPage],
+  );
+
+  const emptyElement = useMemo(
+    () => (
+      <View>
+        {isInitialLoading ? (
+          <NotificationListSkeleton />
+        ) : (
           <EmptyView
             message={t(LocalizedStrings.errors.no_notifications)}
             buttonTitle={t(LocalizedStrings.schedule.create)}
           />
-        }
+        )}
+      </View>
+    ),
+    [isInitialLoading],
+  );
+
+  const refreshControl = useMemo(
+    () => <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />,
+    [isRefreshing, handleRefresh],
+  );
+
+  return (
+    <SafeAreaView style={styles.safeArea}>
+      <FlatList
+        showsVerticalScrollIndicator={false}
+        data={filteredNotification}
+        keyExtractor={keyExtractor}
+        renderItem={renderItem}
+        ListHeaderComponent={listHeader}
+        contentContainerStyle={styles.listContent}
+        onEndReached={handleLoadMore}
+        onEndReachedThreshold={0.5}
+        refreshControl={refreshControl}
+        ListFooterComponent={footerElement}
+        ListEmptyComponent={emptyElement}
       />
     </SafeAreaView>
   );
 }
-
-const RenderRightActions = (onDelete: () => void, theme: Theme) => {
-  const DeleteAction = () => {
-    const styles = createStyles(theme);
-    return (
-      <TouchableOpacity style={styles.deleteAction} onPress={onDelete} activeOpacity={0.8}>
-        <Ionicons name="trash-outline" size={moderateScale(22)} color={theme.colors.white} />
-      </TouchableOpacity>
-    );
-  };
-
-  DeleteAction.displayName = "DeleteAction";
-  return DeleteAction;
-};
 
 const createStyles = (theme: Theme) =>
   StyleSheet.create({
@@ -192,6 +272,16 @@ const createStyles = (theme: Theme) =>
     },
     container: {
       paddingTop: verticalScale(30),
+    },
+    listHeader: {
+      paddingTop: verticalScale(30),
+    },
+    tabsWrapper: {
+      marginTop: verticalScale(20),
+    },
+    listContent: {
+      gap: verticalScale(15),
+      marginHorizontal: scale(16),
     },
     header: {
       fontSize: moderateScale(24),

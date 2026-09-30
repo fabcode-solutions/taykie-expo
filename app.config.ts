@@ -7,6 +7,12 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   version: "1.0.0",
   orientation: "default",
   scheme: "taykie",
+  // Localized native strings (iOS permission prompts in Info.plist). English stays
+  // in ios.infoPlist below; the Spanish overrides live in i18n/native/es.json. This
+  // is native config read at build time, so a new build is required for it to apply.
+  locales: {
+    es: "./i18n/native/es.json",
+  },
   // Locked per brief §Priority 3 ("Dark mode... close to unusable on iOS;
   // date pickers cannot be used at all") until a proper dark theme ships.
   // "automatic" let iOS render native chrome — status bar, keyboard, and
@@ -86,6 +92,12 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   plugins: [
     "./plugins/withBleNative",
     "expo-router",
+    [
+      "expo-local-authentication",
+      {
+        faceIDPermission: "Allow Taykie to use Face ID to unlock the app.",
+      },
+    ],
     [
       "expo-splash-screen",
       {

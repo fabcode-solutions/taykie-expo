@@ -191,7 +191,7 @@ export default function SupplementEntry() {
 
       {slots.map((slot, si) => (
         <View key={si} style={styles.slotWrapper}>
-          <ThemeText variant="manrope.subtitle2">Slot {si + 1}</ThemeText>
+          <ThemeText variant="manrope.subtitle2">{t(LocalizedStrings.onboarding.supplements.slot, { number: si + 1 })}</ThemeText>
           <View style={styles.slotSection}>
             {/* Editable time-of-day label */}
             <View style={[styles.slotHeader, { borderColor: theme.colors.border }]}>
@@ -256,7 +256,7 @@ export default function SupplementEntry() {
                       setSearchVisible(true);
                     }}
                     accessibilityRole="button"
-                    accessibilityLabel={`Supplement name for slot ${si + 1}, item ${ii + 1}`}
+                    accessibilityLabel={t(LocalizedStrings.accessibility.supplementName, { slot: si + 1, item: ii + 1 })}
                   >
                     <TextInput
                       editable={false}
@@ -291,7 +291,7 @@ export default function SupplementEntry() {
                       },
                     ]}
                     maxLength={40}
-                    accessibilityLabel={`Dosage for slot ${si + 1}, item ${ii + 1}`}
+                    accessibilityLabel={t(LocalizedStrings.accessibility.supplementDosage, { slot: si + 1, item: ii + 1 })}
                   />
                 </View>
                 {slot.items.length > 1 && (

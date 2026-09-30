@@ -10,6 +10,8 @@ import {
   HistoryRecord,
 } from "./TaykieProtocol";
 import { volumePercentToByte } from "../../utils/toneAudio";
+import { t } from "i18next";
+import { LocalizedStrings } from "@/i18n/LocalizedStrings";
 
 export { TAYKIE_UUIDS, CmdType, TaykieProtocol };
 export type { ScheduleSlot, DeviceStatus, HistoryRecord };
@@ -360,7 +362,7 @@ class BLEService {
     // this.connectedDevice the moment a real disconnect happens, so check
     // it here and fail loudly instead of reporting a dead link as healthy.
     if (!this.connectedDevice) {
-      throw new Error("Device disconnected during initial handshake");
+      throw new Error(t(LocalizedStrings.errors.device.handshakeDisconnected));
     }
 
     console.log("✅ Successfully connected to Taykie device and listening for updates!");
@@ -420,12 +422,12 @@ class BLEService {
 
   private async writeCommandExclusive(base64Payload: string, label: string) {
     if (!this.connectedDevice) {
-      throw new Error("No Taykie device currently connected");
+      throw new Error(t(LocalizedStrings.errors.device.notConnected));
     }
 
     const isConnected = await this.connectedDevice.isConnected();
     if (!isConnected) {
-      throw new Error("Taykie device connection was lost");
+      throw new Error(t(LocalizedStrings.errors.device.connectionLost));
     }
 
     this.lastCommandLabel = label;

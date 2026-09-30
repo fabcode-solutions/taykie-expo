@@ -12,6 +12,8 @@ import { useBLEConnection, useBLEStore } from "@/stores/bleStore";
 import { moderateScale, scale, verticalScale } from "@/utils/scale";
 import { AlertPresets } from "@/utils/alert";
 import { useAlert } from "@/provider/AlertProvider";
+import { t } from "i18next";
+import { LocalizedStrings } from "@/i18n/LocalizedStrings";
 
 interface FormData {
   oldPassword: string;
@@ -23,7 +25,7 @@ interface FormData {
 // nibble (see TaykieProtocol.encodePassword) — unlike the account password,
 // there's no complexity requirement, just a fixed 6-digit PIN.
 function validateSixDigitPin(value: string): string | true {
-  if (!/^\d{6}$/.test(value)) return "Must be exactly 6 digits.";
+  if (!/^\d{6}$/.test(value)) return t(LocalizedStrings.device.password.sixDigits);
   return true;
 }
 
@@ -48,18 +50,18 @@ export default function ChangeDevicePasswordScreen() {
   const onSubmit = async (data: FormData) => {
     if (connectionStatus !== "connected") {
       alert.show(
-        AlertPresets.error("Not connected", "Connect to your Taykie device first to change its password."),
+        AlertPresets.error(t(LocalizedStrings.device.notConnected), t(LocalizedStrings.device.password.notConnectedMessage)),
       );
       return;
     }
     setIsSaving(true);
     try {
       await changeDevicePassword(data.oldPassword, data.password);
-      alert.show(AlertPresets.success("Password changed", "Your Taykie device's password has been updated."));
+      alert.show(AlertPresets.success(t(LocalizedStrings.device.password.changed), t(LocalizedStrings.device.password.changedMessage)));
       reset();
       router.back();
     } catch (error: any) {
-      alert.show(AlertPresets.error("Error", error.message));
+      alert.show(AlertPresets.error(t(LocalizedStrings.common.error), error.message));
     } finally {
       setIsSaving(false);
     }
@@ -79,20 +81,19 @@ export default function ChangeDevicePasswordScreen() {
           </TouchableOpacity>
 
           <ThemeText variant="manrope.h2" style={styles.header}>
-            Device Password
+            {t(LocalizedStrings.device.password.title)}
           </ThemeText>
           <ThemeText variant="manrope.body2" style={styles.description}>
-            This is your Taykie device's own 6-digit Bluetooth pairing PIN — separate from your
-            account password. The factory default is 000000.
+            {t(LocalizedStrings.device.password.description)}
           </ThemeText>
 
           <View style={styles.section}>
             <Input
-              label="Current Password"
+              label={t(LocalizedStrings.device.password.current)}
               control={control}
               name="oldPassword"
               rules={{
-                required: "Current password is required",
+                required: t(LocalizedStrings.device.password.currentRequired),
                 validate: validateSixDigitPin,
               }}
               placeholder="000000"
@@ -101,28 +102,28 @@ export default function ChangeDevicePasswordScreen() {
               returnKeyType="next"
             />
             <Input
-              label="New Password"
+              label={t(LocalizedStrings.device.password.new)}
               control={control}
               name="password"
               rules={{
-                required: "New password is required",
+                required: t(LocalizedStrings.device.password.newRequired),
                 validate: validateSixDigitPin,
               }}
-              placeholder="6-digit PIN"
+              placeholder={t(LocalizedStrings.device.password.pinPlaceholder)}
               keyboardType="number-pad"
               secureTextEntry
               returnKeyType="next"
             />
             <Input
-              label="Confirm New Password"
+              label={t(LocalizedStrings.device.password.confirm)}
               control={control}
               name="confirmPassword"
               rules={{
-                required: "Please confirm your new password",
+                required: t(LocalizedStrings.device.password.confirmRequired),
                 validate: (value: string) =>
-                  value === getValues("password") || "Passwords don't match",
+                  value === getValues("password") || t(LocalizedStrings.device.password.mismatch),
               }}
-              placeholder="6-digit PIN"
+              placeholder={t(LocalizedStrings.device.password.pinPlaceholder)}
               keyboardType="number-pad"
               secureTextEntry
               returnKeyType="go"
@@ -130,7 +131,7 @@ export default function ChangeDevicePasswordScreen() {
             />
           </View>
 
-          <Button title="Change Password" onPress={handleSubmit(onSubmit)} loading={isSaving} fullWidth />
+          <Button title={t(LocalizedStrings.device.password.submit)} onPress={handleSubmit(onSubmit)} loading={isSaving} fullWidth />
         </ScrollView>
       </SafeAreaView>
     </KeyboardAvoidingView>

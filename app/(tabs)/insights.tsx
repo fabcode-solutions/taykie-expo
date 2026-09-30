@@ -17,8 +17,162 @@ import * as Print from "expo-print";
 import { LocalizedStrings } from "@/i18n/LocalizedStrings";
 import { AlertPresets } from "@/utils/alert";
 import { useAlert } from "@/provider/AlertProvider";
+import { Loader } from "@/components/shared/loader";
+import {
+  ChartsSkeleton,
+  MetricsSkeleton,
+  SuggestionsSkeleton,
+} from "@/components/insights/InsightsSkeletons";
 
 type InsightSegment = "day" | "week" | "month";
+
+const SEGMENT_KEYS: InsightSegment[] = ["day", "week", "month"];
+const EMPTY_BAR_LABELS = ["M", "T", "W", "T", "F", "S", "S"];
+
+// Color per dominant period
+const periodColor = (period: string) => {
+  switch (period) {
+    case "morning":
+      return "#0095FF";
+    case "afternoon":
+      return "#47D257";
+    case "evening":
+      return "#FFB020";
+    case "night":
+      return "#9E77ED";
+    default:
+      return "#B0B0B0";
+  }
+};
+
+type InsightStyles = ReturnType<typeof createStyles>;
+
+interface MetricCardProps {
+  metric: { key: string; label: string; value: string | number; tone?: "success" | "warning" };
+  styles: InsightStyles;
+  backgroundColor: string;
+}
+
+const MetricCard = React.memo(function MetricCard({
+  metric,
+  styles,
+  backgroundColor,
+}: MetricCardProps) {
+  return (
+    <ThemeView
+      style={[
+        styles.metricCard,
+        metric.tone === "success" && styles.metricCardSuccess,
+        metric.tone === "warning" && styles.metricCardWarning,
+      ]}
+      backgroundColor={backgroundColor}
+      rounded="lg"
+    >
+      <ThemeText variant="manrope.caption" style={styles.metricLabel}>
+        {metric.label}
+      </ThemeText>
+      <ThemeText
+        variant="manrope.h4"
+        style={[
+          styles.metricValue,
+          metric.key === "streak" && styles.metricValueStreak,
+          metric.tone === "success" && styles.metricValueSuccess,
+          metric.tone === "warning" && styles.metricValueWarning,
+        ]}
+      >
+        {metric.value}
+      </ThemeText>
+    </ThemeView>
+  );
+});
+
+interface BarColumnProps {
+  day: { label: string; heightPct: number; dominantPeriod: string };
+  styles: InsightStyles;
+}
+
+const BarColumn = React.memo(function BarColumn({ day, styles }: BarColumnProps) {
+  return (
+    <View style={styles.barColumn}>
+      <View style={styles.barColumInner}>
+        <View style={styles.bar}>
+          <View
+            style={[
+              styles.barInner,
+              {
+                height: `${Math.max(day.heightPct, 4)}%`,
+                backgroundColor: periodColor(day.dominantPeriod),
+              },
+            ]}
+          />
+        </View>
+        <ThemeText variant="manrope.caption" style={styles.barDay}>
+          {day.label}
+        </ThemeText>
+      </View>
+    </View>
+  );
+});
+
+interface AdherenceBarColProps {
+  point: { label: string; takenRate?: number | null };
+  styles: InsightStyles;
+}
+
+const AdherenceBarCol = React.memo(function AdherenceBarCol({
+  point,
+  styles,
+}: AdherenceBarColProps) {
+  const rate = point.takenRate ?? 0;
+  const barColor = rate >= 80 ? "#19A98C" : rate >= 50 ? "#FFB020" : "#E25B45";
+  return (
+    <View style={styles.adherenceBarCol}>
+      <View style={styles.adherenceBarTrack}>
+        <View
+          style={[
+            styles.adherenceBarFill,
+            { height: `${Math.max(rate, 4)}%`, backgroundColor: barColor },
+          ]}
+        />
+      </View>
+      <ThemeText variant="manrope.caption" style={styles.adherenceBarLabel}>
+        {point.label}
+      </ThemeText>
+    </View>
+  );
+});
+
+interface SegmentPillProps {
+  segmentKey: InsightSegment;
+  label: string;
+  active: boolean;
+  onSelect: (key: InsightSegment) => void;
+  styles: InsightStyles;
+}
+
+const SegmentPill = React.memo(function SegmentPill({
+  segmentKey,
+  label,
+  active,
+  onSelect,
+  styles,
+}: SegmentPillProps) {
+  const handlePress = useCallback(() => onSelect(segmentKey), [onSelect, segmentKey]);
+  return (
+    <TouchableOpacity
+      style={[styles.segmentPill, active && styles.segmentPillActive]}
+      onPress={handlePress}
+      activeOpacity={0.9}
+    >
+      <ThemeText
+        variant="manrope.caption"
+        style={[styles.segmentLabel, active && styles.segmentLabelActive]}
+      >
+        {label}
+      </ThemeText>
+    </TouchableOpacity>
+  );
+});
 
 export default function InsightsScreen() {
   const theme = useTheme();
@@ -32,14 +186,18 @@ export default function InsightsScreen() {
   const [startDate, setStartDate] = useState<string | null>(null);
   const [endDate, setEndDate] = useState<string | null>(null);
 
-  const {
-    fetchUserInsights,
-    userInsights,
-    fetchDataToExport,
-    isLoading,
-    fetchUserInsightsByDate,
-    fetchUserInsightsInRange,
-  } = useInsightStore();
+  const fetchUserInsights = useInsightStore((s) => s.fetchUserInsights);
+  const userInsights = useInsightStore((s) => s.userInsights);
+  const fetchDataToExport = useInsightStore((s) => s.fetchDataToExport);
+  const fetchUserInsightsByDate = useInsightStore((s) => s.fetchUserInsightsByDate);
+  const fetchUserInsightsInRange = useInsightStore((s) => s.fetchUserInsightsInRange);
+
+  // The store's isLoading is shared with export, so track the two flows locally:
+  // skeletons for insight fetches, a blocking overlay for exporting.
+  const [isFetchingInsights, setIsFetchingInsights] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const showSkeleton = isFetchingInsights && !isRefreshing;
 
   // ─── Derived data from API ───────────────────────────────────────────────────
 
@@ -85,22 +243,6 @@ export default function InsightsScreen() {
     }));
   }, [timeOfDayMissed]);
 
-  // Color per dominant period
-  const periodColor = (period: string) => {
-    switch (period) {
-      case "morning":
-        return "#0095FF";
-      case "afternoon":
-        return "#47D257";
-      case "evening":
-        return "#FFB020";
-      case "night":
-        return "#9E77ED";
-      default:
-        return "#B0B0B0";
-    }
-  };
-
   // Line chart — adherence over time using real data points
   const adherencePoints = useMemo(() => {
     const data = adherenceOverTime?.data ?? [];
@@ -119,15 +261,26 @@ export default function InsightsScreen() {
   // ─── Fetch logic ─────────────────────────────────────────────────────────────
 
   const fetchInsights = useCallback(async () => {
+    setIsFetchingInsights(true);
     try {
       await fetchUserInsights(segment as InsightPeriod);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to load insights";
+      const message =
+        error instanceof Error ? error.message : t(LocalizedStrings.insights.loadFailed);
       alert.show(AlertPresets.error(t(LocalizedStrings.common.error), message));
+    } finally {
+      setIsFetchingInsights(false);
     }
-  }, [segment, fetchUserInsights, t]);
+  }, [segment, fetchUserInsights, t, alert]);
+
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    await fetchInsights();
+    setIsRefreshing(false);
+  }, [fetchInsights]);
 
   const fetchInsightsByCalender = useCallback(async () => {
+    setIsFetchingInsights(true);
     try {
       if (startDate && endDate) {
         await fetchUserInsightsInRange(startDate, endDate);
@@ -135,10 +288,13 @@ export default function InsightsScreen() {
         await fetchUserInsightsByDate(startDate);
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to load insights";
+      const message =
+        error instanceof Error ? error.message : t(LocalizedStrings.insights.loadFailed);
       alert.show(AlertPresets.error(t(LocalizedStrings.common.error), message));
+    } finally {
+      setIsFetchingInsights(false);
     }
-  }, [startDate, endDate, fetchUserInsightsInRange, fetchUserInsightsByDate, t]);
+  }, [startDate, endDate, fetchUserInsightsInRange, fetchUserInsightsByDate, t, alert]);
 
   useEffect(() => {
     fetchInsights();
@@ -152,6 +308,12 @@ export default function InsightsScreen() {
 
   const handleClose = useCallback(() => setToggleCalander(false), []);
   const handleOpen = useCallback(() => setToggleCalander(true), []);
+  const handleSelectSegment = useCallback((key: InsightSegment) => {
+    setStartDate(null);
+    setEndDate(null);
+    setSegment(key);
+  }, []);
+  const handleToggleShare = useCallback(() => setShareEnabled((prev) => !prev), []);
   const onDateRangeSelect = useCallback((start: string, end: string) => {
     setStartDate(start || null);
     setEndDate(end || null);
@@ -177,13 +339,15 @@ export default function InsightsScreen() {
     try {
       return await fetchDataToExport();
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Export failed";
+      const message =
+        error instanceof Error ? error.message : t(LocalizedStrings.insights.export.failed);
       alert.show(AlertPresets.error(t(LocalizedStrings.common.error), message));
       return null;
     }
   }, [fetchDataToExport, t]);
 
-  const exportAsPDF = async () => {
+  const exportAsPDF = useCallback(async () => {
+    setIsExporting(true);
     try {
       const data = await fetchExportedData();
       if (!data) {
@@ -205,10 +369,10 @@ export default function InsightsScreen() {
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(newPath, {
           mimeType: "application/pdf",
-          dialogTitle: "Share PDF",
+          dialogTitle: t(LocalizedStrings.insights.export.sharePdf),
         });
       } else {
-        alert.show(AlertPresets.error("Sharing not available"));
+        alert.show(AlertPresets.error(t(LocalizedStrings.insights.sharingNotAvailable)));
       }
       alert.show(
         AlertPresets.success(
@@ -216,16 +380,24 @@ export default function InsightsScreen() {
           t(LocalizedStrings.insights.export.pdf),
         ),
       );
-    } catch (err: any) {
-      alert.show(AlertPresets.error(t(LocalizedStrings.common.error), err.message));
+    } catch (err) {
+      alert.show(
+        AlertPresets.error(
+          t(LocalizedStrings.common.error),
+          err instanceof Error ? err.message : String(err),
+        ),
+      );
+    } finally {
+      setIsExporting(false);
     }
-  };
+  }, [fetchExportedData, t, alert]);
 
-  const exportAsCSV = async () => {
+  const exportAsCSV = useCallback(async () => {
+    setIsExporting(true);
     try {
       const data = await fetchExportedData();
       if (!data) {
-        alert.show(AlertPresets.error("No Data Available"));
+        alert.show(AlertPresets.error(t(LocalizedStrings.insights.noDataAvailable)));
         return;
       }
       const flattenObject = (obj: any, prefix = ""): any => {
@@ -268,25 +440,33 @@ export default function InsightsScreen() {
           t(LocalizedStrings.insights.export.csv),
         ),
       );
-    } catch (err: any) {
-      alert.show(AlertPresets.error(t(LocalizedStrings.common.error), err.message));
+    } catch (err) {
+      alert.show(
+        AlertPresets.error(
+          t(LocalizedStrings.common.error),
+          err instanceof Error ? err.message : String(err),
+        ),
+      );
+    } finally {
+      setIsExporting(false);
     }
-  };
+  }, [fetchExportedData, t, alert]);
+
+  const refreshControl = useMemo(
+    () => <RefreshControl onRefresh={handleRefresh} refreshing={isRefreshing} />,
+    [handleRefresh, isRefreshing],
+  );
 
   // ─── Render ───────────────────────────────────────────────────────────────────
 
   return (
-    <SafeAreaScreen
-      withBackground={false}
-      style={themedStyles.screen}
-      edges={["top"]}
-      showLoader={isLoading}
-    >
+    <SafeAreaScreen withBackground={false} style={themedStyles.screen} edges={["top"]}>
+      {isExporting && <Loader />}
       <ThemeStatusBar style={theme.mode === "dark" ? "light" : "dark"} />
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={themedStyles.contentContainer}
-        refreshControl={<RefreshControl onRefresh={fetchInsights} refreshing={isLoading} />}
+        refreshControl={refreshControl}
       >
         <AppHeader />
 
@@ -311,194 +491,142 @@ export default function InsightsScreen() {
         />
 
         {/* ── Summary metric cards ── */}
-        <View style={themedStyles.metricRow}>
-          {METRICS.map((metric) => (
+        {showSkeleton ? (
+          <MetricsSkeleton />
+        ) : (
+          <View style={themedStyles.metricRow}>
+            {METRICS.map((metric) => (
+              <MetricCard
+                key={metric.key}
+                metric={metric}
+                styles={themedStyles}
+                backgroundColor={theme.colors.white}
+              />
+            ))}
+          </View>
+        )}
+
+        {showSkeleton ? (
+          <ChartsSkeleton />
+        ) : (
+          <View style={themedStyles.chartRow}>
+            {/* ── Time of day missed bar chart (real data) ── */}
             <ThemeView
-              key={metric.key}
-              style={[
-                themedStyles.metricCard,
-                metric.tone === "success" && themedStyles.metricCardSuccess,
-                metric.tone === "warning" && themedStyles.metricCardWarning,
-              ]}
+              style={themedStyles.chartCard}
               backgroundColor={theme.colors.white}
               rounded="lg"
             >
-              <ThemeText variant="manrope.caption" style={themedStyles.metricLabel}>
-                {metric.label}
-              </ThemeText>
-              <ThemeText
-                variant="manrope.h4"
-                style={[
-                  themedStyles.metricValue,
-                  metric.key === "streak" && themedStyles.metricValueStreak,
-                  metric.tone === "success" && themedStyles.metricValueSuccess,
-                  metric.tone === "warning" && themedStyles.metricValueWarning,
-                ]}
-              >
-                {metric.value}
-              </ThemeText>
-            </ThemeView>
-          ))}
-        </View>
-
-        <View style={themedStyles.chartRow}>
-          {/* ── Time of day missed bar chart (real data) ── */}
-          <ThemeView
-            style={themedStyles.chartCard}
-            backgroundColor={theme.colors.white}
-            rounded="lg"
-          >
-            <ThemeText variant="manrope.h4" style={themedStyles.chartTitle}>
-              {t(LocalizedStrings.insights.timeOfDayMissed)}
-            </ThemeText>
-            <View style={themedStyles.barChart}>
-              {barDays.length > 0
-                ? barDays.map((day, index) => (
-                    <View key={day.label + index} style={themedStyles.barColumn}>
-                      <View style={themedStyles.barColumInner}>
-                        <View style={themedStyles.bar}>
-                          <View
-                            style={[
-                              themedStyles.barInner,
-                              {
-                                height: `${Math.max(day.heightPct, 4)}%`,
-                                backgroundColor: periodColor(day.dominantPeriod),
-                              },
-                            ]}
-                          />
-                        </View>
-                        <ThemeText variant="manrope.caption" style={themedStyles.barDay}>
-                          {day.label}
-                        </ThemeText>
-                      </View>
-                    </View>
-                  ))
-                : // Fallback empty bars while loading or no data
-                  ["M", "T", "W", "T", "F", "S", "S"].map((day, index) => (
-                    <View key={day + index} style={themedStyles.barColumn}>
-                      <View style={themedStyles.barColumInner}>
-                        <View style={themedStyles.bar}>
-                          <View
-                            style={[
-                              themedStyles.barInner,
-                              { height: "4%", backgroundColor: theme.colors.gray[200] },
-                            ]}
-                          />
-                        </View>
-                        <ThemeText variant="manrope.caption" style={themedStyles.barDay}>
-                          {day}
-                        </ThemeText>
-                      </View>
-                    </View>
-                  ))}
-              <View style={themedStyles.barAxisWrapper}>
-                <View style={themedStyles.barAxis} />
-                <View style={themedStyles.barAxis} />
-                <View style={themedStyles.barAxis} />
-                <View style={themedStyles.barAxis} />
-                <View style={themedStyles.barAxis} />
-              </View>
-            </View>
-            {/* Most missed period label */}
-            {timeOfDayMissed?.mostMissedPeriod && (
-              <ThemeText
-                variant="manrope.button"
-                align="center"
-                style={themedStyles.mostMissedLabel}
-              >
-                Most missed: {timeOfDayMissed.mostMissedPeriod} · {timeOfDayMissed.mostMissedHour}
-              </ThemeText>
-            )}
-          </ThemeView>
-
-          {/* ── Adherence over time (real data) ── */}
-          <ThemeView
-            style={themedStyles.chartCard}
-            backgroundColor={theme.colors.white}
-            rounded="lg"
-          >
-            <View style={themedStyles.chartHeaderRow}>
               <ThemeText variant="manrope.h4" style={themedStyles.chartTitle}>
-                {t(LocalizedStrings.insights.adherenceOverTime)}
+                {t(LocalizedStrings.insights.timeOfDayMissed)}
               </ThemeText>
-              <View style={themedStyles.segmentControl}>
-                {(["day", "week", "month"] as InsightSegment[]).map((key) => {
-                  const isActive = key === segment;
-                  return (
-                    <TouchableOpacity
-                      key={key}
-                      style={[themedStyles.segmentPill, isActive && themedStyles.segmentPillActive]}
-                      onPress={() => {
-                        setStartDate(null);
-                        setEndDate(null);
-                        setSegment(key);
-                      }}
-                      activeOpacity={0.9}
-                    >
-                      <ThemeText
-                        variant="manrope.caption"
-                        style={[
-                          themedStyles.segmentLabel,
-                          isActive && themedStyles.segmentLabelActive,
-                        ]}
-                      >
-                        {t(`insights.segments.${key}`, {
-                          defaultValue: key.charAt(0).toUpperCase() + key.slice(1),
-                        })}
-                      </ThemeText>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </View>
-
-            <View style={themedStyles.adherenceChart}>
-              <View style={themedStyles.lineChartAxis}>
-                <ThemeText variant="manrope.caption" style={themedStyles.axisLabel}>
-                  100%
-                </ThemeText>
-                <ThemeText variant="manrope.caption" style={themedStyles.axisLabel}>
-                  50%
-                </ThemeText>
-                <ThemeText variant="manrope.caption" style={themedStyles.axisLabel}>
-                  0%
-                </ThemeText>
-              </View>
-              {adherencePoints.length > 0 ? (
-                <View style={themedStyles.adherenceBars}>
-                  {adherencePoints.map((point, index) => {
-                    const rate = point.takenRate ?? 0;
-                    const barColor = rate >= 80 ? "#19A98C" : rate >= 50 ? "#FFB020" : "#E25B45";
-                    return (
-                      <View key={point.label + index} style={themedStyles.adherenceBarCol}>
-                        <View style={themedStyles.adherenceBarTrack}>
-                          <View
-                            style={[
-                              themedStyles.adherenceBarFill,
-                              { height: `${Math.max(rate, 4)}%`, backgroundColor: barColor },
-                            ]}
-                          />
+              <View style={themedStyles.barChart}>
+                {barDays.length > 0
+                  ? barDays.map((day, index) => (
+                      <BarColumn key={day.label + index} day={day} styles={themedStyles} />
+                    ))
+                  : // Fallback empty bars while loading or no data
+                    EMPTY_BAR_LABELS.map((day, index) => (
+                      <View key={day + index} style={themedStyles.barColumn}>
+                        <View style={themedStyles.barColumInner}>
+                          <View style={themedStyles.bar}>
+                            <View
+                              style={[
+                                themedStyles.barInner,
+                                { height: "4%", backgroundColor: theme.colors.gray[200] },
+                              ]}
+                            />
+                          </View>
+                          <ThemeText variant="manrope.caption" style={themedStyles.barDay}>
+                            {day}
+                          </ThemeText>
                         </View>
-                        <ThemeText variant="manrope.caption" style={themedStyles.adherenceBarLabel}>
-                          {point.label}
-                        </ThemeText>
                       </View>
-                    );
-                  })}
+                    ))}
+                <View style={themedStyles.barAxisWrapper}>
+                  <View style={themedStyles.barAxis} />
+                  <View style={themedStyles.barAxis} />
+                  <View style={themedStyles.barAxis} />
+                  <View style={themedStyles.barAxis} />
+                  <View style={themedStyles.barAxis} />
                 </View>
-              ) : (
-                <View style={themedStyles.emptyChart}>
+              </View>
+              {/* Most missed period label */}
+              {timeOfDayMissed?.mostMissedPeriod && (
+                <ThemeText
+                  variant="manrope.button"
+                  align="center"
+                  style={themedStyles.mostMissedLabel}
+                >
+                  {t(LocalizedStrings.insights.mostMissed, {
+                    period: timeOfDayMissed.mostMissedPeriod,
+                    hour: timeOfDayMissed.mostMissedHour,
+                  })}
+                </ThemeText>
+              )}
+            </ThemeView>
+
+            {/* ── Adherence over time (real data) ── */}
+            <ThemeView
+              style={themedStyles.chartCard}
+              backgroundColor={theme.colors.white}
+              rounded="lg"
+            >
+              <View style={themedStyles.chartHeaderRow}>
+                <ThemeText variant="manrope.h4" style={themedStyles.chartTitle}>
+                  {t(LocalizedStrings.insights.adherenceOverTime)}
+                </ThemeText>
+                <View style={themedStyles.segmentControl}>
+                  {SEGMENT_KEYS.map((key) => (
+                    <SegmentPill
+                      key={key}
+                      segmentKey={key}
+                      label={t(`insights.segments.${key}`, {
+                        defaultValue: key.charAt(0).toUpperCase() + key.slice(1),
+                      })}
+                      active={key === segment}
+                      onSelect={handleSelectSegment}
+                      styles={themedStyles}
+                    />
+                  ))}
+                </View>
+              </View>
+
+              <View style={themedStyles.adherenceChart}>
+                <View style={themedStyles.lineChartAxis}>
                   <ThemeText variant="manrope.caption" style={themedStyles.axisLabel}>
-                    {t(LocalizedStrings.insights.no_data)}
+                    100%
+                  </ThemeText>
+                  <ThemeText variant="manrope.caption" style={themedStyles.axisLabel}>
+                    50%
+                  </ThemeText>
+                  <ThemeText variant="manrope.caption" style={themedStyles.axisLabel}>
+                    0%
                   </ThemeText>
                 </View>
-              )}
-            </View>
-            <ThemeText variant="manrope.caption" style={themedStyles.adherenceSummaryLabel}>
-              {overallAdherenceRate}% {t(LocalizedStrings.insights.adherenceOverTime)}
-            </ThemeText>
-          </ThemeView>
-        </View>
+                {adherencePoints.length > 0 ? (
+                  <View style={themedStyles.adherenceBars}>
+                    {adherencePoints.map((point, index) => (
+                      <AdherenceBarCol
+                        key={point.label + index}
+                        point={point}
+                        styles={themedStyles}
+                      />
+                    ))}
+                  </View>
+                ) : (
+                  <View style={themedStyles.emptyChart}>
+                    <ThemeText variant="manrope.caption" style={themedStyles.axisLabel}>
+                      {t(LocalizedStrings.insights.no_data)}
+                    </ThemeText>
+                  </View>
+                )}
+              </View>
+              <ThemeText variant="manrope.caption" style={themedStyles.adherenceSummaryLabel}>
+                {overallAdherenceRate}% {t(LocalizedStrings.insights.adherenceOverTime)}
+              </ThemeText>
+            </ThemeView>
+          </View>
+        )}
 
         {/* ── Suggested adjustments (real data) ── */}
         <ThemeView
@@ -510,7 +638,9 @@ export default function InsightsScreen() {
             {t(LocalizedStrings.insights.suggestedAdjustments)}
           </ThemeText>
           <View style={themedStyles.suggestionRow}>
-            {suggestedAdjustments.length > 0 ? (
+            {showSkeleton ? (
+              <SuggestionsSkeleton />
+            ) : suggestedAdjustments.length > 0 ? (
               suggestedAdjustments.map((item, idx) => (
                 <View key={item.type + idx} style={themedStyles.suggestionTile}>
                   <ThemeText variant="manrope.subtitle" style={themedStyles.suggestionTitle}>
@@ -528,7 +658,7 @@ export default function InsightsScreen() {
             ) : (
               <View style={themedStyles.suggestionTile}>
                 <ThemeText variant="manrope.subtitle" style={themedStyles.suggestionTitle}>
-                  No suggestions right now
+                  {t(LocalizedStrings.insights.noSuggestions)}
                 </ThemeText>
               </View>
             )}
@@ -566,7 +696,7 @@ export default function InsightsScreen() {
               <Switch
                 value={shareEnabled}
                 style={themedStyles.switch}
-                onPress={() => setShareEnabled((prev) => !prev)}
+                onPress={handleToggleShare}
               />
             </View>
           </View>

@@ -30,8 +30,10 @@ import {
   useNotificationStore,
 } from "@/stores/notificationStore";
 import { InAppBanner } from "@/components/inAppBanner";
+import { openTip } from "@/components/tips/TipsRow";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { LidOpenPrompt } from "@/components/LidOpenPrompt";
+import { AppLockGate } from "@/components/AppLockGate";
 import { setupNotificationChannels } from "@/hooks/usePushNotifications";
 import {
   isDosageReminder,
@@ -178,10 +180,13 @@ function RootLayoutNav() {
     const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
       void handleLidOpenResponse(response).then((handled) => {
         if (handled) return;
-        const data = response.notification;
+        // The push payload lives on request.content.data (for Android foreground
+        // pushes it is the FCM data we passed to scheduleNotificationAsync).
+        // response.notification.type never existed, so taps here never navigated.
+        const data = response.notification.request.content.data;
 
         console.log("🔔 Notification clicked:", data);
-        handleNotificationNavigation(data.type as NotificationType);
+        handleNotificationNavigation(data);
       });
     });
 
@@ -217,7 +222,7 @@ function RootLayoutNav() {
       await useNotificationStore.getState().fetchNotifications();
       console.log("📲 Opened from background:", remoteMessage);
 
-      handleNotificationNavigation(remoteMessage?.data?.type as NotificationType);
+      handleNotificationNavigation(remoteMessage?.data);
     });
 
     return unsubscribe;
@@ -232,7 +237,7 @@ function RootLayoutNav() {
           if (remoteMessage) {
             await useNotificationStore.getState().fetchNotifications();
             console.log("🚀 Opened from quit:", remoteMessage);
-            handleNotificationNavigation(remoteMessage?.data?.type as NotificationType);
+            handleNotificationNavigation(remoteMessage?.data);
           }
         });
     }, 1000); // wait for router to be ready
@@ -240,8 +245,16 @@ function RootLayoutNav() {
     return () => clearTimeout(timer);
   }, []);
 
-  const handleNotificationNavigation = (notificationType: NotificationType) => {
+  // `data` is the push data payload: { type, ... } — e.g. { type: "Tip", tipId } for a
+  // new-tip push (backend tipService.notifyTipPublished).
+  const handleNotificationNavigation = (data?: Record<string, unknown> | null) => {
+    const notificationType = data?.type as NotificationType | "Tip" | undefined;
     switch (notificationType) {
+      case "Tip":
+        if (typeof data?.tipId === "string" && data.tipId) {
+          openTip(data.tipId);
+        }
+        break;
       case "Like":
         router.navigate("/(tabs)/community");
         // Navigate to chat screen with remoteMessage.data.conversationId
@@ -263,6 +276,14 @@ function RootLayoutNav() {
         break;
     }
   };
+  const rootStack = (
+    <Stack {...STACK_CONFIG}>
+      {STACK_CONFIG.screens.map((screen) => (
+        <Stack.Screen key={screen.name} name={screen.name} options={screen.options} />
+      ))}
+    </Stack>
+  );
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ThemeProviderNative value={DefaultTheme}>
@@ -272,19 +293,10 @@ function RootLayoutNav() {
               <ThemeProvider>
                 <AlertProvider>
                   <ThemeStatusBar />
-                  <ErrorBoundary name="RootStack">
-                    <Stack {...STACK_CONFIG}>
-                      {STACK_CONFIG.screens.map((screen) => (
-                        <Stack.Screen
-                          key={screen.name}
-                          name={screen.name}
-                          options={screen.options}
-                        />
-                      ))}
-                    </Stack>
-                  </ErrorBoundary>
+                  <ErrorBoundary name="RootStack">{rootStack}</ErrorBoundary>
                   <InAppBanner />
                   <LidOpenPrompt />
+                  <AppLockGate />
                 </AlertProvider>
               </ThemeProvider>
             </QueryClientProvider>

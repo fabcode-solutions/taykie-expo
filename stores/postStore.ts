@@ -30,6 +30,8 @@ import {
 import { create } from "zustand";
 import { useUploadStore } from "./uploadStore";
 import { ReportRequest } from "@/services/api/auth";
+import { t } from "i18next";
+import { LocalizedStrings } from "@/i18n/LocalizedStrings";
 
 type State = {
   userPosts: CommunityPost[];
@@ -106,7 +108,10 @@ const initialState: State = {
   otherUserPosts: [],
 };
 
-export const getErrorMessage = (error: any, fallback: string = "Something went wrong"): string => {
+export const getErrorMessage = (
+  error: any,
+  fallback: string = t(LocalizedStrings.errors.unknown),
+): string => {
   return (
     error?.response?.data?.message ||
     error?.response?.data?.errors?.errorCode ||
@@ -137,7 +142,7 @@ export const usePostStore = create<State & Actions>()((set, get) => ({
       set({ isLoading: false });
       return response.message;
     } catch (error) {
-      const message = getErrorMessage(error, "Create Post failed");
+      const message = getErrorMessage(error, t(LocalizedStrings.errors.api.createPost));
       set({
         isLoading: false,
         error: message,
@@ -213,7 +218,10 @@ export const usePostStore = create<State & Actions>()((set, get) => ({
         };
       });
     } catch (error) {
-      const errorMessage = getErrorMessage(error, "Fetch Bookmarked Post failed");
+      const errorMessage = getErrorMessage(
+        error,
+        t(LocalizedStrings.errors.api.fetchBookmarkedPosts),
+      );
       set({ isLoading: false, error: errorMessage });
       throw Error(errorMessage);
     }
@@ -225,7 +233,7 @@ export const usePostStore = create<State & Actions>()((set, get) => ({
       const result = await getPostById(postId);
       set({ isLoading: false, post: result.data });
     } catch (error) {
-      const message = getErrorMessage(error, "Fetch Post By ID failed");
+      const message = getErrorMessage(error, t(LocalizedStrings.errors.api.fetchPost));
 
       set({
         isLoading: false,
@@ -243,7 +251,7 @@ export const usePostStore = create<State & Actions>()((set, get) => ({
       await get().fetchUserPosts();
       set({ isLoading: false });
     } catch (error) {
-      const message = getErrorMessage(error, "Delete Post failed");
+      const message = getErrorMessage(error, t(LocalizedStrings.errors.api.deletePost));
 
       set({
         isLoading: false,
@@ -261,7 +269,7 @@ export const usePostStore = create<State & Actions>()((set, get) => ({
       await get().fetchUserPosts();
       set({ isLoading: false });
     } catch (error) {
-      const message = getErrorMessage(error, "Update Post failed");
+      const message = getErrorMessage(error, t(LocalizedStrings.errors.api.updatePost));
 
       set({
         isLoading: false,
@@ -295,7 +303,7 @@ export const usePostStore = create<State & Actions>()((set, get) => ({
         ),
       }));
 
-      const message = getErrorMessage(error, "Like Post failed");
+      const message = getErrorMessage(error, t(LocalizedStrings.errors.api.likePost));
       set({ error: message });
       throw new Error(message);
     }
@@ -319,7 +327,7 @@ export const usePostStore = create<State & Actions>()((set, get) => ({
         ),
       }));
 
-      const message = getErrorMessage(error, "Unlike Post failed");
+      const message = getErrorMessage(error, t(LocalizedStrings.errors.api.unlikePost));
       set({ error: message });
       throw new Error(message);
     }
@@ -340,7 +348,7 @@ export const usePostStore = create<State & Actions>()((set, get) => ({
         ),
       }));
 
-      const message = getErrorMessage(error, "Bookmark Post failed");
+      const message = getErrorMessage(error, t(LocalizedStrings.errors.api.bookmarkPost));
       set({ error: message });
       throw new Error(message);
     }
@@ -348,9 +356,7 @@ export const usePostStore = create<State & Actions>()((set, get) => ({
   unBookmarkPost: async (postId) => {
     set({ error: null });
     set((state) => ({
-      userPosts: state.userPosts.map((p) =>
-        p.id === postId ? { ...p, isBookmarked: false } : p,
-      ),
+      userPosts: state.userPosts.map((p) => (p.id === postId ? { ...p, isBookmarked: false } : p)),
     }));
 
     try {
@@ -360,7 +366,7 @@ export const usePostStore = create<State & Actions>()((set, get) => ({
         userPosts: state.userPosts.map((p) => (p.id === postId ? { ...p, isBookmarked: true } : p)),
       }));
 
-      const message = getErrorMessage(error, "Unbookmark Post failed");
+      const message = getErrorMessage(error, t(LocalizedStrings.errors.api.unbookmarkPost));
       set({ error: message });
       throw new Error(message);
     }
@@ -373,7 +379,7 @@ export const usePostStore = create<State & Actions>()((set, get) => ({
       const result = await getComments(postId);
       set({ isLoadingComments: false, postComments: result.data });
     } catch (error) {
-      const message = getErrorMessage(error, "Fetch Post Comments failed");
+      const message = getErrorMessage(error, t(LocalizedStrings.errors.api.fetchPostComments));
       set({
         isLoadingComments: false,
         error: message,
@@ -390,7 +396,7 @@ export const usePostStore = create<State & Actions>()((set, get) => ({
       await get().fetchUserPosts(undefined, true, true);
       set({ isLoadingComments: false });
     } catch (error) {
-      const message = getErrorMessage(error, "Add Comment to Post failed");
+      const message = getErrorMessage(error, t(LocalizedStrings.errors.api.addComment));
       set({
         isLoadingComments: false,
         error: message,
@@ -407,7 +413,7 @@ export const usePostStore = create<State & Actions>()((set, get) => ({
       await get().fetchUserPosts(undefined, true, true);
       set({ isLoadingComments: false });
     } catch (error) {
-      const message = getErrorMessage(error, "Remove Comment from Post failed");
+      const message = getErrorMessage(error, t(LocalizedStrings.errors.api.removeComment));
       set({
         isLoadingComments: false,
         error: message,
@@ -426,7 +432,7 @@ export const usePostStore = create<State & Actions>()((set, get) => ({
       await voteOnPoll(postId, optionId);
       await get().fetchUserPosts(undefined, true, true);
     } catch (error) {
-      const message = getErrorMessage(error, "Vote on Post failed");
+      const message = getErrorMessage(error, t(LocalizedStrings.errors.api.votePost));
       set({ error: message });
       throw new Error(message);
     }
@@ -438,7 +444,7 @@ export const usePostStore = create<State & Actions>()((set, get) => ({
       await get().fetchPostComments(postId);
       set({ isLoadingComments: false });
     } catch (error) {
-      const message = getErrorMessage(error, "Reply on Post failed");
+      const message = getErrorMessage(error, t(LocalizedStrings.errors.api.replyPost));
       set({
         isLoadingComments: false,
         error: message,
@@ -452,7 +458,7 @@ export const usePostStore = create<State & Actions>()((set, get) => ({
       const response = await getCommentReplies(commentId);
       set({ postReplies: response.data.replies });
     } catch (error) {
-      const message = getErrorMessage(error, "Fetch Commnet Reples failed");
+      const message = getErrorMessage(error, t(LocalizedStrings.errors.api.fetchReplies));
       set({
         error: message,
       });
@@ -484,7 +490,7 @@ export const usePostStore = create<State & Actions>()((set, get) => ({
         isLoading: false,
       });
     } catch (error) {
-      const message = getErrorMessage(error, "Search User Posts failed");
+      const message = getErrorMessage(error, t(LocalizedStrings.errors.api.searchPosts));
       set({ isLoading: false, error: message });
       throw Error(message);
     }
@@ -507,7 +513,10 @@ export const usePostStore = create<State & Actions>()((set, get) => ({
 
     if (isLoading || (!isRefresh && !hasMore)) return;
 
-    set({ isLoading: true, otherUserPosts: [] });
+    // Clear only on a refresh (opening a profile / pull-to-refresh), so another user's
+    // posts never flash. Clearing on load-more too meant page 2 was appended to an
+    // empty list — the already-loaded posts vanished on every scroll to the end.
+    set(isRefresh ? { isLoading: true, otherUserPosts: [] } : { isLoading: true });
 
     try {
       const pageToFetch = isRefresh ? 1 : currentPage + 1;
@@ -553,7 +562,7 @@ export const usePostStore = create<State & Actions>()((set, get) => ({
         isLoading: false,
       });
     } catch (error) {
-      const message = getErrorMessage(error, "Search User Posts failed");
+      const message = getErrorMessage(error, t(LocalizedStrings.errors.api.searchPosts));
       set({ isLoading: false, error: message });
       throw Error(message);
     }

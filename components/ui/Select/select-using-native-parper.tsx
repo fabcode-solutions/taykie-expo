@@ -6,6 +6,8 @@ import { useTheme, type Theme } from "@/theme";
 import { ThemeText } from "@/components/primitives";
 import { Menu } from "react-native-paper";
 import { moderateScale, scale, verticalScale } from "@/utils/scale";
+import { t } from "i18next";
+import { LocalizedStrings } from "@/i18n/LocalizedStrings";
 
 export interface SelectOption<T = string> {
   label: string;
@@ -67,7 +69,7 @@ export const SelectNativePaper = <TFieldValues extends FieldValues, TValue = str
                     style={[styles.valueText, !selected && styles.placeholderText]}
                     numberOfLines={1}
                   >
-                    {selected ? selected.label : (placeholder ?? "Select")}
+                    {selected ? selected.label : (placeholder ?? t(LocalizedStrings.common.select))}
                   </ThemeText>
                   <Ionicons
                     name="chevron-down"

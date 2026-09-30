@@ -109,4 +109,8 @@ export const endpoints = {
   supplements: {
     events: "/supplements/events",
   },
+
+  tips: {
+    tips: "/tips",
+  },
 };

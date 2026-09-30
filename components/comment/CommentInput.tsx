@@ -6,6 +6,8 @@ import { useCreateComment, useReplyToComment } from "@/hooks/queries/useComments
 import IconSend from "../icons/IconSend";
 import { useAuthStore } from "@/stores/authStore";
 import { moderateScale, scale, verticalScale } from "@/utils/scale";
+import { useTranslation } from "react-i18next";
+import { LocalizedStrings } from "@/i18n/LocalizedStrings";
 
 interface CommentInputProps {
   inputRef: RefObject<TextInput | null>;
@@ -19,12 +21,13 @@ interface CommentInputProps {
 const CommentInputComponent: React.FC<CommentInputProps> = ({
   postId,
   parentCommentId,
-  placeholder = "Write a comment...",
+  placeholder,
   onCommentCreated,
   inputRef,
   autoFocus = false,
 }) => {
   const theme = useTheme();
+  const { t } = useTranslation();
   const [content, setContent] = useState("");
   const [isFocused, setIsFocused] = useState(false);
   const user = useAuthStore((s) => s.user);
@@ -86,7 +89,7 @@ const CommentInputComponent: React.FC<CommentInputProps> = ({
         <TextInput
           ref={inputRef}
           style={[styles.input, { color: theme.colors.text.primary }]}
-          placeholder={placeholder}
+          placeholder={placeholder ?? t(LocalizedStrings.community.post.write_comment)}
           placeholderTextColor={theme.colors.taupe}
           value={content}
           onChangeText={setContent}
@@ -105,7 +108,7 @@ const CommentInputComponent: React.FC<CommentInputProps> = ({
         onPress={handleSubmit}
         disabled={!canSubmit}
         accessibilityRole="button"
-        accessibilityLabel={isReply ? "Post reply" : "Post comment"}
+        accessibilityLabel={isReply ? t(LocalizedStrings.accessibility.postReply) : t(LocalizedStrings.accessibility.postComment)}
         accessibilityState={{ disabled: !canSubmit }}
       >
         <IconSend />

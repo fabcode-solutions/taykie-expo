@@ -26,13 +26,70 @@ import Animated, { FadeInDown, FadeOutDown } from "react-native-reanimated";
 import IconClose from "@/components/icons/IconClose";
 import GroupCard from "@/components/groups/GroupCard";
 import { useGroupStore } from "@/stores/groupStore";
-import { Loader } from "@/components/shared/loader";
+import { GroupListSkeleton } from "@/components/groups/GroupSkeletons";
+import { GroupResponse } from "@/types/groups.types";
 import { moderateScale, scale, verticalScale } from "@/utils/scale";
 import EmptyView from "@/components/ui/empty-view";
 import { t } from "i18next";
 import { LocalizedStrings } from "@/i18n/LocalizedStrings";
 import { AlertPresets } from "@/utils/alert";
 import { useAlert } from "@/provider/AlertProvider";
+
+const groupKeyExtractor = (item: GroupResponse) => String(item.id);
+
+interface RecommendedGroupRowProps {
+  item: GroupResponse;
+  styles: ReturnType<typeof createStyles>;
+  onOpen: (id: string) => void;
+  onJoin: (id: string) => void;
+}
+
+// Memoized so joining one group doesn't re-render every recommended row.
+const RecommendedGroupRow = React.memo(function RecommendedGroupRow({
+  item,
+  styles,
+  onOpen,
+  onJoin,
+}: RecommendedGroupRowProps) {
+  const handleOpen = useCallback(() => onOpen(item.id), [onOpen, item.id]);
+  const handleJoin = useCallback(() => onJoin(item.id), [onJoin, item.id]);
+  return (
+    <Pressable style={styles.recGroupWrapper} onPress={handleOpen}>
+      <View style={styles.recGroupLeft}>
+        {item.uploadGroupPhoto && (
+          <View style={styles.recGroupIcon}>
+            <Image
+              style={styles.frameChild}
+              width={moderateScale(20)}
+              height={moderateScale(20)}
+              source={{ uri: item.uploadGroupPhoto }}
+              resizeMode="cover"
+            />
+          </View>
+        )}
+        <View>
+          <Text style={styles.recGroupHeading}>{item.groupName}</Text>
+          <Text style={styles.recGroupMember}>
+            {item.membersCount}{" "}
+            {(item.membersCount ?? 0) > 1
+              ? t(LocalizedStrings.groups.members)
+              : t(LocalizedStrings.groups.member)}
+          </Text>
+        </View>
+      </View>
+      <View>
+        <TouchableOpacity
+          onPress={handleJoin}
+          style={item.isMember ? styles.recGroupButtonActive : styles.recGroupButton}
+        >
+          <Text style={styles.recGroupBtnText}>
+            {item.isMember ? t(LocalizedStrings.groups.joined) : t(LocalizedStrings.groups.join)}
+          </Text>
+        </TouchableOpacity>
+      </View>
+    </Pressable>
+  );
+});
 
 export default function ChangePasswordScreen() {
   const theme = useTheme();
@@ -41,14 +98,12 @@ export default function ChangePasswordScreen() {
   const styles = useMemo(() => createStyles(theme), [theme]);
   const [searchQuery, setSearchQuery] = useState("");
   const [showSearch, setShowSearch] = useState(false);
-  const {
-    isLoading,
-    fetchUserGroups,
-    userGroups,
-    fetchRecommendedGroups,
-    recommendedGroups,
-    joinGroup,
-  } = useGroupStore();
+  const isLoading = useGroupStore((s) => s.isLoading);
+  const fetchUserGroups = useGroupStore((s) => s.fetchUserGroups);
+  const userGroups = useGroupStore((s) => s.userGroups);
+  const fetchRecommendedGroups = useGroupStore((s) => s.fetchRecommendedGroups);
+  const recommendedGroups = useGroupStore((s) => s.recommendedGroups);
+  const joinGroup = useGroupStore((s) => s.joinGroup);
 
   useEffect(() => {
     fetchGroups();
@@ -96,19 +151,49 @@ export default function ChangePasswordScreen() {
       return name.includes(query);
     });
   }, [userGroups, searchQuery]);
+  // Nothing on screen yet: show skeletons instead of a blocking spinner.
+  const isInitialLoading = isLoading && userGroups.length === 0 && recommendedGroups.length === 0;
+
+  const handleToggleSearch = useCallback(() => setShowSearch((prev) => !prev), []);
+  const handleCreateGroup = useCallback(() => router.push("/groups/create-group"), [router]);
+  const handleOpenGroup = useCallback((id: string) => router.push(`/groups/${id}`), [router]);
+
+  const refreshControl = useMemo(
+    () => (
+      <RefreshControl onRefresh={fetchUserGroups} refreshing={isLoading && !isInitialLoading} />
+    ),
+    [fetchUserGroups, isLoading, isInitialLoading],
+  );
+
+  const renderGroup = useCallback(
+    ({ item }: { item: GroupResponse }) => <GroupCard item={item} />,
+    [],
+  );
+
+  const renderRecommended = useCallback(
+    ({ item }: { item: GroupResponse }) => (
+      <RecommendedGroupRow
+        item={item}
+        styles={styles}
+        onOpen={handleOpenGroup}
+        onJoin={handleGroupJoin}
+      />
+    ),
+    [styles, handleOpenGroup, handleGroupJoin],
+  );
+
   return (
     <KeyboardAvoidingView
       style={[styles.safeArea, { backgroundColor: theme.colors.background.default }]}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       keyboardVerticalOffset={Platform.OS === "ios" ? 80 : 0}
     >
-      {isLoading && <Loader />}
       <SafeAreaView>
         <ScrollView
           style={styles.container}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: verticalScale(80) }}
-          refreshControl={<RefreshControl onRefresh={fetchUserGroups} refreshing={isLoading} />}
+          refreshControl={refreshControl}
         >
           <View>
             <TouchableOpacity onPress={handleBack} style={styles.backButton} activeOpacity={0.7}>
@@ -122,7 +207,7 @@ export default function ChangePasswordScreen() {
               {t(LocalizedStrings.groups.myGroups)}
             </ThemeText>
             <View style={styles.rightIcons}>
-              <TouchableOpacity onPress={() => setShowSearch((prev) => !prev)}>
+              <TouchableOpacity onPress={handleToggleSearch}>
                 {showSearch ? (
                   <IconClose />
                 ) : (
@@ -133,7 +218,7 @@ export default function ChangePasswordScreen() {
                   />
                 )}
               </TouchableOpacity>
-              <TouchableOpacity onPress={() => router.push("/groups/create-group")}>
+              <TouchableOpacity onPress={handleCreateGroup}>
                 <IconAdd />
               </TouchableOpacity>
             </View>
@@ -172,13 +257,18 @@ export default function ChangePasswordScreen() {
           <FlatList
             contentContainerStyle={styles.groupsWrapper}
             data={filteredGroups}
-            renderItem={({ item }) => <GroupCard item={item} />}
+            keyExtractor={groupKeyExtractor}
+            renderItem={renderGroup}
             ListEmptyComponent={
-              <View style={styles.searchResultWrapper}>
-                <Text style={styles.searchResultEmpty}>
-                  {t(LocalizedStrings.groups.noGroupPart)}
-                </Text>
-              </View>
+              isLoading ? (
+                <GroupListSkeleton count={2} />
+              ) : (
+                <View style={styles.searchResultWrapper}>
+                  <Text style={styles.searchResultEmpty}>
+                    {t(LocalizedStrings.groups.noGroupPart)}
+                  </Text>
+                </View>
+              )
             }
           />
 
@@ -189,58 +279,21 @@ export default function ChangePasswordScreen() {
           <FlatList
             contentContainerStyle={styles.groupsWrapper}
             data={recommendedGroups}
-            renderItem={({ item }) => (
-              <Pressable
-                style={styles.recGroupWrapper}
-                onPress={() => {
-                  router.push(`/groups/${item.id}`);
-                }}
-              >
-                <View style={styles.recGroupLeft}>
-                  {item.uploadGroupPhoto && (
-                    <View style={styles.recGroupIcon}>
-                      <Image
-                        style={styles.frameChild}
-                        width={moderateScale(20)}
-                        height={moderateScale(20)}
-                        source={{ uri: item.uploadGroupPhoto }}
-                        resizeMode="cover"
-                      />
-                    </View>
-                  )}
-                  <View>
-                    <Text style={styles.recGroupHeading}>{item.groupName}</Text>
-                    <Text style={styles.recGroupMember}>
-                      {item.membersCount}{" "}
-                      {item.membersCount > 1
-                        ? t(LocalizedStrings.groups.members)
-                        : t(LocalizedStrings.groups.member)}
-                    </Text>
-                  </View>
-                </View>
-                <View>
-                  <TouchableOpacity
-                    onPress={() => handleGroupJoin(item.id)}
-                    style={item.isMember ? styles.recGroupButtonActive : styles.recGroupButton}
-                  >
-                    <Text style={styles.recGroupBtnText}>
-                      {item.isMember
-                        ? t(LocalizedStrings.groups.joined)
-                        : t(LocalizedStrings.groups.join)}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </Pressable>
-            )}
+            keyExtractor={groupKeyExtractor}
+            renderItem={renderRecommended}
             ListEmptyComponent={
-              <EmptyView message={t(LocalizedStrings.groups.no_recommendation_found)} />
+              isLoading ? (
+                <GroupListSkeleton count={2} />
+              ) : (
+                <EmptyView message={t(LocalizedStrings.groups.no_recommendation_found)} />
+              )
             }
           />
 
-          {userGroups.length === 0 && (
+          {userGroups.length === 0 && !isLoading && (
             <Button
               title={t(LocalizedStrings.groups.createFirstGroup)}
-              onPress={() => router.push("/groups/create-group")}
+              onPress={handleCreateGroup}
               style={styles.button}
               textStyle={styles.btnTextStyle}
               rightIcon={null}

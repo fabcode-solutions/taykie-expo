@@ -1,7 +1,8 @@
 import { SafeAreaScreen, ThemeText } from "@/components";
 import IconBackArrow from "@/components/icons/IconBackArrow";
-import { Loader } from "@/components/shared/loader";
-import PostCard from "@/components/social/PostCard";
+import ProfilePostItem from "@/components/profile/ProfilePostItem";
+import { PostCardSkeleton } from "@/components/social/PostCardSkeleton";
+import { CommunityPost } from "@/types/posts.types";
 import SocialPost from "@/components/social/SocialPost";
 import EmptyView from "@/components/ui/empty-view";
 import { NotificationRequest } from "@/services/api/notification";
@@ -18,6 +19,12 @@ import { LocalizedStrings } from "@/i18n/LocalizedStrings";
 import { AlertPresets } from "@/utils/alert";
 import { useAlert } from "@/provider/AlertProvider";
 
+const getErrorMessage = (error: unknown) =>
+  error instanceof Error ? error.message : String(error);
+
+const postKeyExtractor = (item: CommunityPost, index: number) =>
+  item?.id?.toString() || `post-fallback-${index}`;
+
 const PostList = () => {
   const theme = useTheme();
   const alert = useAlert();
@@ -25,20 +32,18 @@ const PostList = () => {
   const [isFetchingMore, setIsFetchingMore] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const user = useAuthStore((state) => state.user);
-  const {
-    userPosts,
-    fetchUserPosts,
-    bookmarkPost,
-    unBookmarkPost,
-    likePost,
-    unLikePost,
-    fetchPostComments,
-    isLoading,
-    hasMore,
-    voteOnPollPost,
-  } = usePostStore();
+  const userPosts = usePostStore((s) => s.userPosts);
+  const fetchUserPosts = usePostStore((s) => s.fetchUserPosts);
+  const bookmarkPost = usePostStore((s) => s.bookmarkPost);
+  const unBookmarkPost = usePostStore((s) => s.unBookmarkPost);
+  const likePost = usePostStore((s) => s.likePost);
+  const unLikePost = usePostStore((s) => s.unLikePost);
+  const fetchPostComments = usePostStore((s) => s.fetchPostComments);
+  const isLoading = usePostStore((s) => s.isLoading);
+  const hasMore = usePostStore((s) => s.hasMore);
+  const voteOnPollPost = usePostStore((s) => s.voteOnPollPost);
 
-  const { sendNotification } = useNotificationStore();
+  const sendNotification = useNotificationStore((s) => s.sendNotification);
 
   useEffect(() => {
     fetchPosts(true);
@@ -48,7 +53,7 @@ const PostList = () => {
     try {
       await fetchUserPosts("mine", isRefresh);
     } catch (error) {
-      alert.show(AlertPresets.error(t(LocalizedStrings.common.error), error.message));
+      alert.show(AlertPresets.error(t(LocalizedStrings.common.error), getErrorMessage(error)));
     }
   }, []);
 
@@ -77,7 +82,7 @@ const PostList = () => {
           await bookmarkPost(postId);
         }
       } catch (error) {
-        alert.show(AlertPresets.error(t(LocalizedStrings.common.error), error.message));
+        alert.show(AlertPresets.error(t(LocalizedStrings.common.error), getErrorMessage(error)));
       }
     },
     [bookmarkPost, unBookmarkPost],
@@ -89,7 +94,7 @@ const PostList = () => {
       try {
         await voteOnPollPost(postId, optionId);
       } catch (error) {
-        alert.show(AlertPresets.error(t(LocalizedStrings.common.error), error.message));
+        alert.show(AlertPresets.error(t(LocalizedStrings.common.error), getErrorMessage(error)));
       }
     },
     [voteOnPollPost],
@@ -117,7 +122,7 @@ const PostList = () => {
         }
         await sendNotification(request);
       } catch (error) {
-        alert.show(AlertPresets.error(t(LocalizedStrings.common.error), error.message));
+        alert.show(AlertPresets.error(t(LocalizedStrings.common.error), getErrorMessage(error)));
       }
     },
     [likePost, unLikePost, sendNotification, user?.id, user?.firstName],
@@ -128,14 +133,14 @@ const PostList = () => {
       try {
         await fetchPostComments(postId);
       } catch (error) {
-        alert.show(AlertPresets.error(t(LocalizedStrings.common.error), error.message));
+        alert.show(AlertPresets.error(t(LocalizedStrings.common.error), getErrorMessage(error)));
       }
     },
     [fetchPostComments],
   );
 
   const renderFooterComponent = useCallback(() => {
-    if (isFetchingMore) return <Loader fullScreen={false} />;
+    if (isFetchingMore) return <PostCardSkeleton />;
     if (!hasMore && userPosts.length > 0) {
       return <View style={{ padding: verticalScale(20), alignItems: "center" }} />;
     }
@@ -144,6 +149,14 @@ const PostList = () => {
 
   // Optimized: Extracted Empty Component
   const renderEmptyComponent = useCallback(() => {
+    if (isLoading) {
+      return (
+        <View>
+          <PostCardSkeleton />
+          <PostCardSkeleton />
+        </View>
+      );
+    }
     return (
       <EmptyView
         message={t(LocalizedStrings.community.placeHolder.beFirstToShare)}
@@ -154,8 +167,33 @@ const PostList = () => {
     );
   }, [isLoading]);
 
+  const handleAuthorPress = useCallback(
+    (authorId: string) =>
+      router.push({ pathname: "/profile/public-profile", params: { userId: authorId } }),
+    [],
+  );
+
+  const renderPost = useCallback(
+    ({ item }: { item: CommunityPost }) => (
+      <ProfilePostItem
+        post={item}
+        onShare={handleBookmark}
+        onLike={handleLike}
+        onComment={handleApiComment}
+        onPollSubmit={handleApiPollSubmit}
+        onAuthorPress={handleAuthorPress}
+      />
+    ),
+    [handleBookmark, handleLike, handleApiComment, handleApiPollSubmit, handleAuthorPress],
+  );
+
+  const refreshControl = useMemo(
+    () => <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />,
+    [isRefreshing, handleRefresh],
+  );
+
   return (
-    <SafeAreaScreen style={styles.safeArea} showLoader={isLoading}>
+    <SafeAreaScreen style={styles.safeArea}>
       <View>
         <TouchableOpacity onPress={handleBack} style={styles.backButton} activeOpacity={0.7}>
           <View style={styles.backButtonInner}>
@@ -171,24 +209,9 @@ const PostList = () => {
       <FlatList
         data={userPosts}
         showsVerticalScrollIndicator={false}
-        renderItem={({ item }) => (
-          <PostCard
-            post={item}
-            onApiShare={handleBookmark}
-            onApiComment={handleApiComment}
-            onApiLike={(postId, isLiked) => handleLike(postId, isLiked, item?.user?.id)}
-            onApiPollSubmit={handleApiPollSubmit}
-            onAuthorPress={(authorId) =>
-              router.push({
-                pathname: "/profile/public-profile",
-                params: {
-                  userId: authorId,
-                },
-              })
-            }
-          />
-        )}
-        refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />}
+        keyExtractor={postKeyExtractor}
+        renderItem={renderPost}
+        refreshControl={refreshControl}
         ListFooterComponent={renderFooterComponent}
         ListEmptyComponent={renderEmptyComponent}
         onEndReached={handleLoadMore}
