@@ -53,7 +53,10 @@
     "join": "Join",
     "joined": "Joined",
     "suggestedGroups": "Suggested groups",
-    "seeAll": "See all"
+    "seeAll": "See all",
+    "groupPosts": "Posts",
+    "noGroupPosts": "No posts in this group yet.",
+    "postCreated": "Posted to the group"
   },
   "navigation": {
     "tabs": {
@@ -1520,6 +1523,8 @@
     "publishedOn": "Published {{date}}",
     "byAuthor": "By {{name}}",
     "notFound": "This tip is no longer available.",
-    "loadFailed": "Couldn't load this tip."
+    "loadFailed": "Couldn't load this tip.",
+    "seeAll": "See all",
+    "empty": "No tips yet."
   }
 }

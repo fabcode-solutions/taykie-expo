@@ -1,5 +1,5 @@
 import React, { memo, useCallback, useMemo } from "react";
-import { FlatList, Image, Pressable, StyleSheet, Text, View } from "react-native";
+import { FlatList, Image, Pressable, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { router, type Href } from "expo-router";
 import { useTranslation } from "react-i18next";
 import { Ionicons } from "@expo/vector-icons";
@@ -9,11 +9,15 @@ import { useTips } from "@/hooks/queries/tips";
 import { Tip } from "@/services/api/tips";
 import { LocalizedStrings } from "@/i18n/LocalizedStrings";
 import { moderateScale, scale, verticalScale } from "@/utils/scale";
+import { cycleWindow } from "@/utils/cycleWindow";
 
 const MAX_TIPS = 10;
 const SKELETON_COUNT = 2;
 
 const keyExtractor = (item: Tip) => item.id;
+
+/** Opens the "all tips" screen (app/tips/index.tsx). */
+export const openAllTips = () => router.push("/tips" as Href);
 
 /** Opens the tip detail screen (app/tips/[tipId].tsx). */
 export const openTip = (tipId: string) =>
@@ -78,6 +82,12 @@ const TipCardSkeleton = memo(function TipCardSkeleton({
 interface TipsRowProps {
   /** Horizontal inset for the header + list; defaults to the theme's lg spacing. */
   horizontalInset?: number;
+  /**
+   * Which block this is when the row appears several times in a feed — each slot shows
+   * the next `count` tips (wrapping). Omit `count` to show all loaded tips.
+   */
+  slot?: number;
+  count?: number;
 }
 
 /**
@@ -89,7 +99,7 @@ interface TipsRowProps {
  * anyone not opted in — in both cases this renders nothing, so it never leaves an
  * empty box behind.
  */
-function TipsRow({ horizontalInset }: TipsRowProps) {
+function TipsRow({ horizontalInset, slot = 0, count = MAX_TIPS }: TipsRowProps) {
   const theme = useTheme();
   const { t } = useTranslation();
   const styles = useMemo(
@@ -97,7 +107,8 @@ function TipsRow({ horizontalInset }: TipsRowProps) {
     [theme, horizontalInset],
   );
   const { data, isLoading, isFetching } = useTips(MAX_TIPS);
-  const tips = data?.tips ?? [];
+  // One shared query for every TipsRow on screen (same key) — react-query dedupes it.
+  const tips = useMemo(() => cycleWindow(data?.tips ?? [], slot, count), [data?.tips, slot, count]);
 
   const renderItem = useCallback(
     ({ item }: { item: Tip }) => (
@@ -113,8 +124,17 @@ function TipsRow({ horizontalInset }: TipsRowProps) {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Ionicons name="bulb-outline" size={moderateScale(18)} color={theme.colors.text.primary} />
-        <Text style={styles.title}>{t(LocalizedStrings.tips.title)}</Text>
+        <View style={styles.headerTitle}>
+          <Ionicons
+            name="bulb-outline"
+            size={moderateScale(18)}
+            color={theme.colors.text.primary}
+          />
+          <Text style={styles.title}>{t(LocalizedStrings.tips.title)}</Text>
+        </View>
+        <TouchableOpacity onPress={openAllTips} accessibilityRole="button" hitSlop={8}>
+          <Text style={styles.seeAll}>{t(LocalizedStrings.tips.seeAll)}</Text>
+        </TouchableOpacity>
       </View>
       {showSkeleton ? (
         <View style={styles.skeletonRow}>
@@ -147,9 +167,20 @@ const createStyles = (theme: Theme, inset: number) =>
     header: {
       flexDirection: "row",
       alignItems: "center",
-      gap: scale(6),
+      justifyContent: "space-between",
       paddingHorizontal: inset,
       marginBottom: verticalScale(10),
+    },
+    headerTitle: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: scale(6),
+    },
+    seeAll: {
+      fontSize: moderateScale(14),
+      fontFamily: fontFamily.manrope.medium,
+      fontWeight: "500" as const,
+      color: theme.colors.primary.dark,
     },
     title: {
       fontSize: moderateScale(16),

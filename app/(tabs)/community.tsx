@@ -47,8 +47,52 @@ export const FILTERS = [
 const getErrorMessage = (error: unknown) =>
   error instanceof Error ? error.message : String(error);
 
-const keyExtractor = (item: CommunityPost, index: number) =>
-  item?.id?.toString() || `fallback-${index}`;
+// ─── Mixed feed: posts with group-suggestion and health-tip blocks ───────────
+//
+// Layout: 4 posts → groups → 5 posts → tips → 5 posts → groups → 5 posts → tips → …
+// Each repeated block shows the NEXT set of groups / tips (see cycleWindow), so the
+// feed doesn't show the same cards twice in a row.
+const FIRST_BLOCK_AFTER_POSTS = 4;
+const POSTS_BETWEEN_BLOCKS = 5;
+const GROUPS_PER_BLOCK = 6;
+const TIPS_PER_BLOCK = 5;
+
+type FeedItem =
+  | { kind: "post"; post: CommunityPost }
+  | { kind: "groups"; slot: number }
+  | { kind: "tips"; slot: number };
+
+const buildFeed = (posts: CommunityPost[], withBlocks: boolean): FeedItem[] => {
+  const items: FeedItem[] = posts.map((post) => ({ kind: "post" as const, post }));
+  if (!withBlocks || posts.length === 0) return items;
+
+  const feed: FeedItem[] = [];
+  let nextBlockAt = FIRST_BLOCK_AFTER_POSTS;
+  let blockIndex = 0;
+  posts.forEach((post, index) => {
+    feed.push({ kind: "post", post });
+    // Only between posts (never dangling after the last loaded one) — the next page
+    // of posts will bring the next block along with it.
+    if (index + 1 === nextBlockAt && index + 1 < posts.length) {
+      const slot = Math.floor(blockIndex / 2);
+      feed.push(blockIndex % 2 === 0 ? { kind: "groups", slot } : { kind: "tips", slot });
+      blockIndex += 1;
+      nextBlockAt += POSTS_BETWEEN_BLOCKS;
+    }
+  });
+
+  // A short feed (all posts fit before the first block) still gets groups + tips at
+  // the end, instead of never showing them.
+  if (posts.length <= FIRST_BLOCK_AFTER_POSTS) {
+    feed.push({ kind: "groups", slot: 0 }, { kind: "tips", slot: 0 });
+  }
+  return feed;
+};
+
+const keyExtractor = (item: FeedItem, index: number) => {
+  if (item.kind === "post") return item.post?.id?.toString() || `fallback-${index}`;
+  return `${item.kind}-${item.slot}`;
+};
 
 const handleCreatePost = () => router.push("/(screens)/create-post");
 
@@ -78,6 +122,12 @@ export default function CommunityScreen() {
   const sendNotification = useNotificationStore((s) => s.sendNotification);
   const fetchRecommendedGroups = useGroupStore((s) => s.fetchRecommendedGroups);
   const queryClient = useQueryClient();
+
+  // Recommended groups are fetched once here for every groups block in the feed
+  // (the rows use autoFetch={false}); tips blocks share one react-query query.
+  useEffect(() => {
+    fetchRecommendedGroups().catch(() => {});
+  }, [fetchRecommendedGroups]);
   const [activeFilter, setActiveFilter] = React.useState<CommunityFilter>("new");
   const themedStyles = React.useMemo(() => createStyles(theme), [theme]);
 
@@ -234,21 +284,39 @@ export default function CommunityScreen() {
   // ProfilePostItem is memoized and gives PostCard a stable per-post like handler —
   // the old inline `onApiLike={(...) => ...}` created a new function per row per
   // render, which defeated PostCard's memo.
-  const renderPostItem = useCallback(
-    ({ item }: { item: CommunityPost }) => (
-      <View style={themedStyles.postItem}>
-        <ProfilePostItem
-          post={item}
-          onLike={handleApiLike}
-          onComment={handleApiComment}
-          onShare={handleApiShare}
-          onPollSubmit={handleApiPollSubmit}
-          onMenuPress={handleMenuPress}
-          onAuthorPress={handleAuthorPress}
-        />
-      </View>
-    ),
+  const renderFeedItem = useCallback(
+    ({ item }: { item: FeedItem }) => {
+      if (item.kind === "groups") {
+        return (
+          <View style={themedStyles.feedBlock}>
+            <SuggestedGroupsRow slot={item.slot} count={GROUPS_PER_BLOCK} autoFetch={false} />
+          </View>
+        );
+      }
+      if (item.kind === "tips") {
+        // Admin health tips — renders nothing for users who didn't opt in.
+        return (
+          <View style={themedStyles.feedBlock}>
+            <TipsRow slot={item.slot} count={TIPS_PER_BLOCK} />
+          </View>
+        );
+      }
+      return (
+        <View style={themedStyles.postItem}>
+          <ProfilePostItem
+            post={item.post}
+            onLike={handleApiLike}
+            onComment={handleApiComment}
+            onShare={handleApiShare}
+            onPollSubmit={handleApiPollSubmit}
+            onMenuPress={handleMenuPress}
+            onAuthorPress={handleAuthorPress}
+          />
+        </View>
+      );
+    },
     [
+      themedStyles.feedBlock,
       themedStyles.postItem,
       handleApiLike,
       handleApiComment,
@@ -292,19 +360,11 @@ export default function CommunityScreen() {
     );
   }, [showSkeleton, themedStyles.postItem, t]);
 
-  // Passed as an ELEMENT for the same reason as the footer above. Hidden while
-  // searching — suggestions aren't search results.
+  // Groups / tips blocks are hidden while searching — suggestions aren't search results.
   const isSearching = searchText.trim().length > 0;
-  const headerElement = React.useMemo(
-    () =>
-      isSearching ? null : (
-        <View>
-          <SuggestedGroupsRow />
-          {/* Admin health tips — only for users who opted in during onboarding. */}
-          <TipsRow />
-        </View>
-      ),
-    [isSearching],
+  const feedItems = React.useMemo(
+    () => buildFeed(userPosts, !isSearching),
+    [userPosts, isSearching],
   );
 
   const refreshControl = React.useMemo(
@@ -341,15 +401,14 @@ export default function CommunityScreen() {
 
       <FlatList
         // While a new filter/search loads, hide the previous results behind skeletons.
-        data={showSkeleton ? [] : userPosts}
+        data={showSkeleton ? [] : feedItems}
         keyExtractor={keyExtractor}
         showsVerticalScrollIndicator={false}
-        renderItem={renderPostItem}
+        renderItem={renderFeedItem}
         onEndReached={handleLoadMore}
         onEndReachedThreshold={0.5}
         contentContainerStyle={themedStyles.listContent}
         refreshControl={refreshControl}
-        ListHeaderComponent={headerElement}
         ListFooterComponent={footerElement}
         ListEmptyComponent={emptyElement}
         initialNumToRender={5}
@@ -374,6 +433,10 @@ const createStyles = (theme: Theme) =>
     header: {
       paddingTop: theme.spacing.lg,
       paddingHorizontal: theme.spacing.lg,
+    },
+    // Groups / tips blocks inside the feed: a little breathing room around the rows.
+    feedBlock: {
+      paddingTop: verticalScale(8),
     },
     postItem: {
       paddingHorizontal: theme.spacing.lg,

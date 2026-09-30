@@ -18,8 +18,23 @@ import { LocalizedStrings } from "@/i18n/LocalizedStrings";
 import { useAlert } from "@/provider/AlertProvider";
 import { AlertPresets } from "@/utils/alert";
 import { moderateScale, scale, verticalScale } from "@/utils/scale";
+import { cycleWindow } from "@/utils/cycleWindow";
 
 const MAX_SUGGESTIONS = 10;
+
+interface SuggestedGroupsRowProps {
+  /**
+   * Which block this is when the row appears several times in a feed — each slot shows
+   * the next `count` suggestions (wrapping), so repeated blocks don't repeat groups.
+   */
+  slot?: number;
+  count?: number;
+  /**
+   * Fetch recommended groups on mount. Set false when the parent fetches once for
+   * several rows (the Community feed), so each block doesn't refetch.
+   */
+  autoFetch?: boolean;
+}
 
 const keyExtractor = (item: GroupResponse) => String(item.id);
 
@@ -59,7 +74,9 @@ const SuggestedGroupCard = memo(function SuggestedGroupCard({
       </Text>
       <Text style={styles.members}>
         {membersCount}{" "}
-        {membersCount === 1 ? t(LocalizedStrings.groups.member) : t(LocalizedStrings.groups.members)}
+        {membersCount === 1
+          ? t(LocalizedStrings.groups.member)
+          : t(LocalizedStrings.groups.members)}
       </Text>
       <TouchableOpacity
         style={styles.joinButton}
@@ -84,7 +101,11 @@ const SuggestedGroupCard = memo(function SuggestedGroupCard({
  * Renders nothing while the first load is in flight or when there's nothing
  * to suggest, so it never leaves an empty box above the feed.
  */
-function SuggestedGroupsRow() {
+function SuggestedGroupsRow({
+  slot = 0,
+  count = MAX_SUGGESTIONS,
+  autoFetch = true,
+}: SuggestedGroupsRowProps) {
   const theme = useTheme();
   const alert = useAlert();
   const { t } = useTranslation();
@@ -94,18 +115,24 @@ function SuggestedGroupsRow() {
   const joinGroup = useGroupStore((s) => s.joinGroup);
   // Local, not groupStore.isLoading — that flag is shared with every other
   // group action (join, members, friends, ...).
-  const [hasLoaded, setHasLoaded] = useState(false);
+  const [hasLoaded, setHasLoaded] = useState(!autoFetch);
   const [joiningId, setJoiningId] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!autoFetch) return;
     fetchRecommendedGroups()
       .catch((error) => console.warn("Failed to load suggested groups:", error))
       .finally(() => setHasLoaded(true));
-  }, [fetchRecommendedGroups]);
+  }, [fetchRecommendedGroups, autoFetch]);
 
   const suggestions = useMemo(
-    () => (recommendedGroups ?? []).filter((g) => !g.isMember).slice(0, MAX_SUGGESTIONS),
-    [recommendedGroups],
+    () =>
+      cycleWindow(
+        (recommendedGroups ?? []).filter((g) => !g.isMember),
+        slot,
+        count,
+      ),
+    [recommendedGroups, slot, count],
   );
 
   const handleOpen = useCallback((id: string) => router.push(`/groups/${id}`), []);

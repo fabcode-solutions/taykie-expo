@@ -18,6 +18,17 @@ export async function getUserPosts(
   return apiClient.get(`${endpoints.post.posts}?feed=${filter}&page=${page}&limit=${limit}`);
 }
 
+/** Posts made in a group (backend GET /posts filters by groupId). */
+export async function getGroupPosts(
+  groupId: string,
+  page: number = 1,
+  limit: number = 20,
+): Promise<PostResponse> {
+  return apiClient.get(
+    `${endpoints.post.posts}?groupId=${encodeURIComponent(groupId)}&page=${page}&limit=${limit}`,
+  );
+}
+
 export async function getPostById(postId: string): Promise<any> {
   return apiClient.get(`${endpoints.post.posts}/${postId}`);
 }

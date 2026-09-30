@@ -138,8 +138,12 @@ export const usePostStore = create<State & Actions>()((set, get) => ({
         ...requestBody,
         ...(imageUrl && { image: imageUrl }),
       });
-      await get().fetchUserPosts();
+      // isLoading must be cleared BEFORE refreshing: fetchUserPosts returns early while
+      // isLoading is true, so the feed never picked up the new post.
       set({ isLoading: false });
+      await get()
+        .fetchUserPosts("new", true, true)
+        .catch(() => {});
       return response.message;
     } catch (error) {
       const message = getErrorMessage(error, t(LocalizedStrings.errors.api.createPost));

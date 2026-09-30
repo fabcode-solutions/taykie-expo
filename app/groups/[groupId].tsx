@@ -30,6 +30,12 @@ import { useAlert } from "@/provider/AlertProvider";
 import { Button } from "@/components/ui/button";
 import { GroupDetailsSkeleton } from "@/components/groups/GroupSkeletons";
 import { GroupResponse } from "@/types/groups.types";
+import { CommunityPost, PostType } from "@/types/posts.types";
+import { usePostStore } from "@/stores/postStore";
+import ProfilePostItem from "@/components/profile/ProfilePostItem";
+import { PostCardSkeleton } from "@/components/social/PostCardSkeleton";
+import { groupPostKeys, useGroupPosts } from "@/hooks/queries/groupPosts";
+import { useQueryClient } from "@tanstack/react-query";
 
 type ParallaxProps = React.ComponentProps<typeof ParallaxScrollView>;
 type RenderHeader = NonNullable<ParallaxProps["renderHeader"]>;
@@ -42,6 +48,8 @@ const HEADER_MIN_HEIGHT = Dimensions.get("screen").height / 2.2;
 // no visible room for the post box.
 const HEADER_MIN_HEIGHT_KEYBOARD = verticalScale(120);
 const POST_MAX_LENGTH = 250;
+// Space kept between the composer's bottom edge (the Post button) and the keyboard.
+const KEYBOARD_GAP = verticalScale(16);
 
 const getErrorMessage = (error: unknown) =>
   error instanceof Error ? error.message : String(error);
@@ -88,6 +96,9 @@ interface PostComposerProps {
   styles: GroupStyles;
   placeholderColor: string;
   onFocus: () => void;
+  /** Resolves true when the post was created (the box is then cleared). */
+  onSubmit: (text: string) => Promise<boolean>;
+  onLayout: (y: number, height: number) => void;
 }
 
 // Owns its own text state: typing used to re-render the WHOLE screen (parallax header,
@@ -96,33 +107,159 @@ const PostComposer = memo(function PostComposer({
   styles,
   placeholderColor,
   onFocus,
+  onSubmit,
+  onLayout,
 }: PostComposerProps) {
   const [textPost, setTextPost] = useState("");
+  const [isPosting, setIsPosting] = useState(false);
+  const canPost = textPost.trim().length > 0 && !isPosting;
+
+  const handlePost = useCallback(async () => {
+    if (!canPost) return;
+    setIsPosting(true);
+    const ok = await onSubmit(textPost.trim());
+    setIsPosting(false);
+    if (ok) {
+      setTextPost("");
+      Keyboard.dismiss();
+    }
+  }, [canPost, onSubmit, textPost]);
 
   return (
-    <View style={styles.textInputWrapper}>
-      <TextInput
-        style={styles.textInput}
-        multiline
-        numberOfLines={4}
-        onChangeText={setTextPost}
-        onFocus={onFocus}
-        value={textPost}
-        maxLength={POST_MAX_LENGTH}
-        placeholderTextColor={placeholderColor}
-        placeholder={t(LocalizedStrings.groups.writeSomething)}
-      />
-      <Text style={styles.letterCount}>
-        {textPost.length}/{POST_MAX_LENGTH}
-      </Text>
-      <View style={styles.postIcons}>
-        <TouchableOpacity>
-          <IconImage />
-        </TouchableOpacity>
-        <TouchableOpacity>
-          <IconPoll />
-        </TouchableOpacity>
+    <View
+      style={styles.composer}
+      onLayout={(e) => onLayout(e.nativeEvent.layout.y, e.nativeEvent.layout.height)}
+    >
+      <View style={styles.textInputWrapper}>
+        <TextInput
+          style={styles.textInput}
+          multiline
+          numberOfLines={4}
+          onChangeText={setTextPost}
+          onFocus={onFocus}
+          value={textPost}
+          maxLength={POST_MAX_LENGTH}
+          placeholderTextColor={placeholderColor}
+          placeholder={t(LocalizedStrings.groups.writeSomething)}
+        />
+        <Text style={styles.letterCount}>
+          {textPost.length}/{POST_MAX_LENGTH}
+        </Text>
+        <View style={styles.postIcons}>
+          <TouchableOpacity>
+            <IconImage />
+          </TouchableOpacity>
+          <TouchableOpacity>
+            <IconPoll />
+          </TouchableOpacity>
+        </View>
       </View>
+      <View style={styles.postButtonRow}>
+        <Button
+          fullWidth={false}
+          size="small"
+          title={t(LocalizedStrings.community.post.title)}
+          onPress={handlePost}
+          loading={isPosting}
+          disabled={!canPost}
+          textStyle={styles.joinButtonText}
+          rightIcon={null}
+        />
+      </View>
+    </View>
+  );
+});
+
+// ─── Group posts ──────────────────────────────────────────────────────────────
+
+interface GroupPostsProps {
+  groupId: string;
+  styles: GroupStyles;
+}
+
+// Posts made in this group, below the composer. Plain map (not a FlatList): it lives
+// inside the parallax ScrollView, and a nested VirtualizedList would warn/misbehave.
+const GroupPosts = memo(function GroupPosts({ groupId, styles }: GroupPostsProps) {
+  const alert = useAlert();
+  const router = useRouter();
+  const queryClient = useQueryClient();
+  const { data: posts = [], isLoading } = useGroupPosts(groupId);
+  const likePost = usePostStore((s) => s.likePost);
+  const unLikePost = usePostStore((s) => s.unLikePost);
+  const bookmarkPost = usePostStore((s) => s.bookmarkPost);
+  const unBookmarkPost = usePostStore((s) => s.unBookmarkPost);
+  const fetchPostComments = usePostStore((s) => s.fetchPostComments);
+  const voteOnPollPost = usePostStore((s) => s.voteOnPollPost);
+
+  const refresh = useCallback(
+    () => queryClient.invalidateQueries({ queryKey: groupPostKeys.list(groupId) }),
+    [queryClient, groupId],
+  );
+  const run = useCallback(
+    async (action: () => Promise<unknown>) => {
+      try {
+        await action();
+        await refresh();
+      } catch (error) {
+        alert.show(AlertPresets.error(t(LocalizedStrings.common.error), getErrorMessage(error)));
+      }
+    },
+    [refresh, alert],
+  );
+
+  const handleLike = useCallback(
+    (postId: string, isLiked: boolean) =>
+      run(() => (isLiked ? unLikePost(postId) : likePost(postId))),
+    [run, likePost, unLikePost],
+  );
+  const handleShare = useCallback(
+    (postId: string, isBookmarked: boolean) =>
+      run(() => (isBookmarked ? unBookmarkPost(postId) : bookmarkPost(postId))),
+    [run, bookmarkPost, unBookmarkPost],
+  );
+  const handleComment = useCallback(
+    (postId: string) => {
+      fetchPostComments(postId).catch((error) =>
+        alert.show(AlertPresets.error(t(LocalizedStrings.common.error), getErrorMessage(error))),
+      );
+    },
+    [fetchPostComments, alert],
+  );
+  const handlePoll = useCallback(
+    (postId: string, optionId: string) => run(() => voteOnPollPost(postId, optionId)),
+    [run, voteOnPollPost],
+  );
+  const handleAuthorPress = useCallback(
+    (authorId: string) =>
+      router.push({ pathname: "/profile/public-profile", params: { userId: authorId } }),
+    [router],
+  );
+
+  return (
+    <View style={styles.postsSection}>
+      <Text style={styles.postsHeading}>{t(LocalizedStrings.groups.groupPosts)}</Text>
+      {isLoading ? (
+        <View>
+          <PostCardSkeleton />
+          <PostCardSkeleton />
+        </View>
+      ) : posts.length === 0 ? (
+        <Text style={styles.postsEmpty}>{t(LocalizedStrings.groups.noGroupPosts)}</Text>
+      ) : (
+        <View>
+          {posts.map((post: CommunityPost) => (
+            <ProfilePostItem
+              key={post.id}
+              post={post}
+              onLike={handleLike}
+              onShare={handleShare}
+              onComment={handleComment}
+              onPollSubmit={handlePoll}
+              onAuthorPress={handleAuthorPress}
+            />
+          ))}
+        </View>
+      )}
     </View>
   );
 });
@@ -198,6 +335,30 @@ export default function SingleGroupScreen() {
   const scrollRef = useRef<ScrollView>(null);
   const composerFocusedRef = useRef(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
+  // Keyboard's top edge in screen coordinates (the scroll view starts at screen top).
+  const keyboardTopRef = useRef(0);
+  const scrollYRef = useRef(0);
+  // Composer frame inside the scroll CONTENT (its onLayout y is relative to
+  // parallaxInner, which sits at the content's paddingTop = HEADER_MAX_HEIGHT).
+  const composerFrameRef = useRef<{ y: number; height: number } | null>(null);
+
+  // Scroll just enough that the composer's bottom (incl. the Post button) sits above
+  // the keyboard. Measured, not scrollToEnd: there are posts below the composer now,
+  // and scrollToEnd right after adding padding raced the layout — it scrolled to the
+  // OLD end, leaving the box behind the keyboard.
+  const scrollComposerIntoView = useCallback(() => {
+    const frame = composerFrameRef.current;
+    if (!composerFocusedRef.current || !frame || keyboardTopRef.current <= 0) return;
+    const composerBottom = HEADER_MAX_HEIGHT + frame.y + frame.height;
+    const target = composerBottom + KEYBOARD_GAP - keyboardTopRef.current;
+    if (target > scrollYRef.current) {
+      scrollRef.current?.scrollTo({ y: target, animated: true });
+    }
+  }, []);
+
+  const handleComposerLayout = useCallback((y: number, height: number) => {
+    composerFrameRef.current = { y, height };
+  }, []);
 
   // ── Keyboard handling ──
   // Edge-to-edge is on (app.config.ts), so on Android the window no longer resizes for
@@ -209,9 +370,11 @@ export default function SingleGroupScreen() {
     const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
     const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
     const showSub = Keyboard.addListener(showEvent, (e) => {
+      keyboardTopRef.current = e.endCoordinates.screenY;
       setKeyboardHeight(e.endCoordinates.height);
     });
     const hideSub = Keyboard.addListener(hideEvent, () => {
+      keyboardTopRef.current = 0;
       setKeyboardHeight(0);
       composerFocusedRef.current = false;
     });
@@ -221,21 +384,20 @@ export default function SingleGroupScreen() {
     };
   }, []);
 
-  // Once the new padding / collapsed header have laid out, bring the composer up.
+  // Keyboard opened: bring the composer up. Also re-run from onContentSizeChange
+  // (below), so a late layout of the keyboard padding can't leave it hidden.
   useEffect(() => {
-    if (keyboardHeight > 0 && composerFocusedRef.current) {
-      const timer = setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 50);
+    if (keyboardHeight > 0) {
+      const timer = setTimeout(scrollComposerIntoView, 100);
       return () => clearTimeout(timer);
     }
-  }, [keyboardHeight]);
+  }, [keyboardHeight, scrollComposerIntoView]);
 
   const handleComposerFocus = useCallback(() => {
     composerFocusedRef.current = true;
     // Keyboard already open (e.g. refocus) — the keyboardHeight effect won't re-fire.
-    if (Keyboard.isVisible()) {
-      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 50);
-    }
-  }, []);
+    if (Keyboard.isVisible()) setTimeout(scrollComposerIntoView, 50);
+  }, [scrollComposerIntoView]);
 
   // ── Data ──
   const fetchGroupDetails = useCallback(async () => {
@@ -265,6 +427,23 @@ export default function SingleGroupScreen() {
       alert.show(AlertPresets.error(t(LocalizedStrings.common.error), getErrorMessage(error)));
     }
   }, [group?.isMember, groupId, joinGroup, leaveGroup, fetchRecommendedGroups, alert]);
+
+  const createPost = usePostStore((s) => s.createPost);
+  const queryClient = useQueryClient();
+  const handleCreatePost = useCallback(
+    async (text: string) => {
+      try {
+        await createPost({ type: PostType.TEXT, text, groupId });
+        await queryClient.invalidateQueries({ queryKey: groupPostKeys.list(groupId) });
+        alert.show(AlertPresets.success(t(LocalizedStrings.groups.postCreated)));
+        return true;
+      } catch (error) {
+        alert.show(AlertPresets.error(t(LocalizedStrings.common.error), getErrorMessage(error)));
+        return false;
+      }
+    },
+    [createPost, groupId, queryClient, alert],
+  );
 
   // fetchGroupById clears `group` while loading, so no group + loading = first load.
   // (join/leave also toggle isLoading but keep the group, so they don't flash the skeleton.)
@@ -344,8 +523,15 @@ export default function SingleGroupScreen() {
       showsVerticalScrollIndicator: false,
       keyboardShouldPersistTaps: "handled" as const,
       keyboardDismissMode: "interactive" as const,
+      // Listener only — ParallaxScrollView still drives the header from scrollY.
+      onScroll: (e: { nativeEvent: { contentOffset: { y: number } } }) => {
+        scrollYRef.current = e.nativeEvent.contentOffset.y;
+      },
+      onContentSizeChange: () => {
+        if (keyboardTopRef.current > 0) scrollComposerIntoView();
+      },
     }),
-    [],
+    [scrollComposerIntoView],
   );
 
   return (
@@ -382,8 +568,14 @@ export default function SingleGroupScreen() {
                   styles={styles}
                   placeholderColor={theme.colors.text.secondary}
                   onFocus={handleComposerFocus}
+                  onSubmit={handleCreatePost}
+                  onLayout={handleComposerLayout}
                 />
               ) : null}
+            </View>
+            {/* Posts made in this group (stable wrapper, same rationale as above). */}
+            <View>
+              {!showSkeleton && !!groupId ? <GroupPosts groupId={groupId} styles={styles} /> : null}
             </View>
           </View>
         </View>
@@ -411,6 +603,31 @@ const createStyles = (theme: Theme) =>
       fontFamily: fontFamily.gascogneSerial.regular,
       color: theme.colors.text.primary,
       margin: 0,
+    },
+    composer: {
+      marginVertical: verticalScale(15),
+    },
+    postButtonRow: {
+      flexDirection: "row",
+      justifyContent: "flex-end",
+      marginTop: verticalScale(8),
+    },
+    postsSection: {
+      marginTop: verticalScale(10),
+    },
+    postsHeading: {
+      fontSize: moderateScale(16),
+      fontFamily: fontFamily.manrope.bold,
+      fontWeight: "700" as const,
+      color: theme.colors.text.primary,
+      marginBottom: verticalScale(8),
+    },
+    postsEmpty: {
+      textAlign: "center",
+      paddingVertical: verticalScale(24),
+      fontSize: moderateScale(14),
+      fontFamily: fontFamily.manrope.medium,
+      color: theme.colors.text.secondary,
     },
     joinButtonText: {
       fontSize: moderateScale(14),
@@ -625,7 +842,6 @@ const createStyles = (theme: Theme) =>
     },
     textInputWrapper: {
       position: "relative",
-      marginVertical: verticalScale(15),
     },
     letterCount: {
       position: "absolute",

@@ -53,7 +53,10 @@
     "join": "Unirse",
     "joined": "Unido",
     "suggestedGroups": "Grupos sugeridos",
-    "seeAll": "Ver todo"
+    "seeAll": "Ver todo",
+    "groupPosts": "Publicaciones",
+    "noGroupPosts": "Todavía no hay publicaciones en este grupo.",
+    "postCreated": "Publicado en el grupo"
   },
   "navigation": {
     "tabs": {
@@ -1520,6 +1523,8 @@
     "publishedOn": "Publicado el {{date}}",
     "byAuthor": "Por {{name}}",
     "notFound": "Este consejo ya no está disponible.",
-    "loadFailed": "No se pudo cargar este consejo."
+    "loadFailed": "No se pudo cargar este consejo.",
+    "seeAll": "Ver todos",
+    "empty": "Aún no hay consejos."
   }
 }

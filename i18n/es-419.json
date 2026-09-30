@@ -370,6 +370,8 @@
     "publishedOn": "Publicado el {{date}}",
     "byAuthor": "Por {{name}}",
     "notFound": "Este consejo ya no está disponible.",
-    "loadFailed": "No se pudo cargar este consejo."
+    "loadFailed": "No se pudo cargar este consejo.",
+    "seeAll": "Ver todos",
+    "empty": "Aún no hay consejos."
   }
 }

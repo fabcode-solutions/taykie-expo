@@ -53,6 +53,9 @@ export const LocalizedStrings = {
     join: "groups.join",
     joined: "groups.joined",
     suggestedGroups: "groups.suggestedGroups",
+    groupPosts: "groups.groupPosts",
+    noGroupPosts: "groups.noGroupPosts",
+    postCreated: "groups.postCreated",
     seeAll: "groups.seeAll",
   },
   navigation: {
@@ -1510,5 +1513,7 @@ export const LocalizedStrings = {
     byAuthor: "tips.byAuthor",
     notFound: "tips.notFound",
     loadFailed: "tips.loadFailed",
+    seeAll: "tips.seeAll",
+    empty: "tips.empty",
   },
 };

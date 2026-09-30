@@ -108,7 +108,7 @@ export async function getUserSchedules(
 ): Promise<ScheduleResponse> {
   return apiClient.get(`${endpoints.schedule.schedules}?page=${page}&limit=${limit}`);
 }
-export async function getTodaySchedules(period:string="morning"): Promise<ScheduleResponse> {
+export async function getTodaySchedules(period: string = "morning"): Promise<ScheduleResponse> {
   return apiClient.get(`${endpoints.schedule.today_schedules}?period=${period}`);
 }
 export async function getScheduleById(scheduleId: string): Promise<any> {
