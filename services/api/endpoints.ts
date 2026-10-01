@@ -74,7 +74,7 @@ export const endpoints = {
   post: {
     posts: "/posts",
     bookmark: "/posts/bookmarked",
-    comments: "posts/comments",
+    comments: "/posts/comments",
   },
 
   group: {
