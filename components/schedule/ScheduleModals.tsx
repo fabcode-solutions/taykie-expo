@@ -21,6 +21,9 @@ import { useAlert } from "@/provider/AlertProvider";
 import { useBLEStore, scheduleTimeKey } from "@/stores/bleStore";
 import { SCHEDULE_SLOT_COUNT } from "@/services/ble/TaykieProtocol";
 import { searchSupplements } from "@/services/openFoodFacts.service";
+import { searchCatalogProducts } from "@/hooks/queries/products";
+import { catalogRequestFields, marketForCountry, withUnit } from "@/utils/supplementCatalog";
+import { useAuthStore } from "@/stores/authStore";
 import { createSupplementEvent } from "@/hooks/queries/supplements";
 
 const ScheduleModals = ({
@@ -47,19 +50,42 @@ const ScheduleModals = ({
     setSearchVisible(visible);
   }, [visible]);
 
-  // Layer 1 (live Open Food Facts search) + reuse of the user's own
-  // previously-added products, merged into one result list. Layer 2 (a
-  // seed-list fallback) has no real data yet — the 600-item file is
-  // supposed to come from James — so it's not wired in here. Layer 3 (the
+  // Layer 2 (our admin-managed supplement catalog, searched server-side since
+  // it is far larger than the list the app keeps in memory) + the user's own
+  // previously-added products + Layer 1 (live Open Food Facts search), merged
+  // into one result list, our own entries first. Layer 3 (the
   // "Add '[search text]' as a custom supplement" fallback) doesn't need
   // anything here — SearchModal already shows it whenever this resolves to
   // an empty list.
+  const country = useAuthStore((s) => s.user?.country);
   const handleSearch = useCallback(
     async (query: string): Promise<SearchItem[]> => {
       const lower = query.toLowerCase();
+      const toItem = (p: any): SearchItem => ({
+        ...p,
+        source: "local" as const,
+        brand: p.brandName ?? p.brand,
+      });
+
       const localMatches: SearchItem[] = products
-        .filter((p) => p.name.toLowerCase().includes(lower))
-        .map((p) => ({ ...p, source: "local" as const }));
+        .filter(
+          (p) =>
+            p.name.toLowerCase().includes(lower) ||
+            p.brandName?.toLowerCase().includes(lower) ||
+            p.primaryActiveIngredient?.toLowerCase().includes(lower),
+        )
+        .map(toItem);
+
+      const seen = new Set(localMatches.map((p) => p.id));
+      let catalogMatches: SearchItem[] = [];
+      try {
+        const result = await searchCatalogProducts(query, marketForCountry(country));
+        catalogMatches = ((result?.data ?? []) as any[])
+          .filter((p) => !seen.has(p.id))
+          .map(toItem);
+      } catch (error) {
+        console.error("Catalog search failed:", error);
+      }
 
       let apiMatches: SearchItem[] = [];
       try {
@@ -68,9 +94,9 @@ const ScheduleModals = ({
         console.error("Open Food Facts search failed:", error);
       }
 
-      return [...localMatches, ...apiMatches];
+      return [...localMatches, ...catalogMatches, ...apiMatches];
     },
-    [products],
+    [products, country],
   );
 
   const handleSelect = (item: SearchItem | null) => {
@@ -98,6 +124,13 @@ const ScheduleModals = ({
             description: product.description,
             dosage: product.dosageCount,
             strength: product.strength,
+            strengthUnit: product.strengthUnit,
+            brandName: product.brandName,
+            primaryActiveIngredient: product.primaryActiveIngredient,
+            deliveryForm: product.deliveryForm,
+            targetMarket: product.targetMarket,
+            category: product.category,
+            barcodeGtin: product.barcodeGtin,
           } as Medication;
         }
 
@@ -108,6 +141,7 @@ const ScheduleModals = ({
           description: product.description,
           dosage: product.dosageCount,
           strength: product.strength,
+          strengthUnit: product.strengthUnit,
         };
       });
       setAddProductVisible(false);
@@ -204,7 +238,7 @@ const ScheduleModals = ({
         productId: medication.id,
         name: medication.name,
         dosage: `${dosageNumber} ${dosageNumber > 1 ? "tablets" : "tablet"}`,
-        strength: `${medication.strength} mg`,
+        strength: withUnit(medication.strength, medication.strengthUnit),
         scheduleDay: weekDays,
         scheduleTime: timeOfDay,
         scheduleDayOfMonth: selectedMonthDay,
@@ -237,6 +271,10 @@ const ScheduleModals = ({
             name,
             type,
             ...(description && { description }),
+            ...catalogRequestFields(medication as Parameters<typeof catalogRequestFields>[0]),
+            // A supplement the user typed in themselves is offered to the shared
+            // catalog: usable by them right away, visible to others once approved.
+            ...(selectedItem === null && { submitForReview: true }),
           };
 
           const id = await createProduct(request);

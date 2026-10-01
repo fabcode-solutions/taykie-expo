@@ -18,6 +18,7 @@ import { LocalizedStrings } from "@/i18n/LocalizedStrings";
 import EmptyView from "../ui/empty-view";
 import { Button } from "../ui/button";
 import { SearchItem } from "@/types/search.types";
+import { describeSupplement } from "@/utils/supplementCatalog";
 
 interface SearchModalProps {
   onSelect?: (item: SearchItem | null) => void;
@@ -128,6 +129,9 @@ export default function SearchModal({
       >
         <View style={themedStyles.listItemContent}>
           <Text style={themedStyles.itemName}>{item.name}</Text>
+          {!!describeSupplement(item) && (
+            <Text style={themedStyles.itemMeta}>{describeSupplement(item)}</Text>
+          )}
         </View>
         <Text style={themedStyles.addItemText}>
           {t(LocalizedStrings.schedule.placeHolders.add)}
@@ -248,6 +252,12 @@ const createStyles = (theme: Theme) =>
       fontSize: moderateScale(16),
       fontWeight: "bold",
       lineHeight: verticalScale(24),
+    },
+    itemMeta: {
+      color: theme.colors.text.secondary,
+      fontFamily: fontFamily.manrope.regular,
+      fontSize: moderateScale(13),
+      marginTop: verticalScale(2),
     },
     emptyContainer: {
       alignItems: "center",

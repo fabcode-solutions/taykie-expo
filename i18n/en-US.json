@@ -240,6 +240,7 @@
     "network": "Network error. Please check your connection and try again.",
     "invalidCredentials": "Invalid email or password. Please try again.",
     "unknown": "Something went wrong. Please try again.",
+    "profanity": "Please remove inappropriate language and try again.",
     "validation": {
       "required": "This field is required",
       "minLength": "Must be at least {{count}} characters",
@@ -1133,6 +1134,40 @@
     "deleteConfirmTitle": "Delete Product",
     "deleteConfirmMessage": "Are you sure you want to delete this product? This cannot be undone.",
     "deleteSuccess": "Product deleted successfully",
+    "reviewStatus": {
+      "pending": "Pending review — only you can see this for now",
+      "rejected": "Not added to the shared catalog"
+    },
+    "visibility": {
+      "private": "Only me",
+      "public": "Share with everyone (reviewed first)"
+    },
+    "fields": {
+      "brand": "Brand",
+      "activeIngredient": "Active ingredient",
+      "unit": "Unit",
+      "deliveryForm": "Form",
+      "targetMarket": "Market",
+      "category": "Category",
+      "barcode": "Barcode (optional)",
+      "other": "Other (custom)",
+      "customUnit": "Enter unit",
+      "customForm": "Enter form",
+      "customMarket": "Enter market",
+      "customRequired": "Please enter a value",
+      "strengthInvalid": "Enter a number greater than 0",
+      "barcodeInvalid": "Barcode must be 8–14 digits"
+    },
+    "forms": {
+      "capsule": "Capsule",
+      "tablet": "Tablet",
+      "softgel": "Softgel",
+      "gummy": "Gummy",
+      "powder": "Powder",
+      "liquid": "Liquid",
+      "spray": "Spray",
+      "lozenge": "Lozenge"
+    },
     "no_data": {
       "title": "No results to show",
       "description": "We couldn’t find what you’re looking for. Give it another try!",

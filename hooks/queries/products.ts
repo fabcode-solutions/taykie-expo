@@ -25,6 +25,17 @@ export async function getPublicProducts(page: number = 1, limit: number = 10): P
   return apiClient.get(`${endpoints.products.public_product}?page=${page}&limit=${limit}`);
 }
 
+/** Server-side search of the supplement catalog (name, brand, ingredient, category, barcode). */
+export async function searchCatalogProducts(
+  query: string,
+  market?: string,
+  limit: number = 20,
+): Promise<any> {
+  const params = new URLSearchParams({ q: query, limit: String(limit) });
+  if (market) params.set("market", market);
+  return apiClient.get(`${endpoints.products.search}?${params.toString()}`);
+}
+
 export async function getProductById(productId: string): Promise<any> {
   return apiClient.get(`${endpoints.products.products}/${productId}`);
 }

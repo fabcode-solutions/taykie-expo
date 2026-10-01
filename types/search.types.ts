@@ -12,6 +12,11 @@ export interface SearchItem {
   brand?: string;
   category?: string;
   doseQuantity?: string;
+  // Supplement catalog fields (admin-managed products).
+  brandName?: string | null;
+  primaryActiveIngredient?: string | null;
+  targetMarket?: string | null;
+  deliveryForm?: string | null;
   // Open Food Facts barcode, present only for source: "api" items.
   offId?: string;
 }

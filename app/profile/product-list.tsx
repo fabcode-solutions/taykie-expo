@@ -11,6 +11,7 @@ import { fontFamily, Theme, useTheme } from "@/theme";
 import { Medication, ProductRequest } from "@/types/products.types";
 import { AlertPresets } from "@/utils/alert";
 import { moderateScale, scale, verticalScale } from "@/utils/scale";
+import { catalogRequestFields } from "@/utils/supplementCatalog";
 import { router } from "expo-router";
 import { t } from "i18next";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
@@ -71,7 +72,7 @@ const ProductList = () => {
         const request: ProductRequest = {
           name: product.productName,
           dosage: `${product.dosageCount} ${Number(product.dosageCount) > 1 ? "Tablets" : "Tablet"}`,
-          strength: `${product.strength} mg`,
+          ...catalogRequestFields(product),
           ...(product.description && { description: product.description }),
           ...(product.type && { type: product.type }),
         };
@@ -96,7 +97,7 @@ const ProductList = () => {
       const request: ProductRequest = {
         name: product.productName,
         dosage: `${product.dosageCount} ${Number(product.dosageCount) > 1 ? "Tablets" : "Tablet"}`,
-        strength: `${product.strength} mg`,
+        ...catalogRequestFields(product),
         ...(product.description && { description: product.description }),
         ...(product.type && { type: product.type }),
       };
@@ -242,20 +243,44 @@ const ProductRow = memo(
   }) => {
     const handleEdit = useCallback(() => onEdit(item), [onEdit, item]);
     const handleDelete = useCallback(() => onDelete(item), [onDelete, item]);
-    return <ProductItem name={item.name} onEdit={handleEdit} onDelete={handleDelete} />;
+    return (
+      <ProductItem
+        name={item.name}
+        reviewStatus={item.reviewStatus}
+        onEdit={handleEdit}
+        onDelete={handleDelete}
+      />
+    );
   },
 );
 
 ProductRow.displayName = "ProductRow";
 
 const ProductItem = memo(
-  ({ name, onEdit, onDelete }: { name: string; onEdit: () => void; onDelete: () => void }) => {
+  ({
+    name,
+    reviewStatus,
+    onEdit,
+    onDelete,
+  }: {
+    name: string;
+    reviewStatus?: Medication["reviewStatus"];
+    onEdit: () => void;
+    onDelete: () => void;
+  }) => {
     const theme = useTheme();
     const styles = useMemo(() => createStyles(theme), [theme]);
 
     return (
       <View style={[styles.container, styles.row, styles.border]}>
-        <ThemeText variant="manrope.body2Bold">{name}</ThemeText>
+        <View style={styles.nameBlock}>
+          <ThemeText variant="manrope.body2Bold">{name}</ThemeText>
+          {(reviewStatus === "pending" || reviewStatus === "rejected") && (
+            <Text style={styles.reviewStatusText}>
+              {t(LocalizedStrings.product.reviewStatus[reviewStatus])}
+            </Text>
+          )}
+        </View>
         <View style={[styles.row, { gap: verticalScale(8) }]}>
           <TouchableOpacity style={styles.editButton} onPress={onEdit}>
             <Text style={styles.editButtonText}>{t(LocalizedStrings.common.edit)}</Text>
@@ -292,6 +317,16 @@ const createStyles = (theme: Theme) =>
     row: {
       flexDirection: "row",
       alignItems: "center",
+    },
+    nameBlock: {
+      flex: 1,
+      marginRight: scale(8),
+    },
+    reviewStatusText: {
+      fontFamily: fontFamily.manrope.regular,
+      fontSize: moderateScale(12),
+      color: theme.colors.text.secondary,
+      marginTop: verticalScale(2),
     },
     header: {
       fontSize: moderateScale(24),

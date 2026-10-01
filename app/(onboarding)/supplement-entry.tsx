@@ -23,6 +23,7 @@ import SearchModal from "@/components/schedule/SearchModal";
 import { useProductStore } from "@/stores/productStore";
 import { ProductRequest } from "@/types/products.types";
 import { AlertPresets } from "@/utils/alert";
+import { catalogRequestFields } from "@/utils/supplementCatalog";
 import { useAlert } from "@/provider/AlertProvider";
 
 export default function SupplementEntry() {
@@ -151,7 +152,7 @@ export default function SupplementEntry() {
         name: product.productName,
         type: product.type,
         dosage: product.dosageCount + product.dosageCount > 1 ? " Tablet" : " Tablets",
-        strength: product.strength + " mg",
+        ...catalogRequestFields(product),
         ...(product.description && { description: product.description }),
       };
       await createProduct(request);

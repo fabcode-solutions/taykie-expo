@@ -15,6 +15,7 @@ import ScheduleComponent from "./Schedule";
 import { Medication } from "@/types/products.types";
 import { CreateScheduleRequest, Schedule } from "@/types/schedule.types";
 import { formatTimeAmPm, getFrequency } from "@/utils/formatter";
+import { withUnit } from "@/utils/supplementCatalog";
 import { generateWeek } from "@/app/(tabs)/schedule";
 import { moderateScale, scale, verticalScale } from "@/utils/scale";
 import { LocalizedStrings } from "@/i18n/LocalizedStrings";
@@ -118,11 +119,11 @@ const MedicineTaken = ({ task, onClose, onEditComplete }: MedicineTakenProp) => 
     setRoutineVisible(true);
   }, []);
 
-  const handleAddProduct = useCallback((dosage: string, strength: string) => {
+  const handleAddProduct = useCallback((dosage: string, strength: string, unit?: string) => {
     setMedication((prev) => ({
       ...prev!,
       dosage,
-      strength,
+      strength: withUnit(strength, unit),
     }));
 
     setAddProductVisible(false);
@@ -156,7 +157,7 @@ const MedicineTaken = ({ task, onClose, onEditComplete }: MedicineTakenProp) => 
       const payload: CreateScheduleRequest = {
         name: medication.name,
         dosage: `${medication.dosage} ${Number(medication.dosage) > 1 ? "Tablets" : "Tablet"}`,
-        strength: `${medication.strength} mg`,
+        strength: withUnit(medication.strength),
         scheduleType: frequency,
         scheduleDay: weekDays,
         scheduleDayOfMonth: selectedMonthDay,
@@ -335,7 +336,11 @@ const MedicineTaken = ({ task, onClose, onEditComplete }: MedicineTakenProp) => 
           initialDosage={dosageCount}
           initialStrength={strengthCount}
           onAddProduct={(product) =>
-            handleAddProduct(String(product.dosageCount), String(product.strength))
+            handleAddProduct(
+              String(product.dosageCount),
+              String(product.strength),
+              product.strengthUnit,
+            )
           }
         />
       </BlurModal>

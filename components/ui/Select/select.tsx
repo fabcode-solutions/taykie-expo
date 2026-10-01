@@ -9,6 +9,7 @@ import {
   ScrollView,
   LayoutRectangle,
   Pressable,
+  useWindowDimensions,
 } from "react-native";
 import { Controller, Control, FieldValues, Path, RegisterOptions } from "react-hook-form";
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -84,6 +85,29 @@ export const Select = <TFieldValues extends FieldValues, TValue = string>({
     setOpen(false);
   }, []);
 
+  const { height: windowHeight } = useWindowDimensions();
+
+  // The list opens below the field, or above it when there isn't room below (a field
+  // near the bottom of a modal or screen). Its height is capped to the room available
+  // in the chosen direction so it never runs off screen.
+  const getPlacement = (layout: LayoutRectangle, optionCount: number) => {
+    const overlap = 16; // the list tucks under/over the field's edge by this much
+    const edge = verticalScale(24); // keep clear of the screen edge
+    const maxListHeight = verticalScale(250);
+    const wanted = Math.min(maxListHeight, optionCount * verticalScale(48));
+    const spaceBelow = windowHeight - (layout.y + layout.height - overlap) - edge;
+    const spaceAbove = layout.y + overlap - edge;
+    const openUp = spaceBelow < wanted && spaceAbove > spaceBelow;
+    const room = openUp ? spaceAbove : spaceBelow;
+    return {
+      openUp,
+      maxHeight: Math.max(verticalScale(96), Math.min(maxListHeight, room)),
+      position: openUp
+        ? { bottom: windowHeight - (layout.y + overlap) }
+        : { top: layout.y + layout.height - overlap },
+    };
+  };
+
   return (
     <Controller
       control={control}
@@ -91,6 +115,7 @@ export const Select = <TFieldValues extends FieldValues, TValue = string>({
       rules={rules}
       render={({ field: { value, onChange }, fieldState: { error } }) => {
         const selected = options.find((o) => o.value === value);
+        const placement = dropdownLayout ? getPlacement(dropdownLayout, options.length) : null;
 
         return (
           <View style={[styles.wrapper, style]}>
@@ -136,7 +161,7 @@ export const Select = <TFieldValues extends FieldValues, TValue = string>({
             ) : null}
 
             {/* Dropdown Modal */}
-            {open && dropdownLayout && (
+            {open && dropdownLayout && placement && (
               <Modal visible={open} transparent animationType="fade" onRequestClose={handleClose}>
                 <Pressable style={styles.modalOverlay} onPress={handleClose}>
                   <View
@@ -145,10 +170,10 @@ export const Select = <TFieldValues extends FieldValues, TValue = string>({
                       dropdownStyle,
                       {
                         position: "absolute",
-                        top: dropdownLayout.y + dropdownLayout.height - 16,
+                        ...placement.position,
                         left: dropdownLayout.x,
                         width: dropdownLayout.width,
-                        maxHeight: verticalScale(250),
+                        maxHeight: placement.maxHeight,
                       },
                     ]}
                   >

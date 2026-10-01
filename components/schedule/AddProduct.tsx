@@ -7,10 +7,21 @@ import { Ionicons } from "@expo/vector-icons";
 import { Button } from "@/components/ui/button";
 import { LocalizedStrings } from "@/i18n/LocalizedStrings";
 import { moderateScale, scale, verticalScale } from "@/utils/scale";
-import { useForm } from "react-hook-form";
+import { Control, useForm } from "react-hook-form";
 import { Input } from "../ui/TextInput/input";
 import Select from "../ui/Select/select";
 import { SearchItem } from "@/types/search.types";
+import { useAuthStore } from "@/stores/authStore";
+import {
+  DELIVERY_FORMS,
+  DOSAGE_UNITS,
+  OTHER_OPTION,
+  TARGET_MARKETS,
+  fromChoice,
+  marketForCountry,
+  parseStrength,
+  toChoice,
+} from "@/utils/supplementCatalog";
 // ============================================
 // Types
 // ============================================
@@ -19,14 +30,38 @@ export interface ProductDetails {
   productName?: string | null;
   dosageCount: number;
   strength: number;
+  /** Unit of `strength`: a preset (mg, mcg, g, IU, ml, CFU) or whatever the user typed. */
+  strengthUnit?: string;
   type?: string | null;
   description?: string | null;
+  // Supplement details, collected when creating a new product.
+  brandName?: string;
+  primaryActiveIngredient?: string;
+  deliveryForm?: string;
+  targetMarket?: string;
+  category?: string;
+  barcodeGtin?: string;
 }
+
+// The form edits pickers as "choice + custom text" pairs, and the strength of a new
+// product as free text; both are folded back into ProductDetails on submit.
+interface FormValues extends ProductDetails {
+  strengthText: string;
+  strengthUnitChoice: string;
+  strengthUnitCustom: string;
+  deliveryFormChoice: string;
+  deliveryFormCustom: string;
+  targetMarketChoice: string;
+  targetMarketCustom: string;
+}
+
 interface AddProductProps {
   item: SearchItem | null;
   productName?: string | null;
   initialDosage?: number;
   initialStrength?: number;
+  /** Unit of initialStrength; defaults to the unit in item.strength, else mg. */
+  initialUnit?: string;
   /** May return a promise (create/update) — the button shows a loader until it settles. */
   onAddProduct?: (product: ProductDetails) => void | Promise<unknown>;
 }
@@ -86,6 +121,64 @@ const CounterField = memo(
 
 CounterField.displayName = "CounterField";
 
+/** How far the +/- buttons move the strength, by unit. */
+const strengthStep = (unit: string) => {
+  switch (unit) {
+    case "g":
+    case "ml":
+      return 1;
+    case "mcg":
+      return 50;
+    case "IU":
+    case "CFU":
+      return 500;
+    default:
+      return 100;
+  }
+};
+
+interface ChoiceFieldProps {
+  control: Control<FormValues>;
+  choiceName: "strengthUnitChoice" | "deliveryFormChoice" | "targetMarketChoice";
+  customName: "strengthUnitCustom" | "deliveryFormCustom" | "targetMarketCustom";
+  choice: string;
+  label: string;
+  options: { label: string; value: string }[];
+  customPlaceholder: string;
+}
+
+/** A dropdown whose "Other" option reveals a text box for a value that isn't listed. */
+const ChoiceField = memo(
+  ({ control, choiceName, customName, choice, label, options, customPlaceholder }: ChoiceFieldProps) => {
+    const { t } = useTranslation();
+    return (
+      <>
+        <Select
+          control={control}
+          inputStyle={{ height: verticalScale(50) }}
+          label={label}
+          name={choiceName}
+          options={[...options, { label: t(LocalizedStrings.product.fields.other), value: OTHER_OPTION }]}
+        />
+        {choice === OTHER_OPTION && (
+          <Input
+            control={control}
+            name={customName}
+            inputStyle={{ height: verticalScale(50) }}
+            placeholder={customPlaceholder}
+            autoCapitalize="none"
+            rules={{
+              validate: (v) => !!String(v ?? "").trim() || t(LocalizedStrings.product.fields.customRequired),
+            }}
+          />
+        )}
+      </>
+    );
+  },
+);
+
+ChoiceField.displayName = "ChoiceField";
+
 // ============================================
 // Main Component
 // ============================================
@@ -94,25 +187,49 @@ const AddProduct: React.FC<AddProductProps> = ({
   item,
   initialDosage = 1,
   initialStrength = 500,
+  initialUnit,
   onAddProduct,
 }) => {
   const theme = useTheme();
   const { t } = useTranslation();
   const themedStyles = React.useMemo(() => createStyles(theme), [theme]);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { control, watch, setValue, handleSubmit } = useForm<ProductDetails>({
-    mode: "onChange",
-    reValidateMode: "onSubmit",
-    defaultValues: {
+  // The extra supplement fields only make sense when creating a new product.
+  const isCreate = !item;
+  const country = useAuthStore((s) => s.user?.country);
+
+  const [defaults] = useState<FormValues>(() => {
+    const unit = toChoice(initialUnit ?? parseStrength(item?.strength).unit ?? "mg", DOSAGE_UNITS);
+    const form = toChoice(item?.deliveryForm, DELIVERY_FORMS);
+    const market = toChoice(item?.targetMarket ?? (isCreate ? marketForCountry(country) : undefined), TARGET_MARKETS);
+    return {
       productName: item?.name,
       description: item?.description,
       type: item?.type ?? "private",
       dosageCount: initialDosage,
       strength: initialStrength,
-    },
+      strengthText: String(initialStrength),
+      strengthUnitChoice: unit.choice,
+      strengthUnitCustom: unit.custom,
+      deliveryFormChoice: form.choice,
+      deliveryFormCustom: form.custom,
+      targetMarketChoice: market.choice,
+      targetMarketCustom: market.custom,
+      brandName: item?.brandName ?? "",
+      primaryActiveIngredient: item?.primaryActiveIngredient ?? "",
+      category: item?.category ?? "",
+      barcodeGtin: "",
+    };
   });
 
-  const { dosageCount, strength } = watch();
+  const { control, watch, setValue, handleSubmit } = useForm<FormValues>({
+    mode: "onChange",
+    reValidateMode: "onSubmit",
+    defaultValues: defaults,
+  });
+
+  const { dosageCount, strength, strengthUnitChoice, deliveryFormChoice, targetMarketChoice } = watch();
+  const unitForStep = strengthUnitChoice === OTHER_OPTION ? "" : strengthUnitChoice;
 
   // Dosage handlers with useCallback for performance
   const handleDecrementDosage = useCallback(() => {
@@ -125,25 +242,42 @@ const AddProduct: React.FC<AddProductProps> = ({
 
   // Strength handlers with useCallback for performance
   const handleDecrementStrength = useCallback(() => {
-    setValue("strength", Math.max(100, strength - 100));
-  }, [strength]);
+    const step = strengthStep(unitForStep);
+    setValue("strength", Math.max(step, strength - step));
+  }, [strength, unitForStep]);
 
   const handleIncrementStrength = useCallback(() => {
-    setValue("strength", strength + 100);
-  }, [strength]);
+    setValue("strength", strength + strengthStep(unitForStep));
+  }, [strength, unitForStep]);
 
   // Add product handler
   const handleAddProduct = useCallback(
-    async (data: ProductDetails) => {
+    async (data: FormValues) => {
       if (isSubmitting) return;
       setIsSubmitting(true);
       try {
-        await onAddProduct?.(data);
+        const text = (v?: string) => v?.trim() || undefined;
+        await onAddProduct?.({
+          productName: data.productName,
+          description: data.description,
+          type: data.type,
+          dosageCount: data.dosageCount,
+          strength: isCreate ? Number(data.strengthText.replace(",", ".")) : data.strength,
+          strengthUnit: fromChoice(data.strengthUnitChoice, data.strengthUnitCustom) ?? "mg",
+          ...(isCreate && {
+            brandName: text(data.brandName),
+            primaryActiveIngredient: text(data.primaryActiveIngredient),
+            deliveryForm: fromChoice(data.deliveryFormChoice, data.deliveryFormCustom),
+            targetMarket: fromChoice(data.targetMarketChoice, data.targetMarketCustom),
+            category: text(data.category),
+            barcodeGtin: text(data.barcodeGtin),
+          }),
+        });
       } finally {
         setIsSubmitting(false);
       }
     },
-    [dosageCount, strength, onAddProduct, item, isSubmitting],
+    [onAddProduct, isCreate, isSubmitting],
   );
 
   return (
@@ -170,6 +304,29 @@ const AddProduct: React.FC<AddProductProps> = ({
           placeholder={t(LocalizedStrings.product.add_name)}
         />
 
+        {isCreate && (
+          <>
+            <Input
+              label={t(LocalizedStrings.product.fields.brand)}
+              control={control}
+              name="brandName"
+              inputStyle={{ height: verticalScale(50) }}
+              autoCapitalize="words"
+              rules={{ maxLength: 100 }}
+              placeholder={t(LocalizedStrings.product.fields.brand)}
+            />
+            <Input
+              label={t(LocalizedStrings.product.fields.activeIngredient)}
+              control={control}
+              name="primaryActiveIngredient"
+              inputStyle={{ height: verticalScale(50) }}
+              autoCapitalize="words"
+              rules={{ maxLength: 150 }}
+              placeholder={t(LocalizedStrings.product.fields.activeIngredient)}
+            />
+          </>
+        )}
+
         <CounterField
           label={t(LocalizedStrings.schedule.addProduct.dosage)}
           value={dosageCount}
@@ -179,14 +336,86 @@ const AddProduct: React.FC<AddProductProps> = ({
           theme={theme}
         />
 
-        <CounterField
-          label={t(LocalizedStrings.schedule.addProduct.strength)}
-          value={strength}
-          unit={t(LocalizedStrings.home.extras.mg)}
-          onIncrement={handleIncrementStrength}
-          onDecrement={handleDecrementStrength}
-          theme={theme}
+        {isCreate ? (
+          <Input
+            label={t(LocalizedStrings.schedule.addProduct.strength)}
+            control={control}
+            name="strengthText"
+            keyboardType="decimal-pad"
+            inputStyle={{ height: verticalScale(50) }}
+            rules={{
+              validate: (v) =>
+                Number(String(v).replace(",", ".")) > 0 || t(LocalizedStrings.product.fields.strengthInvalid),
+            }}
+          />
+        ) : (
+          <CounterField
+            label={t(LocalizedStrings.schedule.addProduct.strength)}
+            value={strength}
+            unit={strengthUnitChoice === OTHER_OPTION ? watch("strengthUnitCustom") : strengthUnitChoice}
+            onIncrement={handleIncrementStrength}
+            onDecrement={handleDecrementStrength}
+            theme={theme}
+          />
+        )}
+
+        <ChoiceField
+          control={control}
+          choiceName="strengthUnitChoice"
+          customName="strengthUnitCustom"
+          choice={strengthUnitChoice}
+          label={t(LocalizedStrings.product.fields.unit)}
+          options={DOSAGE_UNITS.map((u) => ({ label: u, value: u }))}
+          customPlaceholder={t(LocalizedStrings.product.fields.customUnit)}
         />
+
+        {isCreate && (
+          <>
+            <ChoiceField
+              control={control}
+              choiceName="deliveryFormChoice"
+              customName="deliveryFormCustom"
+              choice={deliveryFormChoice}
+              label={t(LocalizedStrings.product.fields.deliveryForm)}
+              options={DELIVERY_FORMS.map((v) => ({
+                label: t(LocalizedStrings.product.forms[v]),
+                value: v,
+              }))}
+              customPlaceholder={t(LocalizedStrings.product.fields.customForm)}
+            />
+            <ChoiceField
+              control={control}
+              choiceName="targetMarketChoice"
+              customName="targetMarketCustom"
+              choice={targetMarketChoice}
+              label={t(LocalizedStrings.product.fields.targetMarket)}
+              options={TARGET_MARKETS.map((m) => ({ label: m, value: m }))}
+              customPlaceholder={t(LocalizedStrings.product.fields.customMarket)}
+            />
+            <Input
+              label={t(LocalizedStrings.product.fields.category)}
+              control={control}
+              name="category"
+              inputStyle={{ height: verticalScale(50) }}
+              rules={{ maxLength: 100 }}
+              placeholder={t(LocalizedStrings.product.fields.category)}
+            />
+            <Input
+              label={t(LocalizedStrings.product.fields.barcode)}
+              control={control}
+              name="barcodeGtin"
+              keyboardType="number-pad"
+              inputStyle={{ height: verticalScale(50) }}
+              rules={{
+                validate: (v) =>
+                  !String(v ?? "").trim() ||
+                  /^\d{8,14}$/.test(String(v).trim()) ||
+                  t(LocalizedStrings.product.fields.barcodeInvalid),
+              }}
+              placeholder="0123456789012"
+            />
+          </>
+        )}
 
         <Select
           control={control}
@@ -195,11 +424,11 @@ const AddProduct: React.FC<AddProductProps> = ({
           name="type"
           options={[
             {
-              label: t(LocalizedStrings.groups.private),
+              label: t(LocalizedStrings.product.visibility.private),
               value: "private",
             },
             {
-              label: t(LocalizedStrings.groups.public),
+              label: t(LocalizedStrings.product.visibility.public),
               value: "public",
             },
           ]}

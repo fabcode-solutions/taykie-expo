@@ -240,6 +240,7 @@
     "network": "Error de red. Comprueba tu conexión e inténtalo de nuevo.",
     "invalidCredentials": "Email o contraseña incorrectos. Inténtalo de nuevo.",
     "unknown": "Algo salió mal. Inténtalo de nuevo.",
+    "profanity": "Elimina el lenguaje inapropiado e inténtalo de nuevo.",
     "validation": {
       "required": "Este campo es obligatorio",
       "minLength": "Debe tener al menos {{count}} caracteres",
@@ -1137,7 +1138,41 @@
     "createProduct": "Crear producto",
     "deleteConfirmTitle": "Eliminar producto",
     "deleteConfirmMessage": "¿Seguro que quieres eliminar este producto? Esta acción no se puede deshacer.",
-    "deleteSuccess": "Producto eliminado correctamente"
+    "deleteSuccess": "Producto eliminado correctamente",
+    "reviewStatus": {
+      "pending": "Pendiente de revisión: por ahora solo tú puedes verlo",
+      "rejected": "No se añadió al catálogo compartido"
+    },
+    "visibility": {
+      "private": "Solo yo",
+      "public": "Compartir con todos (previa revisión)"
+    },
+    "fields": {
+      "brand": "Marca",
+      "activeIngredient": "Ingrediente activo",
+      "unit": "Unidad",
+      "deliveryForm": "Forma",
+      "targetMarket": "Mercado",
+      "category": "Categoría",
+      "barcode": "Código de barras (opcional)",
+      "other": "Otro (personalizado)",
+      "customUnit": "Introduce la unidad",
+      "customForm": "Introduce la forma",
+      "customMarket": "Introduce el mercado",
+      "customRequired": "Introduce un valor",
+      "strengthInvalid": "Introduce un número mayor que 0",
+      "barcodeInvalid": "El código de barras debe tener de 8 a 14 dígitos"
+    },
+    "forms": {
+      "capsule": "Cápsula",
+      "tablet": "Comprimido",
+      "softgel": "Cápsula blanda",
+      "gummy": "Gominola",
+      "powder": "Polvo",
+      "liquid": "Líquido",
+      "spray": "Spray",
+      "lozenge": "Pastilla"
+    }
   },
   "report": {
     "title": "Reportar",

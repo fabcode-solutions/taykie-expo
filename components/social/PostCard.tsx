@@ -28,6 +28,30 @@ import { router } from "expo-router";
 import { Button } from "../ui/button";
 import { useAuthStore } from "@/stores/authStore";
 import { usePostStore } from "@/stores/postStore";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import Reanimated, {
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withSequence,
+  withSpring,
+  withTiming,
+} from "react-native-reanimated";
+import * as Haptics from "expo-haptics";
+import { useNotificationStore } from "@/stores/notificationStore";
+import { getErrorMessage } from "@/stores/postStore";
+import { useAlert } from "@/provider/AlertProvider";
+import { AlertPresets } from "@/utils/alert";
+
+/** Taykie's own brand account (the one superadmin posts are published under). */
+const isOfficialAccount = (u?: { username?: string | null; firstName?: string; lastName?: string }) =>
+  u?.username?.toLowerCase() === "taykie" ||
+  (u?.firstName?.trim().toLowerCase() === "taykie" && !u?.lastName?.trim());
+
+// The following list is only fetched by the follow screen, so load it once for the feed.
+let followingRequested = false;
+
 export interface PostCardProps {
   post: CommunityPost;
   onApiLike?: (postId: string, isLiked: boolean, authorId?: string) => void;
@@ -56,6 +80,13 @@ export const PostCard = memo<PostCardProps>(
     const [menuVisible, setMenuVisible] = React.useState(false);
 
     const user = useAuthStore((s) => s.user);
+    const alert = useAlert();
+    const following = useAuthStore((s) => s.following);
+    const fetchFollowingList = useAuthStore((s) => s.fetchFollowingList);
+    const followUserId = useAuthStore((s) => s.followUserId);
+    const sendNotification = useNotificationStore((s) => s.sendNotification);
+    const [isFollowBusy, setIsFollowBusy] = useState(false);
+    const [justFollowed, setJustFollowed] = useState(false);
     const deletePostFromStore = usePostStore((s) => s.deletePost);
     const commentsDrawer = useBottomDrawer();
     const [selectedOptionId, setSelectedOptionId] = useState<string | null>(null);
@@ -76,6 +107,40 @@ export const PostCard = memo<PostCardProps>(
     };
 
     const isOwnPost = !!user?.id && user.id === post.userId;
+    const isOfficial = isOfficialAccount(post?.user);
+
+    useEffect(() => {
+      if (followingRequested || !user?.id) return;
+      followingRequested = true;
+      fetchFollowingList().catch(() => {
+        followingRequested = false;
+      });
+    }, [user?.id, fetchFollowingList]);
+
+    const isFollowingAuthor = justFollowed || (following ?? []).some((f) => f.id === post.userId);
+    const showFollow = !!user?.id && !!post?.userId && !isOwnPost && !isFollowingAuthor;
+
+    const handleFollow = useCallback(async () => {
+      if (isFollowBusy || !post?.userId) return;
+      setIsFollowBusy(true);
+      try {
+        await followUserId(post.userId);
+        setJustFollowed(true);
+        if (user?.id) {
+          sendNotification({
+            fromUserId: user.id,
+            toUserId: post.userId,
+            type: "Follow",
+            heading: t(LocalizedStrings.follow.new_follower),
+            context: t("follow.started_following", { user: user.firstName }),
+          }).catch(() => {});
+        }
+      } catch (error) {
+        alert.show(AlertPresets.error(t(LocalizedStrings.common.error), getErrorMessage(error)));
+      } finally {
+        setIsFollowBusy(false);
+      }
+    }, [isFollowBusy, post?.userId, followUserId, sendNotification, user?.id, user?.firstName, alert]);
 
     const MenuList = useMemo(
       () => [
@@ -161,6 +226,44 @@ export const PostCard = memo<PostCardProps>(
       onApiLike?.(post?.id, post?.isLiked ?? false, post?.userId);
     }, [post?.id, post?.isLiked, post?.userId, onApiLike]);
 
+    // Instagram-style double-tap: a big heart pops over the post, then fades out.
+    // Double-tapping never un-likes; it only likes a post that isn't liked yet.
+    const burstScale = useSharedValue(0);
+    const burstOpacity = useSharedValue(0);
+    const burstRotate = useSharedValue(0);
+
+    const likeFromDoubleTap = useCallback(() => {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+      if (!post?.isLiked) {
+        onApiLike?.(post?.id, false, post?.userId);
+      }
+    }, [post?.id, post?.isLiked, post?.userId, onApiLike]);
+
+    const doubleTapGesture = useMemo(
+      () =>
+        Gesture.Tap()
+          .numberOfTaps(2)
+          .maxDelay(250)
+          .onEnd((_e, success) => {
+            if (!success) return;
+            burstRotate.value = (Math.random() - 0.5) * 24;
+            burstScale.value = 0.2;
+            burstOpacity.value = 1;
+            burstScale.value = withSequence(
+              withSpring(1.15, { damping: 8, stiffness: 220 }),
+              withDelay(350, withTiming(1.4, { duration: 250 })),
+            );
+            burstOpacity.value = withDelay(450, withTiming(0, { duration: 250 }));
+            runOnJS(likeFromDoubleTap)();
+          }),
+      [burstOpacity, burstRotate, burstScale, likeFromDoubleTap],
+    );
+
+    const burstStyle = useAnimatedStyle(() => ({
+      opacity: burstOpacity.value,
+      transform: [{ scale: burstScale.value }, { rotate: `${burstRotate.value}deg` }],
+    }));
+
     const handleComment = useCallback(() => {
       onApiComment?.(post?.id);
       commentsDrawer.open();
@@ -225,26 +328,58 @@ export const PostCard = memo<PostCardProps>(
           </View>
 
           <View style={styles.authorInfo}>
-            <ThemeText style={styles.authorName}>
-              {post?.user?.firstName || t(LocalizedStrings.community.post.noName)}
-            </ThemeText>
+            <View style={styles.nameRow}>
+              <ThemeText style={[styles.authorName, styles.authorNameFlex]} numberOfLines={1}>
+                {post?.user?.firstName || t(LocalizedStrings.community.post.noName)}
+              </ThemeText>
+              {isOfficial && (
+                <Ionicons
+                  name="checkmark-circle"
+                  size={moderateScale(16)}
+                  color="#2D9CDB"
+                  style={styles.verifiedBadge}
+                  accessibilityLabel="Verified account"
+                />
+              )}
+            </View>
             <ThemeText style={styles.timestamp}>{getTimeAgo(post?.createdAt ?? "")}</ThemeText>
           </View>
         </TouchableOpacity>
 
-        <TouchableOpacity
-          onPress={handleMenuPress}
-          style={styles.menuButton}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          accessibilityRole="button"
-          accessibilityLabel={t(LocalizedStrings.community.post.moreOptions)}
-        >
-          <Ionicons
-            name="ellipsis-horizontal"
-            size={moderateScale(20)}
-            color={theme.colors.text.secondary}
-          />
-        </TouchableOpacity>
+        {showFollow && (
+          <TouchableOpacity
+            onPress={handleFollow}
+            disabled={isFollowBusy}
+            style={styles.followButton}
+            hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+            accessibilityRole="button"
+            accessibilityState={{ busy: isFollowBusy }}
+            accessibilityLabel={t(LocalizedStrings.follow.title)}
+          >
+            {isFollowBusy ? (
+              <ActivityIndicator size="small" color={theme.colors.white} />
+            ) : (
+              <ThemeText style={styles.followButtonText}>{t(LocalizedStrings.follow.title)}</ThemeText>
+            )}
+          </TouchableOpacity>
+        )}
+
+        {/* No report/delete menu on Taykie's official account. */}
+        {!isOfficial && (
+          <TouchableOpacity
+            onPress={handleMenuPress}
+            style={styles.menuButton}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            accessibilityRole="button"
+            accessibilityLabel={t(LocalizedStrings.community.post.moreOptions)}
+          >
+            <Ionicons
+              name="ellipsis-horizontal"
+              size={moderateScale(20)}
+              color={theme.colors.text.secondary}
+            />
+          </TouchableOpacity>
+        )}
       </View>
     );
 
@@ -317,16 +452,25 @@ export const PostCard = memo<PostCardProps>(
       <View style={styles.cardContainer}>
         <View style={styles.card}>
           {renderHeader()}
-          {/* Image for image posts */}
-          {post?.type === PostType.IMAGE && !!post?.image && (
-            <Image
-              source={{ uri: post?.image }}
-              style={styles.postImage}
-              resizeMode="cover"
-              accessibilityLabel={t(LocalizedStrings.community.post.postImage)}
-            />
-          )}
-          {renderContent()}
+          <GestureDetector gesture={doubleTapGesture}>
+            <View collapsable={false}>
+              {/* Image for image posts */}
+              {post?.type === PostType.IMAGE && !!post?.image && (
+                <Image
+                  source={{ uri: post?.image }}
+                  style={styles.postImage}
+                  resizeMode="cover"
+                  accessibilityLabel={t(LocalizedStrings.community.post.postImage)}
+                />
+              )}
+              {renderContent()}
+              <View style={styles.burstOverlay} pointerEvents="none">
+                <Reanimated.View style={burstStyle}>
+                  <Ionicons name="heart" size={moderateScale(90)} color="#FFFFFF" style={styles.burstHeart} />
+                </Reanimated.View>
+              </View>
+            </View>
+          </GestureDetector>
           {/* Poll section */}
           {(post?.type === PostType.POLL ||
             post?.type === PostType.ACTIVE ||
@@ -514,6 +658,21 @@ const UserEngagement = memo<UserEngagementProps>(
     const theme = useTheme();
     const styles = useMemo(() => createStyles(theme), [theme]);
 
+    // Pop the heart whenever it turns liked (tap or double-tap), not on first mount.
+    const heartScale = useSharedValue(1);
+    const wasLiked = React.useRef(isLiked);
+    useEffect(() => {
+      if (isLiked && !wasLiked.current) {
+        heartScale.value = withSequence(
+          withTiming(0.6, { duration: 80 }),
+          withSpring(1.35, { damping: 6, stiffness: 300 }),
+          withSpring(1, { damping: 10, stiffness: 200 }),
+        );
+      }
+      wasLiked.current = isLiked;
+    }, [isLiked, heartScale]);
+    const heartStyle = useAnimatedStyle(() => ({ transform: [{ scale: heartScale.value }] }));
+
     // Fixed: Added early return if count is null/undefined to prevent .toString() crash
     const formatCount = (count?: number | null): string => {
       if (count == null) return "0";
@@ -532,7 +691,9 @@ const UserEngagement = memo<UserEngagementProps>(
           accessibilityRole="button"
           accessibilityLabel={t(LocalizedStrings.accessibility.likes, { count: likes || 0 })}
         >
-          <IconHeart filled={isLiked} />
+          <Reanimated.View style={heartStyle}>
+            <IconHeart filled={isLiked} />
+          </Reanimated.View>
           <ThemeText style={[styles.engagementText, isLiked && { color: theme.colors.error.main }]}>
             {formatCount(likes)}
           </ThemeText>
@@ -609,11 +770,51 @@ const createStyles = (theme: Theme) =>
       color: theme.colors.text.secondary,
       lineHeight: verticalScale(16),
     },
+    nameRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      marginBottom: verticalScale(3),
+    },
+    authorNameFlex: {
+      flexShrink: 1,
+      marginBottom: 0,
+    },
+    verifiedBadge: {
+      marginLeft: scale(4),
+    },
+    followButton: {
+      minWidth: scale(64),
+      height: verticalScale(28),
+      paddingHorizontal: scale(12),
+      borderRadius: 999,
+      backgroundColor: theme.colors.slateCharcoal,
+      justifyContent: "center",
+      alignItems: "center",
+      marginRight: scale(8),
+      alignSelf: "center",
+    },
+    followButtonText: {
+      fontFamily: fontFamily.manrope.bold,
+      fontWeight: "700" as const,
+      fontSize: moderateScale(12),
+      color: theme.colors.white,
+    },
     menuButton: {
+      alignSelf: "center",
       aspectRatio: 1,
       height: verticalScale(20),
       justifyContent: "center",
       alignItems: "center",
+    },
+    burstOverlay: {
+      ...StyleSheet.absoluteFillObject,
+      justifyContent: "center",
+      alignItems: "center",
+    },
+    burstHeart: {
+      textShadowColor: "rgba(0,0,0,0.35)",
+      textShadowOffset: { width: 0, height: 2 },
+      textShadowRadius: 12,
     },
     postImage: {
       width: "100%",

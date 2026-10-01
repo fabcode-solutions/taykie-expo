@@ -2,6 +2,14 @@ import { API_BASE_URL, REQUEST_TIMEOUT_MS, DEFAULT_RETRY_COUNT } from "@/utils/c
 import { triggerUnauthorized } from "@/services/api/events";
 import { useAuthStore } from "@/stores/authStore";
 import { refreshTokenApi } from "./auth";
+import i18n from "@/i18n";
+import { LocalizedStrings } from "@/i18n/LocalizedStrings";
+
+// The server rejects text containing profanity with this code (see taykie-backend cleanLanguage).
+// Its message is English, so it is swapped for the user's language here — every screen that shows
+// an API error then gets the localised text without handling it individually.
+const isProfanityRejection = (data: any) => data?.errors?.errorCode === "PROFANITY_DETECTED";
+const profanityMessage = () => i18n.t(LocalizedStrings.errors.profanity);
 
 export type ApiError = {
   status: number;
@@ -97,7 +105,9 @@ export class ApiClient {
           const err: ApiError = {
             status: res.status,
             code: (data as any)?.code,
-            message: (data as any)?.message || `HTTP ${res.status}`,
+            message: isProfanityRejection(data)
+              ? profanityMessage()
+              : (data as any)?.message || `HTTP ${res.status}`,
             details: data,
           };
 
@@ -239,7 +249,7 @@ export class ApiClient {
 
       throw {
         status: res.status,
-        message: data?.message,
+        message: isProfanityRejection(data) ? profanityMessage() : data?.message,
         details: data,
       };
     }

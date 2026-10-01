@@ -56,6 +56,17 @@ function navigateToTarget(target: NotificationTarget, currentUserId?: string): b
 
 /** Tap on a row of the in-app notification list. Returns false when there is nowhere to go. */
 export function openNotification(notification: NotificationData, currentUserId?: string): boolean {
+  // Dosage / missed-dose reminders are also "System" rows with a resourceId, so they must be
+  // routed by their action *before* the tip check — otherwise the schedule id is opened as a tip.
+  const isScheduleReminder =
+    notification.action === "navigate_to_schedule" ||
+    notification.type === ("dosage_reminder" as string) ||
+    notification.type === ("missed_dose" as string);
+  if (isScheduleReminder && notification.resourceId) {
+    openSchedule(notification.resourceId);
+    return true;
+  }
+
   const tipId = getTipIdFromNotification(notification);
   if (tipId) {
     openTip(tipId);

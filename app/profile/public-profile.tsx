@@ -106,7 +106,7 @@ const ProfileDetails = memo(function ProfileDetails({
   const styles = useMemo(() => createStyles(theme), [theme]);
   const profileUser = profile.user;
   const fullName = `${profileUser?.firstName ?? ""} ${profileUser?.lastName ?? ""}`.trim();
-  const displayHandle = profileUser?.username ? `@${profileUser.username}` : profileUser?.email;
+  const displayHandle = profileUser?.username ? `@${profileUser.username}` : "";
   const joined = formatJoined((profileUser as { createdAt?: string })?.createdAt);
 
   return (
@@ -149,7 +149,7 @@ const ProfileDetails = memo(function ProfileDetails({
       </View>
       <View>
         <ThemeText style={styles.fullName}>{fullName}</ThemeText>
-        <ThemeText style={styles.handle}>{displayHandle}</ThemeText>
+        {displayHandle && <ThemeText style={styles.handle}>{displayHandle}</ThemeText>}
       </View>
 
       {/* `!!`: an empty string with `&&` renders a bare string inside a View, which is a
