@@ -18,6 +18,7 @@ import IconSearch from "@/components/icons/IconSearch";
 import Svg, { Path } from "react-native-svg";
 import PostCard from "@/components/social/PostCard";
 import { usePostStore } from "@/stores/postStore";
+import { usePostLike } from "@/hooks/usePostLike";
 import { moderateScale, scale, verticalScale } from "@/utils/scale";
 import { PostCardSkeleton } from "@/components/social/PostCardSkeleton";
 import { LocalizedStrings } from "@/i18n/LocalizedStrings";
@@ -141,9 +142,7 @@ export default function BookmarkedScreen() {
   }, [router]);
 
   // API Handlers
-  const handleApiLike = useCallback((postId: string, isLiked: boolean) => {
-    console.log(`API: ${isLiked ? "Like" : "Unlike"} post:`, postId);
-  }, []);
+  const handleApiLike = usePostLike();
 
   const handleApiComment = useCallback(
     async (postId: string) => {

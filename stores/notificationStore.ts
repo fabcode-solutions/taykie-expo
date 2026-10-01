@@ -329,6 +329,14 @@ export const useNotificationStore = create<State & Actions>()(
     {
       name: "notification-store",
       storage: mmkvJSONStateStorage,
+      // The list is paginated and refetched on every screen mount, so it is not
+      // persisted: serializing thousands of rows to MMKV on each store update
+      // would stall the JS thread (and fill storage) for no benefit.
+      partialize: (state) => ({
+        fcmToken: state.fcmToken,
+        notificationSettings: state.notificationSettings,
+        unreadCount: state.unreadCount,
+      }),
     },
   ),
 );

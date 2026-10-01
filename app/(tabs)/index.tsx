@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  AppState,
   Image,
   RefreshControl,
   ScrollView,
@@ -10,6 +11,8 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { format } from "date-fns";
+import { router, useLocalSearchParams } from "expo-router";
+import { getTodaySchedules } from "@/hooks/queries/schedule";
 import { SafeAreaScreen, ThemeStatusBar, ThemeText, ThemeView } from "@/components";
 import { fontFamily, useTheme } from "@/theme";
 import type { Theme } from "@/theme";
@@ -36,8 +39,14 @@ import { useNotificationStore } from "@/stores/notificationStore";
 import { AlertPresets } from "@/utils/alert";
 import { useAlert } from "@/provider/AlertProvider";
 import TipsRow from "@/components/tips/TipsRow";
+import RegistrationNudge from "@/components/device/RegistrationNudge";
+import UpcomingReminderTitle from "@/components/schedule/UpcomingReminderTitle";
 
 type SegmentKey = "morning" | "afternoon" | "evening" | "night";
+
+/** The period of the day the phone's clock is in right now. */
+const getCurrentSegment = (): SegmentKey =>
+  getTimeOfDay(`${new Date().getHours()}:00`) as SegmentKey;
 
 export type Task = {
   id: string;
@@ -63,7 +72,30 @@ export default function HomeScreen() {
   const [task, setTask] = useState<Schedule | null>(null);
   const [searchVisible, setSearchVisible] = useState(false);
   const [logVisible, setLogVisible] = useState(false);
-  const [activeSegment, setActiveSegment] = React.useState<SegmentKey>("morning");
+  // Opens on the period matching the phone's current time (morning < 12:00 ≤ afternoon
+  // < 17:00 ≤ evening < 20:00 ≤ night — same boundaries as getTimeOfDay elsewhere).
+  const [activeSegment, setActiveSegment] = React.useState<SegmentKey>(getCurrentSegment);
+  // Last period we switched to automatically. When the clock crosses into a new period
+  // (app left open, or reopened from the background later) we follow it — but a tab the
+  // user picked themselves is left alone until the period actually changes.
+  const autoSegmentRef = React.useRef<SegmentKey>(activeSegment);
+  useEffect(() => {
+    const syncToCurrentPeriod = () => {
+      const current = getCurrentSegment();
+      if (current !== autoSegmentRef.current) {
+        autoSegmentRef.current = current;
+        setActiveSegment(current);
+      }
+    };
+    const interval = setInterval(syncToCurrentPeriod, 60 * 1000);
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") syncToCurrentPeriod();
+    });
+    return () => {
+      clearInterval(interval);
+      subscription.remove();
+    };
+  }, []);
   const themedStyles = React.useMemo(() => createStyles(theme), [theme]);
   const { fetchPublicProducts } = useProductStore();
   const {
@@ -79,6 +111,10 @@ export default function HomeScreen() {
   const { fetchNotifications } = useNotificationStore();
 
   const { userStreak } = useAuthStore();
+
+  const handleSelectSegment = useCallback((key: string | string[]) => {
+    setActiveSegment(key as SegmentKey);
+  }, []);
 
   const segments = React.useMemo(
     () =>
@@ -133,6 +169,43 @@ export default function HomeScreen() {
     setTask(null);
   }, []);
 
+  // Opened from a notification (see utils/notificationNavigation): show that
+  // schedule's MedicineTaken modal. The schedule may belong to another period
+  // than the one selected, so look for its period first and switch to it.
+  const { scheduleId: notificationScheduleId } = useLocalSearchParams<{ scheduleId?: string }>();
+  useEffect(() => {
+    if (!notificationScheduleId) return;
+    const isTarget = (s: Schedule) => (s.scheduleId ?? s.id) === notificationScheduleId;
+    const match = todaySchedules?.find(isTarget);
+    if (match) {
+      setTask(match);
+      router.setParams({ scheduleId: undefined });
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      for (const segment of Object.keys(SEGMENT_DEFAULTS) as SegmentKey[]) {
+        try {
+          const res = await getTodaySchedules(segment);
+          if (cancelled) return;
+          if ((res.data as unknown as Schedule[]).some(isTarget)) {
+            if (segment !== activeSegment) setActiveSegment(segment);
+            return;
+          }
+        } catch {
+          // try the next period
+        }
+      }
+      // Not scheduled today (e.g. an old reminder): nothing to open.
+      if (!cancelled) router.setParams({ scheduleId: undefined });
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notificationScheduleId, todaySchedules]);
+
   // Full refresh, incl. today's schedules — used after editing a schedule
   // (onEditComplete below), where the edit may move it in/out of the active
   // segment. NOT used for the mount effect further down: that would fetch
@@ -184,6 +257,11 @@ export default function HomeScreen() {
     // are handled entirely by the fetchTodaySchedules effect further up.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Countdown hit zero: move on to the next upcoming dose (errors are non-fatal here).
+  const refreshUpcomingReminder = useCallback(() => {
+    fetchUpcomingReminder().catch(() => {});
+  }, [fetchUpcomingReminder]);
 
   const handleMarkMedicineAsTaken = useCallback(async () => {
     try {
@@ -259,6 +337,11 @@ export default function HomeScreen() {
         // }
       >
         <AppHeader showGreeting />
+        {/* "Register your Taykie" reminder (48h after skipping, max twice). Stable wrapper:
+            the nudge itself mounts/unmounts. */}
+        <View>
+          <RegistrationNudge />
+        </View>
         <ThemeView style={themedStyles.card} backgroundColor={theme.colors.white}>
           <View style={themedStyles.cardHeader}>
             <ThemeText
@@ -272,7 +355,12 @@ export default function HomeScreen() {
               {todayLabel}
             </ThemeText>
           </View>
-          <Tabs onSelect={(e) => setActiveSegment(e as SegmentKey)} segments={segments} />
+          <Tabs
+            onSelect={handleSelectSegment}
+            segments={segments}
+            initialKey={activeSegment}
+            selectedKey={activeSegment}
+          />
 
           {isLoading && todayTaskItems.length === 0 ? (
             // Cold load only (first mount, or a segment switch that left no
@@ -304,9 +392,13 @@ export default function HomeScreen() {
           <View style={!hasUpcomingReminder && themedStyles.hiddenSection}>
             {hasUpcomingReminder && (
               <>
-                <ThemeText variant="manrope.body1Bold" style={themedStyles.reminderTitle}>
-                  {`${t(LocalizedStrings.common.take)} ${upcomingReminder?.name} ${t(LocalizedStrings.common.in)} ${upcomingReminder?.countdownLabel} `}
-                </ThemeText>
+                {upcomingReminder && (
+                  <UpcomingReminderTitle
+                    reminder={upcomingReminder}
+                    style={themedStyles.reminderTitle}
+                    onElapsed={refreshUpcomingReminder}
+                  />
+                )}
                 <View style={themedStyles.reminderDivider} />
                 <View style={themedStyles.reminderActions}>
                   <TouchableOpacity

@@ -11,7 +11,8 @@ import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBannerStore } from "@/stores/bannerStore";
 import { useBLEStore } from "@/stores/bleStore";
-import { router } from "expo-router";
+import { openPushNotification } from "@/utils/notificationNavigation";
+import { useAuthStore } from "@/stores/authStore";
 import { moderateScale, scale, verticalScale } from "@/utils/scale";
 import { useTranslation } from "react-i18next";
 import { LocalizedStrings } from "@/i18n/LocalizedStrings";
@@ -86,23 +87,7 @@ export function InAppBanner() {
     const data = message?.data;
     console.log("🔔 Custom Banner Clicked:", data);
 
-    // Your existing routing logic
-    switch (data?.type) {
-      case "Like":
-        router.navigate("/(tabs)/community");
-        break;
-      case "Comment":
-        router.push({
-          pathname: "/(tabs)/community",
-          params: { commentId: "Following" }, // Adjust based on your data
-        });
-        break;
-      case "Follow":
-        router.navigate("/profile/follow");
-        break;
-      default:
-        break;
-    }
+    openPushNotification(data as Record<string, unknown> | undefined, useAuthStore.getState().user?.id);
   };
 
   // Swipe up to dismiss, matching the system notification banner gesture.

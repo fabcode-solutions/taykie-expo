@@ -34,9 +34,19 @@ import { t } from "i18next";
 import { LocalizedStrings } from "@/i18n/LocalizedStrings";
 
 type State = {
+  // The community feed. Profile screens must NOT write here — they used to (feed=mine),
+  // which replaced everyone's posts with the user's own when going back to Community.
   userPosts: CommunityPost[];
+  // The signed-in user's own posts (profile + "my posts" list), with their own paging.
+  myPosts: CommunityPost[];
+  myPostsPage: number;
+  myPostsHasMore: boolean;
   post: CommunityPost | null;
   postComments: CommentResponse[];
+  // Comment pagination (20 per page): only the loaded pages live in memory/the list.
+  commentsPage: number;
+  hasMoreComments: boolean;
+  isLoadingMoreComments: boolean;
   bookmarkedPost: CommunityPost[];
   // Feed-level loads only (fetchUserPosts/searchUserPosts) — community.tsx
   // shows a full-screen loader on this, so per-post actions (like, bookmark,
@@ -62,6 +72,7 @@ type Actions = {
     isRefresh?: boolean,
     silent?: boolean,
   ) => Promise<void>;
+  fetchMyPosts: (isRefresh?: boolean) => Promise<void>;
   fetchBookmarkedPosts: (isRefresh?: boolean) => Promise<void>;
   fetchPostById: (postId: string) => Promise<void>;
   deletePost: (scheduleId: string) => Promise<void>;
@@ -71,6 +82,7 @@ type Actions = {
   bookmarkPost: (postId: string) => Promise<void>;
   unBookmarkPost: (postId: string) => Promise<void>;
   fetchPostComments: (postId: string) => Promise<void>;
+  fetchMoreComments: (postId: string) => Promise<void>;
   addCommentToPost: (postId: string, content: string) => Promise<void>;
   removeCommentFromPost: (postId: string, commentId: string) => Promise<void>;
   voteOnPollPost: (postId: string, optionId: string) => Promise<void>;
@@ -96,8 +108,14 @@ type Actions = {
 
 const initialState: State = {
   userPosts: [],
+  myPosts: [],
+  myPostsPage: 1,
+  myPostsHasMore: true,
   bookmarkedPost: [],
   postComments: [],
+  commentsPage: 1,
+  hasMoreComments: false,
+  isLoadingMoreComments: false,
   post: null,
   isLoading: false,
   isLoadingComments: false,
@@ -121,6 +139,18 @@ export const getErrorMessage = (
   );
 };
 // API base URL now handled by the shared api client + endpoints
+
+// A post can be on screen in the feed, the profile, someone else's profile and the
+// bookmarks at once, so engagement changes (like) are applied to every list.
+const patchPostLists = (
+  state: State,
+  patch: (p: CommunityPost) => CommunityPost,
+): Pick<State, "userPosts" | "myPosts" | "otherUserPosts" | "bookmarkedPost"> => ({
+  userPosts: state.userPosts.map(patch),
+  myPosts: state.myPosts.map(patch),
+  otherUserPosts: state.otherUserPosts.map(patch),
+  bookmarkedPost: state.bookmarkedPost.map(patch),
+});
 
 export const usePostStore = create<State & Actions>()((set, get) => ({
   ...initialState,
@@ -194,6 +224,37 @@ export const usePostStore = create<State & Actions>()((set, get) => ({
       throw Error(errorMessage);
     }
   },
+  fetchMyPosts: async (isRefresh = true) => {
+    const { myPostsPage, myPostsHasMore, isLoading } = get();
+
+    if (isLoading || (!isRefresh && !myPostsHasMore)) return;
+
+    set({ error: null, isLoading: true });
+
+    try {
+      const pageToFetch = isRefresh ? 1 : myPostsPage + 1;
+      const response = await getUserPosts("mine", pageToFetch);
+      const newPosts = (response?.data ?? []).filter((post: CommunityPost) => post?.id);
+
+      set((state) => {
+        const combined = isRefresh ? newPosts : [...state.myPosts, ...newPosts];
+        const uniqueMap = new Map<string, CommunityPost>();
+        combined.forEach((post: CommunityPost) => uniqueMap.set(post.id, post));
+        const finalPosts = Array.from(uniqueMap.values());
+
+        return {
+          myPosts: finalPosts,
+          myPostsPage: pageToFetch,
+          myPostsHasMore: finalPosts.length < (response?.meta?.total ?? 0),
+          isLoading: false,
+        };
+      });
+    } catch (error) {
+      const errorMessage = getErrorMessage(error);
+      set({ isLoading: false, error: errorMessage });
+      throw Error(errorMessage);
+    }
+  },
   fetchBookmarkedPosts: async (isRefresh = true) => {
     const { currentPage, hasMore, isLoading } = get();
 
@@ -249,19 +310,21 @@ export const usePostStore = create<State & Actions>()((set, get) => ({
   },
 
   deletePost: async (postId) => {
-    set({ isLoading: true, error: null });
+    // No feed-level isLoading (it blanks the whole screen). The post is dropped from every
+    // loaded list once the server confirms, so profile/bookmarks/feed all update at once.
+    set({ error: null });
     try {
       await deletePost(postId);
-      await get().fetchUserPosts();
-      set({ isLoading: false });
+      const without = (p: CommunityPost) => p.id !== postId;
+      set((state) => ({
+        userPosts: state.userPosts.filter(without),
+        myPosts: state.myPosts.filter(without),
+        otherUserPosts: state.otherUserPosts.filter(without),
+        bookmarkedPost: state.bookmarkedPost.filter(without),
+      }));
     } catch (error) {
       const message = getErrorMessage(error, t(LocalizedStrings.errors.api.deletePost));
-
-      set({
-        isLoading: false,
-        error: message,
-      });
-
+      set({ error: message });
       throw new Error(message);
     }
   },
@@ -290,22 +353,18 @@ export const usePostStore = create<State & Actions>()((set, get) => ({
   // failure instead of waiting for the response to update anything.
   likePost: async (postId) => {
     set({ error: null });
-    set((state) => ({
-      userPosts: state.userPosts.map((p) =>
+    set((state) => patchPostLists(state, (p) =>
         p.id === postId ? { ...p, isLiked: true, likesCount: (p.likesCount || 0) + 1 } : p,
-      ),
-    }));
+      ));
 
     try {
       await likePostById(postId);
     } catch (error) {
-      set((state) => ({
-        userPosts: state.userPosts.map((p) =>
+      set((state) => patchPostLists(state, (p) =>
           p.id === postId
             ? { ...p, isLiked: false, likesCount: Math.max(0, (p.likesCount || 1) - 1) }
             : p,
-        ),
-      }));
+        ));
 
       const message = getErrorMessage(error, t(LocalizedStrings.errors.api.likePost));
       set({ error: message });
@@ -314,22 +373,18 @@ export const usePostStore = create<State & Actions>()((set, get) => ({
   },
   unLikePost: async (postId) => {
     set({ error: null });
-    set((state) => ({
-      userPosts: state.userPosts.map((p) =>
+    set((state) => patchPostLists(state, (p) =>
         p.id === postId
           ? { ...p, isLiked: false, likesCount: Math.max(0, (p.likesCount || 1) - 1) }
           : p,
-      ),
-    }));
+      ));
 
     try {
       await unlikePostById(postId);
     } catch (error) {
-      set((state) => ({
-        userPosts: state.userPosts.map((p) =>
+      set((state) => patchPostLists(state, (p) =>
           p.id === postId ? { ...p, isLiked: true, likesCount: (p.likesCount || 0) + 1 } : p,
-        ),
-      }));
+        ));
 
       const message = getErrorMessage(error, t(LocalizedStrings.errors.api.unlikePost));
       set({ error: message });
@@ -339,18 +394,16 @@ export const usePostStore = create<State & Actions>()((set, get) => ({
 
   bookmarkPost: async (postId) => {
     set({ error: null });
-    set((state) => ({
-      userPosts: state.userPosts.map((p) => (p.id === postId ? { ...p, isBookmarked: true } : p)),
-    }));
+    set((state) =>
+      patchPostLists(state, (p) => (p.id === postId ? { ...p, isBookmarked: true } : p)),
+    );
 
     try {
       await bookmarkById(postId);
     } catch (error) {
-      set((state) => ({
-        userPosts: state.userPosts.map((p) =>
-          p.id === postId ? { ...p, isBookmarked: false } : p,
-        ),
-      }));
+      set((state) =>
+        patchPostLists(state, (p) => (p.id === postId ? { ...p, isBookmarked: false } : p)),
+      );
 
       const message = getErrorMessage(error, t(LocalizedStrings.errors.api.bookmarkPost));
       set({ error: message });
@@ -359,9 +412,9 @@ export const usePostStore = create<State & Actions>()((set, get) => ({
   },
   unBookmarkPost: async (postId) => {
     set({ error: null });
-    set((state) => ({
-      userPosts: state.userPosts.map((p) => (p.id === postId ? { ...p, isBookmarked: false } : p)),
-    }));
+    set((state) =>
+      patchPostLists(state, (p) => (p.id === postId ? { ...p, isBookmarked: false } : p)),
+    );
 
     try {
       await unBookmarkById(postId);
@@ -381,7 +434,13 @@ export const usePostStore = create<State & Actions>()((set, get) => ({
     set({ isLoadingComments: true, error: null });
     try {
       const result = await getComments(postId);
-      set({ isLoadingComments: false, postComments: result.data });
+      const comments: CommentResponse[] = result.data ?? [];
+      set({
+        isLoadingComments: false,
+        postComments: comments,
+        commentsPage: 1,
+        hasMoreComments: comments.length < (result.meta?.total ?? 0),
+      });
     } catch (error) {
       const message = getErrorMessage(error, t(LocalizedStrings.errors.api.fetchPostComments));
       set({
@@ -390,6 +449,31 @@ export const usePostStore = create<State & Actions>()((set, get) => ({
       });
 
       throw new Error(message);
+    }
+  },
+  fetchMoreComments: async (postId) => {
+    const { commentsPage, hasMoreComments, isLoadingMoreComments, isLoadingComments } = get();
+    if (!hasMoreComments || isLoadingMoreComments || isLoadingComments) return;
+
+    set({ isLoadingMoreComments: true });
+    try {
+      const nextPage = commentsPage + 1;
+      const result = await getComments(postId, nextPage);
+      const incoming: CommentResponse[] = result.data ?? [];
+      set((state) => {
+        // De-dupe: a comment added meanwhile shifts the pages by one.
+        const seen = new Set(state.postComments.map((c) => c.id));
+        const merged = [...state.postComments, ...incoming.filter((c) => !seen.has(c.id))];
+        return {
+          postComments: merged,
+          commentsPage: nextPage,
+          hasMoreComments: incoming.length > 0 && merged.length < (result.meta?.total ?? 0),
+          isLoadingMoreComments: false,
+        };
+      });
+    } catch (error) {
+      set({ isLoadingMoreComments: false });
+      throw new Error(getErrorMessage(error, t(LocalizedStrings.errors.api.fetchPostComments)));
     }
   },
   addCommentToPost: async (postId, content) => {
@@ -413,6 +497,12 @@ export const usePostStore = create<State & Actions>()((set, get) => ({
     set({ isLoadingComments: true, error: null });
     try {
       await deleteComment(commentId);
+      // Drop it locally right away (as a comment or as a reply), then resync the list
+      // and the feed's comment counts.
+      set((state) => ({
+        postComments: state.postComments.filter((c) => c.id !== commentId),
+        postReplies: state.postReplies.filter((c) => c.id !== commentId),
+      }));
       await get().fetchPostComments(postId);
       await get().fetchUserPosts(undefined, true, true);
       set({ isLoadingComments: false });
@@ -579,6 +669,7 @@ export const usePostStore = create<State & Actions>()((set, get) => ({
 
     set((state) => ({
       userPosts: state.userPosts.map(patchPost),
+      myPosts: state.myPosts.map(patchPost),
       otherUserPosts: state.otherUserPosts.map(patchPost),
       bookmarkedPost: state.bookmarkedPost.map(patchPost),
       post: state.post ? patchPost(state.post) : state.post,

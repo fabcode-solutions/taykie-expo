@@ -19,8 +19,8 @@ import { AlertPresets } from "@/utils/alert";
 import { useAlert } from "@/provider/AlertProvider";
 import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import { Ionicons } from "@expo/vector-icons";
-import { getTipIdFromNotification } from "@/services/api/tips";
-import { openTip } from "@/components/tips/TipsRow";
+import { openNotification } from "@/utils/notificationNavigation";
+import { useAuthStore } from "@/stores/authStore";
 
 type PostType = "All" | "Follow" | "Like" | "Comment" | "System";
 
@@ -80,6 +80,7 @@ export default function NotificationScreen() {
   const isFetchingNextPage = useNotificationStore((s) => s.isFetchingNextPage);
   const hasMore = useNotificationStore((s) => s.hasMore);
   const deleteNotification = useNotificationStore((s) => s.deleteNotification);
+  const currentUserId = useAuthStore((s) => s.user?.id);
 
   // The store's isLoading is shared with sendNotification / registerFCMToken / settings
   // calls, so the list's own loading states are tracked locally: skeletons for the
@@ -139,16 +140,15 @@ export default function NotificationScreen() {
 
   const markNotificationAsRead = useCallback(
     async (notification: NotificationData) => {
-      // "New tip" notifications open the tip; everything else just marks read.
-      const tipId = getTipIdFromNotification(notification);
-      if (tipId) openTip(tipId);
+      openNotification(notification, currentUserId);
+      if (notification.isRead) return;
       try {
         await markAsRead(notification.id);
       } catch (error) {
         alert.show(AlertPresets.error(t(LocalizedStrings.common.error), getErrorMessage(error)));
       }
     },
-    [markAsRead, alert],
+    [markAsRead, alert, currentUserId],
   );
 
   const handleDeleteNotification = useCallback(
@@ -257,6 +257,12 @@ export default function NotificationScreen() {
         contentContainerStyle={styles.listContent}
         onEndReached={handleLoadMore}
         onEndReachedThreshold={0.5}
+        // Windowed rendering: with thousands of loaded rows only the ones near the
+        // viewport stay mounted. Rows are fetched 10 at a time (see fetchNotifications).
+        initialNumToRender={10}
+        maxToRenderPerBatch={10}
+        windowSize={7}
+        removeClippedSubviews
         refreshControl={refreshControl}
         ListFooterComponent={footerElement}
         ListEmptyComponent={emptyElement}

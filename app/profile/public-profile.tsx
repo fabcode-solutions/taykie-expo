@@ -20,6 +20,7 @@ import { useAlert } from "@/provider/AlertProvider";
 import { AlertPresets } from "@/utils/alert";
 import { useNotificationStore } from "@/stores/notificationStore";
 import { NotificationRequest } from "@/services/api/notification";
+import { usePostLike } from "@/hooks/usePostLike";
 import { usePostStore } from "@/stores/postStore";
 import EmptyView from "@/components/ui/empty-view";
 import PostCard from "@/components/social/PostCard";
@@ -341,11 +342,18 @@ const PublicProfileScreen = () => {
     [fetchPostComments, alert],
   );
 
+  const handleApiLike = usePostLike();
+
   const renderPostItem = useCallback(
     ({ item }: { item: CommunityPost }) => (
-      <PostCard post={item} onAuthorPress={handleAuthorPress} onApiComment={handleApiComment} />
+      <PostCard
+        post={item}
+        onAuthorPress={handleAuthorPress}
+        onApiComment={handleApiComment}
+        onApiLike={handleApiLike}
+      />
     ),
-    [handleAuthorPress, handleApiComment],
+    [handleAuthorPress, handleApiComment, handleApiLike],
   );
 
   const handleLoadMore = useCallback(async () => {

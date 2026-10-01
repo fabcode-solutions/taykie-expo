@@ -3,7 +3,7 @@ import "../global.css";
 import { DefaultTheme, ThemeProvider as ThemeProviderNative } from "@react-navigation/native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { useFonts } from "expo-font";
-import { router, Stack } from "expo-router";
+import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect, useRef } from "react";
 import "react-native-reanimated";
@@ -26,11 +26,9 @@ import messaging from "@react-native-firebase/messaging";
 import * as Notifications from "expo-notifications";
 import {
   isNotificationSoundEnabled,
-  NotificationType,
   useNotificationStore,
 } from "@/stores/notificationStore";
 import { InAppBanner } from "@/components/inAppBanner";
-import { openTip } from "@/components/tips/TipsRow";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { LidOpenPrompt } from "@/components/LidOpenPrompt";
 import { AppLockGate } from "@/components/AppLockGate";
@@ -41,7 +39,9 @@ import {
   triggerDeviceSoundForReminder,
 } from "@/utils/reminderSound";
 import { useBLEStore } from "@/stores/bleStore";
+import { useAuthStore } from "@/stores/authStore";
 import { AppState, Platform } from "react-native";
+import { openPushNotification } from "@/utils/notificationNavigation";
 import { handleLidOpenResponse, registerLidOpenCategory } from "@/services/notifications.service";
 
 Notifications.setNotificationHandler({
@@ -167,7 +167,12 @@ function RootLayoutNav() {
   // catches it, e.g. after landing with auto-timezone on). No-ops when the
   // zone hasn't actually changed or nothing is connected.
   useEffect(() => {
-    const resync = () => useBLEStore.getState().resyncTimezoneIfChanged();
+    const resync = () => {
+      useBLEStore.getState().resyncTimezoneIfChanged();
+      // Same trigger for the account's saved zone (server reminders / "today"), so a
+      // traveller's reminders follow the phone, not the zone they signed up in.
+      void useAuthStore.getState().syncDeviceTimezone();
+    };
     resync(); // covers the app already being foregrounded when this mounts
 
     const subscription = AppState.addEventListener("change", (state) => {
@@ -245,36 +250,9 @@ function RootLayoutNav() {
     return () => clearTimeout(timer);
   }, []);
 
-  // `data` is the push data payload: { type, ... } — e.g. { type: "Tip", tipId } for a
-  // new-tip push (backend tipService.notifyTipPublished).
+  // `data` is the push data payload — see openPushNotification for the shapes.
   const handleNotificationNavigation = (data?: Record<string, unknown> | null) => {
-    const notificationType = data?.type as NotificationType | "Tip" | undefined;
-    switch (notificationType) {
-      case "Tip":
-        if (typeof data?.tipId === "string" && data.tipId) {
-          openTip(data.tipId);
-        }
-        break;
-      case "Like":
-        router.navigate("/(tabs)/community");
-        // Navigate to chat screen with remoteMessage.data.conversationId
-        break;
-      case "Comment":
-        router.push({
-          pathname: "/(tabs)/community",
-          params: {
-            commentId: "Following",
-          },
-        });
-        // Navigate to notifications screen
-        break;
-      case "Follow":
-        router.navigate("/profile/follow");
-        break;
-      case "System":
-      case "Group":
-        break;
-    }
+    openPushNotification(data, useAuthStore.getState().user?.id);
   };
   const rootStack = (
     <Stack {...STACK_CONFIG}>

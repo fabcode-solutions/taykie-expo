@@ -60,9 +60,6 @@ const createStyles = (theme: Theme) =>
       paddingBottom: verticalScale(32),
       flexDirection: "row",
       gap: scale(16),
-      boxShadow: "0px 2px 12px rgba(0, 0, 0, 0.01)",
-      elevation: 12,
-      ...theme.shadows[2],
     },
     dot: {
       backgroundColor: theme.colors.taupe,

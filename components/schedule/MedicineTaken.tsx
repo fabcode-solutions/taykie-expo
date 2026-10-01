@@ -10,6 +10,7 @@ import { useScheduleStore } from "@/stores/scheduleStore";
 import { getErrorMessage } from "@/stores/postStore";
 import BlurModal from "../ui/Modal";
 import AddProduct from "./AddProduct";
+import AddProductLogModal from "../medication/AddProductLog";
 import ScheduleComponent from "./Schedule";
 import { Medication } from "@/types/products.types";
 import { CreateScheduleRequest, Schedule } from "@/types/schedule.types";
@@ -39,6 +40,7 @@ const MedicineTaken = ({ task, onClose, onEditComplete }: MedicineTakenProp) => 
   const [addProductVisible, setAddProductVisible] = useState(false);
   const [routineVisible, setRoutineVisible] = useState(false);
   const [info, setInfo] = useState(false);
+  const [logVisible, setLogVisible] = useState(false);
 
   const [medication, setMedication] = useState<Medication>();
 
@@ -274,6 +276,10 @@ const MedicineTaken = ({ task, onClose, onEditComplete }: MedicineTakenProp) => 
               onPress={() => setAddProductVisible(true)}
             />
             <Button btnText={t(LocalizedStrings.common.editTime)} onPress={handleEditTime} />
+            <Button
+              btnText={t(LocalizedStrings.home.reminder.log)}
+              onPress={() => setLogVisible(true)}
+            />
           </View>
         </Animated.View>
       )}
@@ -311,6 +317,13 @@ const MedicineTaken = ({ task, onClose, onEditComplete }: MedicineTakenProp) => 
       )}
 
       {openDelete && <DeleteSchedule onClose={handleDeleteClose} onYes={handleDeleteSchedule} />}
+
+      <AddProductLogModal
+        scheduleId={resolvedTaskId}
+        productName={task.name}
+        visible={logVisible}
+        onClose={() => setLogVisible(false)}
+      />
 
       <BlurModal
         heading={t(LocalizedStrings.home.extras.updateProduct)}
@@ -358,6 +371,9 @@ const createStyles = (theme: Theme) =>
       marginTop: verticalScale(28),
     },
 
+    logBtnStyle: {
+      marginTop: verticalScale(20),
+    },
     headerBtnStyle: {
       aspectRatio: 1,
       height: verticalScale(40),
