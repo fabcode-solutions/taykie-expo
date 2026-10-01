@@ -174,7 +174,7 @@ const ProductList = () => {
           accessibilityRole="button"
           accessibilityLabel={t(LocalizedStrings.product.addProduct)}
         >
-          <Ionicons name="add" size={moderateScale(20)} color={theme.colors.white} />
+          <Ionicons name="add" size={moderateScale(20)} color={theme.colors.black} />
         </TouchableOpacity>
       </View>
 

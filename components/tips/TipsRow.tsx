@@ -1,5 +1,13 @@
 import React, { memo, useCallback, useMemo } from "react";
-import { FlatList, Image, Pressable, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import {
+  Image,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { router, type Href } from "expo-router";
 import { useTranslation } from "react-i18next";
 import { Ionicons } from "@expo/vector-icons";
@@ -13,8 +21,6 @@ import { cycleWindow } from "@/utils/cycleWindow";
 
 const MAX_TIPS = 10;
 const SKELETON_COUNT = 2;
-
-const keyExtractor = (item: Tip) => item.id;
 
 /** Opens the "all tips" screen (app/tips/index.tsx). */
 export const openAllTips = () => router.push("/tips" as Href);
@@ -98,6 +104,16 @@ interface TipsRowProps {
  * is skipped for an explicit opt-out, and the backend returns an empty list for
  * anyone not opted in — in both cases this renders nothing, so it never leaves an
  * empty box behind.
+ *
+ * STRUCTURE IS DELIBERATELY STABLE. This used to `return null` until tips arrived and
+ * swap a skeleton View for a horizontal FlatList — both change the parent's Yoga
+ * children at the exact commit the response lands, which is the Fabric/Yoga
+ * "ABA ownership" crash (YGNodeGetOwner(childYogaNode) == &yogaNode_, RN 0.79,
+ * facebook/react-native#52349) that killed the Home screen ~1.5s after launch. So the
+ * container, header and scroller are always mounted; "nothing to show" just collapses
+ * the container to height 0, and only the scroller's *children* change. A plain
+ * horizontal ScrollView (≤ MAX_TIPS cards) replaces the FlatList, so no cards are
+ * mounted/unmounted by windowing while scrolling either.
  */
 function TipsRow({ horizontalInset, slot = 0, count = MAX_TIPS }: TipsRowProps) {
   const theme = useTheme();
@@ -110,19 +126,18 @@ function TipsRow({ horizontalInset, slot = 0, count = MAX_TIPS }: TipsRowProps) 
   // One shared query for every TipsRow on screen (same key) — react-query dedupes it.
   const tips = useMemo(() => cycleWindow(data?.tips ?? [], slot, count), [data?.tips, slot, count]);
 
-  const renderItem = useCallback(
-    ({ item }: { item: Tip }) => (
-      <TipCard tip={item} styles={styles} iconColor={theme.colors.slateCharcoal} onOpen={openTip} />
-    ),
-    [styles, theme.colors.slateCharcoal],
-  );
-
   // First load (nothing cached yet): skeleton cards.
   const showSkeleton = isLoading && isFetching;
-  if (!showSkeleton && tips.length === 0) return null;
+  // Nothing to show (opted out, or no tips): collapse instead of unmounting — see above.
+  const isEmpty = !showSkeleton && tips.length === 0;
 
   return (
-    <View style={styles.container}>
+    <View
+      style={[styles.container, isEmpty && styles.collapsed]}
+      pointerEvents={isEmpty ? "none" : "auto"}
+      accessibilityElementsHidden={isEmpty}
+      importantForAccessibility={isEmpty ? "no-hide-descendants" : "auto"}
+    >
       <View style={styles.header}>
         <View style={styles.headerTitle}>
           <Ionicons
@@ -136,22 +151,26 @@ function TipsRow({ horizontalInset, slot = 0, count = MAX_TIPS }: TipsRowProps) 
           <Text style={styles.seeAll}>{t(LocalizedStrings.tips.seeAll)}</Text>
         </TouchableOpacity>
       </View>
-      {showSkeleton ? (
-        <View style={styles.skeletonRow}>
-          {Array.from({ length: SKELETON_COUNT }).map((_, i) => (
-            <TipCardSkeleton key={i} styles={styles} />
-          ))}
-        </View>
-      ) : (
-        <FlatList
-          horizontal
-          data={tips}
-          keyExtractor={keyExtractor}
-          renderItem={renderItem}
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.listContent}
-        />
-      )}
+      <ScrollView
+        horizontal
+        nestedScrollEnabled
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.listContent}
+      >
+        {showSkeleton
+          ? Array.from({ length: SKELETON_COUNT }).map((_, i) => (
+              <TipCardSkeleton key={`skeleton-${i}`} styles={styles} />
+            ))
+          : tips.map((tip) => (
+              <TipCard
+                key={tip.id}
+                tip={tip}
+                styles={styles}
+                iconColor={theme.colors.slateCharcoal}
+                onOpen={openTip}
+              />
+            ))}
+      </ScrollView>
     </View>
   );
 }
@@ -192,10 +211,11 @@ const createStyles = (theme: Theme, inset: number) =>
       paddingHorizontal: inset,
       gap: scale(10),
     },
-    skeletonRow: {
-      flexDirection: "row",
-      paddingHorizontal: inset,
-      gap: scale(10),
+    collapsed: {
+      height: 0,
+      paddingTop: 0,
+      paddingBottom: 0,
+      overflow: "hidden",
     },
     card: {
       width: scale(230),

@@ -2,7 +2,6 @@ import React, { useState, useCallback, memo, RefObject } from "react";
 import { View, TextInput, Pressable, StyleSheet, Image } from "react-native";
 import { useTheme } from "@/theme";
 
-import { useCreateComment, useReplyToComment } from "@/hooks/queries/useComments";
 import IconSend from "../icons/IconSend";
 import { useAuthStore } from "@/stores/authStore";
 import { moderateScale, scale, verticalScale } from "@/utils/scale";
@@ -10,8 +9,9 @@ import { useTranslation } from "react-i18next";
 import { LocalizedStrings } from "@/i18n/LocalizedStrings";
 
 interface CommentInputProps {
-  inputRef: RefObject<TextInput | null>;
-  postId: string;
+  inputRef?: RefObject<TextInput | null>;
+  /** Unused here (the parent performs the request); kept so existing callers still compile. */
+  postId?: string;
   parentCommentId?: string;
   placeholder?: string;
   onCommentCreated?: (content: string) => void;
@@ -19,7 +19,6 @@ interface CommentInputProps {
 }
 
 const CommentInputComponent: React.FC<CommentInputProps> = ({
-  postId,
   parentCommentId,
   placeholder,
   onCommentCreated,
@@ -29,38 +28,18 @@ const CommentInputComponent: React.FC<CommentInputProps> = ({
   const theme = useTheme();
   const { t } = useTranslation();
   const [content, setContent] = useState("");
-  const [isFocused, setIsFocused] = useState(false);
-  const user = useAuthStore((s) => s.user);
-  const createCommentMutation = useCreateComment(postId);
-  const replyCommentMutation = useReplyToComment(postId);
-
-  const isLoading = createCommentMutation.isPending || replyCommentMutation.isPending;
+  const avatarUrl = useAuthStore((s) => s.user?.avatarUrl);
   const isReply = !!parentCommentId;
 
   const handleSubmit = useCallback(() => {
-    if (!content.trim() || isLoading) return;
+    const trimmed = content.trim();
+    if (!trimmed) return;
 
     setContent("");
-    onCommentCreated?.(content.trim());
-  }, [
-    content,
-    isLoading,
-    isReply,
-    parentCommentId,
-    createCommentMutation,
-    replyCommentMutation,
-    onCommentCreated,
-  ]);
+    onCommentCreated?.(trimmed);
+  }, [content, onCommentCreated]);
 
-  const handleFocus = useCallback(() => {
-    setIsFocused(true);
-  }, []);
-
-  const handleBlur = useCallback(() => {
-    setIsFocused(false);
-  }, []);
-
-  const canSubmit = content.trim().length > 0 && !isLoading;
+  const canSubmit = content.trim().length > 0;
 
   return (
     <View
@@ -73,7 +52,7 @@ const CommentInputComponent: React.FC<CommentInputProps> = ({
       ]}
     >
       <Image
-        src={user?.avatarUrl ?? "https://i.pravatar.cc/150?img=1"}
+        src={avatarUrl ?? "https://i.pravatar.cc/150?img=1"}
         width={scale(40)}
         height={verticalScale(40)}
         style={styles.avatar}
@@ -93,12 +72,9 @@ const CommentInputComponent: React.FC<CommentInputProps> = ({
           placeholderTextColor={theme.colors.taupe}
           value={content}
           onChangeText={setContent}
-          onFocus={handleFocus}
-          onBlur={handleBlur}
           multiline
           maxLength={500}
           autoFocus={autoFocus}
-          editable={!isLoading}
           returnKeyType="default"
           blurOnSubmit={false}
         />

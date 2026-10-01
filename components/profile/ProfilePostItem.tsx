@@ -8,8 +8,9 @@ interface ProfilePostItemProps {
   onLike: (postId: string, isLiked: boolean, userId: string) => void;
   onComment: (postId: string) => void;
   onAuthorPress: (authorId: string) => void;
-  onPollSubmit?: (postId: string, optionId: string) => void;
+  onPollSubmit?: (postId: string, optionId: string) => void | Promise<unknown>;
   onMenuPress?: (postId: string) => void;
+  onDeleted?: (postId: string) => void;
 }
 
 /**
@@ -24,6 +25,7 @@ const ProfilePostItem = React.memo(function ProfilePostItem({
   onAuthorPress,
   onPollSubmit,
   onMenuPress,
+  onDeleted,
 }: ProfilePostItemProps) {
   const handleLikePress = useCallback(
     (postId: string, isLiked: boolean) => onLike(postId, isLiked, post?.user?.id as string),
@@ -37,6 +39,7 @@ const ProfilePostItem = React.memo(function ProfilePostItem({
       onApiComment={onComment}
       onApiPollSubmit={onPollSubmit}
       onMenuPress={onMenuPress}
+      onApiDeleted={onDeleted}
       onAuthorPress={onAuthorPress}
     />
   );

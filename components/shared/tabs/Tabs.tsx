@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useCallback, ReactNode } from "react";
+import React, { useMemo, useState, useCallback, useEffect, ReactNode } from "react";
 import { TouchableOpacity, View, StyleSheet, ScrollView } from "react-native";
 import { ThemeText } from "@/components/primitives";
 import { fontFamily, useTheme } from "@/theme";
@@ -11,6 +11,12 @@ interface TabsProps {
   segments: { icon?: ReactNode; key: string; label: string }[];
   onSelect: (key: string | string[]) => void;
   initialKey?: string | string[];
+  /**
+   * Optional controlled selection (single-select): when it changes, the highlighted
+   * tab follows it — e.g. Home switching to the current period of the day.
+   * `initialKey` stays mount-only, so existing usages are unaffected.
+   */
+  selectedKey?: string;
   fullWidth?: boolean;
   multiSelect?: boolean;
 }
@@ -21,6 +27,7 @@ const Tabs: React.FC<TabsProps> = ({
   segments,
   onSelect,
   initialKey,
+  selectedKey,
   fullWidth = true,
   multiSelect = false,
 }) => {
@@ -33,6 +40,10 @@ const Tabs: React.FC<TabsProps> = ({
     if (initialKey) return [initialKey];
     return segments[0] ? [segments[0].key] : [];
   });
+
+  useEffect(() => {
+    if (selectedKey !== undefined) setActiveKeys([selectedKey]);
+  }, [selectedKey]);
 
   const handleSelect = useCallback(
     (key: string) => {

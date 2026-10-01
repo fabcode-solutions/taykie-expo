@@ -60,6 +60,15 @@ export const SETTINGS: SettingsMap = {
       rightIcon: <IconForward />,
     },
   ],
+  deviceRegistration: [
+    {
+      leftIcon: <IconSheild />,
+      heading: "settings.deviceRegistration.itemTitle",
+      action: "/settings/device-registration",
+      description: "settings.deviceRegistration.itemDescription",
+      rightIcon: <IconForward />,
+    },
+  ],
   dataPrivacy: [
     {
       leftIcon: <IconLock />,

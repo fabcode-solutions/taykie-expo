@@ -44,16 +44,21 @@ export const ScrollPicker = <T extends any>({
   minOpacity = 0.3,
 }: ScrollPickerProps<T>) => {
   const theme = useTheme();
-  const scrollY = useSharedValue(0);
   const flatListRef = useRef<FlatList<PickerItem<T>>>(null);
   const [currentSelectedValue, setCurrentSelectedValue] = useState<T | undefined>(selectedValue);
 
-  // Calculate initial scroll position
-  const initialScrollIndex = useMemo(() => {
-    if (!currentSelectedValue) return 0;
-    const index = items.findIndex((item) => item.value === currentSelectedValue);
+  // Starting row — computed ONCE from the value the picker opened with. It used to
+  // depend on the current selection, so every time the wheel settled on a new value
+  // the "scroll to initial index" effect re-ran and hard-jumped the list 150ms after
+  // the user stopped scrolling (the stutter/snap-back when picking an option).
+  const [initialScrollIndex] = useState(() => {
+    if (selectedValue === undefined || selectedValue === null) return 0;
+    const index = items.findIndex((item) => item.value === selectedValue);
     return index !== -1 ? index : 0;
-  }, [items, currentSelectedValue]);
+  });
+  // Start the scale/opacity animation at the opening row, so the first frame is right
+  // instead of animating in from row 0.
+  const scrollY = useSharedValue(initialScrollIndex * itemHeight);
 
   // Calculate selected item based on scroll position
   const calculateSelectedItem = useCallback(
@@ -77,34 +82,38 @@ export const ScrollPicker = <T extends any>({
     [calculateSelectedItem, currentSelectedValue, onValueChange],
   );
 
-  // Scroll handler with selection update
+  // Scroll handler with selection update. onEndDrag too, not only onMomentumEnd: a
+  // slow drag-and-release has no momentum phase (common on Android), so the selection
+  // never updated. The snap target is the nearest row either way.
   const scrollHandler = useAnimatedScrollHandler({
     onScroll: (event) => {
       scrollY.value = event.contentOffset.y;
+    },
+    onEndDrag: (event) => {
+      runOnJS(updateSelection)(event.contentOffset.y);
     },
     onMomentumEnd: (event) => {
       runOnJS(updateSelection)(event.contentOffset.y);
     },
   });
 
-  // Scroll to initial position on mount
+  // Fallback for the rare case initialScrollIndex didn't apply (list not laid out
+  // yet) — runs once on mount, never again on selection changes.
   useEffect(() => {
+    if (initialScrollIndex === 0 || items.length === 0) return;
     const timer = setTimeout(() => {
-      if (flatListRef.current && items.length > 0) {
-        flatListRef.current.scrollToIndex({
-          index: initialScrollIndex,
-          animated: false,
-        });
-        scrollY.value = initialScrollIndex * itemHeight;
-      }
-    }, 150);
-
+      flatListRef.current?.scrollToOffset({
+        offset: initialScrollIndex * itemHeight,
+        animated: false,
+      });
+    }, 50);
     return () => clearTimeout(timer);
-  }, [initialScrollIndex, items.length, itemHeight, scrollY]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Default item renderer
   const defaultRenderItem = useCallback(
-    (item: PickerItem<T>, isSelected: boolean) => (
+    (item: PickerItem<T>, _isSelected: boolean) => (
       <ThemeText
         variant="manrope.h3"
         style={[
@@ -127,6 +136,7 @@ export const ScrollPicker = <T extends any>({
       <PickerItemComponent
         item={item}
         index={index}
+        isSelected={item.value === currentSelectedValue}
         scrollY={scrollY}
         itemHeight={itemHeight}
         renderContent={renderItem || defaultRenderItem}
@@ -134,7 +144,25 @@ export const ScrollPicker = <T extends any>({
         minOpacity={minOpacity}
       />
     ),
-    [scrollY, itemHeight, renderItem, defaultRenderItem, minScale, minOpacity],
+    [
+      scrollY,
+      itemHeight,
+      renderItem,
+      defaultRenderItem,
+      minScale,
+      minOpacity,
+      currentSelectedValue,
+    ],
+  );
+
+  const keyExtractor = useCallback((item: PickerItem<T>) => item.key, []);
+  const getItemLayout = useCallback(
+    (_: unknown, index: number) => ({ length: itemHeight, offset: itemHeight * index, index }),
+    [itemHeight],
+  );
+  const listContentStyle = useMemo(
+    () => ({ paddingVertical: verticalScale(itemHeight * 2) }),
+    [itemHeight],
   );
 
   return (
@@ -154,20 +182,17 @@ export const ScrollPicker = <T extends any>({
         ref={flatListRef}
         data={items}
         renderItem={renderPickerItem}
-        keyExtractor={(item) => item.key}
+        keyExtractor={keyExtractor}
         showsVerticalScrollIndicator={false}
         snapToInterval={itemHeight}
         decelerationRate="fast"
         onScroll={scrollHandler}
         scrollEventThrottle={16}
-        contentContainerStyle={{
-          paddingVertical: verticalScale(itemHeight * 2),
-        }}
-        getItemLayout={(_, index) => ({
-          length: itemHeight,
-          offset: itemHeight * index,
-          index,
-        })}
+        contentContainerStyle={listContentStyle}
+        getItemLayout={getItemLayout}
+        // Short lists: render every row up front so nothing pops in while flicking.
+        initialNumToRender={Math.max(10, initialScrollIndex + 6)}
+        windowSize={11}
         initialScrollIndex={initialScrollIndex}
         onScrollToIndexFailed={(info) => {
           setTimeout(() => {
@@ -196,6 +221,7 @@ export const ScrollPicker = <T extends any>({
 interface PickerItemComponentProps<T> {
   item: PickerItem<T>;
   index: number;
+  isSelected: boolean;
   scrollY: Animated.SharedValue<number>;
   itemHeight: number;
   renderContent: (item: PickerItem<T>, isSelected: boolean) => React.ReactNode;
@@ -206,6 +232,7 @@ interface PickerItemComponentProps<T> {
 const PickerItemComponent = <T extends any>({
   item,
   index,
+  isSelected,
   scrollY,
   itemHeight,
   renderContent,
@@ -241,8 +268,6 @@ const PickerItemComponent = <T extends any>({
       opacity,
     };
   });
-
-  const isSelected = Math.abs(scrollY.value - index * itemHeight) < itemHeight / 2;
 
   return (
     <Animated.View style={[{ height: itemHeight }, pickerStyles.itemContainer, animatedStyle]}>

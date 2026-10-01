@@ -32,15 +32,15 @@ const PostList = () => {
   const [isFetchingMore, setIsFetchingMore] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const user = useAuthStore((state) => state.user);
-  const userPosts = usePostStore((s) => s.userPosts);
-  const fetchUserPosts = usePostStore((s) => s.fetchUserPosts);
+  const userPosts = usePostStore((s) => s.myPosts);
+  const fetchMyPosts = usePostStore((s) => s.fetchMyPosts);
   const bookmarkPost = usePostStore((s) => s.bookmarkPost);
   const unBookmarkPost = usePostStore((s) => s.unBookmarkPost);
   const likePost = usePostStore((s) => s.likePost);
   const unLikePost = usePostStore((s) => s.unLikePost);
   const fetchPostComments = usePostStore((s) => s.fetchPostComments);
   const isLoading = usePostStore((s) => s.isLoading);
-  const hasMore = usePostStore((s) => s.hasMore);
+  const hasMore = usePostStore((s) => s.myPostsHasMore);
   const voteOnPollPost = usePostStore((s) => s.voteOnPollPost);
 
   const sendNotification = useNotificationStore((s) => s.sendNotification);
@@ -51,7 +51,7 @@ const PostList = () => {
 
   const fetchPosts = useCallback(async (isRefresh: boolean) => {
     try {
-      await fetchUserPosts("mine", isRefresh);
+      await fetchMyPosts(isRefresh);
     } catch (error) {
       alert.show(AlertPresets.error(t(LocalizedStrings.common.error), getErrorMessage(error)));
     }

@@ -17,6 +17,7 @@ export default function OnboardingLayout() {
         <Stack.Screen name="create-account" />
         <Stack.Screen name="country-language" />
         <Stack.Screen name="pair-device" />
+        <Stack.Screen name="device-registration" />
         <Stack.Screen name="dosage-frequency" />
         <Stack.Screen name="supplement-entry" />
         <Stack.Screen name="other-supplements" />

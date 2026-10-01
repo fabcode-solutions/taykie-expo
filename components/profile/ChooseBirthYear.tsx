@@ -48,7 +48,7 @@ const ChooseBirthYear = ({
           setSelectedMonth(item.label);
           console.log("Selected month:", value);
         }}
-        itemHeight={60}
+        itemHeight={verticalScale(60)}
       />
       <View style={{ padding: verticalScale(20), width: "100%" }}>
         <Button

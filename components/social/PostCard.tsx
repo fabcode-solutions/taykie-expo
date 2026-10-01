@@ -1,5 +1,14 @@
 import React, { useMemo, memo, useState, useCallback, useEffect } from "react";
-import { View, Image, StyleSheet, TouchableOpacity, Animated, FlatList } from "react-native";
+import {
+  View,
+  Image,
+  StyleSheet,
+  TouchableOpacity,
+  Animated,
+  FlatList,
+  Alert,
+  ActivityIndicator,
+} from "react-native";
 import { ThemeText } from "@/components/primitives";
 import { useTheme, fontFamily, type Theme } from "@/theme";
 import { Ionicons } from "@expo/vector-icons";
@@ -14,19 +23,21 @@ import { getTimeAgo } from "@/utils/formatter";
 import { moderateScale, scale, verticalScale } from "@/utils/scale";
 import { t } from "i18next";
 import { LocalizedStrings } from "@/i18n/LocalizedStrings";
-import GroupCard from "../groups/GroupCard";
 import BlurModal from "../ui/Modal";
 import { router } from "expo-router";
 import { Button } from "../ui/button";
 import { useAuthStore } from "@/stores/authStore";
+import { usePostStore } from "@/stores/postStore";
 export interface PostCardProps {
   post: CommunityPost;
   onApiLike?: (postId: string, isLiked: boolean, authorId?: string) => void;
   onApiComment?: (postId: string) => void;
   onApiShare?: (postId: string, isBookmarked: boolean) => void;
-  onApiPollSubmit?: (postId: string, optionId: string) => void;
+  onApiPollSubmit?: (postId: string, optionId: string) => void | Promise<unknown>;
   onMenuPress?: (postId: string) => void;
   onAuthorPress?: (authorId: string) => void;
+  /** Called after the author's post was deleted (lists not driven by the post store refresh here). */
+  onApiDeleted?: (postId: string) => void;
 }
 
 export const PostCard = memo<PostCardProps>(
@@ -38,12 +49,14 @@ export const PostCard = memo<PostCardProps>(
     onApiPollSubmit,
     onMenuPress,
     onAuthorPress,
+    onApiDeleted,
   }) => {
     const theme = useTheme();
     const styles = useMemo(() => createStyles(theme), [theme]);
     const [menuVisible, setMenuVisible] = React.useState(false);
 
     const user = useAuthStore((s) => s.user);
+    const deletePostFromStore = usePostStore((s) => s.deletePost);
     const commentsDrawer = useBottomDrawer();
     const [selectedOptionId, setSelectedOptionId] = useState<string | null>(null);
     const post = initialPost;
@@ -62,16 +75,64 @@ export const PostCard = memo<PostCardProps>(
       return (names[0].charAt(0) + names[names.length - 1].charAt(0)).toUpperCase();
     };
 
+    const isOwnPost = !!user?.id && user.id === post.userId;
+
     const MenuList = useMemo(
       () => [
         {
           key: "report",
           label: t(LocalizedStrings.report.reportUser),
-          navigateTo: "/report/report",
-          disabled: user?.id === post.userId,
+          disabled: isOwnPost,
         },
+        // Only the author can delete (the backend enforces it too).
+        ...(isOwnPost
+          ? [{ key: "delete", label: t(LocalizedStrings.community.post.deletePost), disabled: false }]
+          : []),
       ],
-      [user?.id, post.userId],
+      [isOwnPost],
+    );
+
+    const handleDeletePost = useCallback(() => {
+      Alert.alert(
+        t(LocalizedStrings.community.post.deletePost),
+        t(LocalizedStrings.community.post.deletePostConfirm),
+        [
+          { text: t(LocalizedStrings.common.cancel), style: "cancel" },
+          {
+            text: t(LocalizedStrings.common.delete),
+            style: "destructive",
+            onPress: async () => {
+              try {
+                await deletePostFromStore(post.id);
+                onApiDeleted?.(post.id);
+              } catch (error) {
+                Alert.alert(
+                  t(LocalizedStrings.common.error),
+                  error instanceof Error ? error.message : String(error),
+                );
+              }
+            },
+          },
+        ],
+      );
+    }, [deletePostFromStore, onApiDeleted, post.id]);
+
+    const handleMenuItemPress = useCallback(
+      (key: string) => {
+        setMenuVisible(false);
+        // Let the menu modal finish closing before the next modal/screen opens.
+        setTimeout(() => {
+          if (key === "delete") {
+            handleDeletePost();
+          } else {
+            router.push({
+              pathname: "/report/report",
+              params: { reportType: key, postId: post.id, userId: post.userId },
+            });
+          }
+        }, 300);
+      },
+      [handleDeletePost, post.id, post.userId],
     );
 
     const votedOption = useMemo(() => {
@@ -122,11 +183,16 @@ export const PostCard = memo<PostCardProps>(
       setSelectedOptionId(optionId);
     }, []);
 
-    const handlePollSubmit = useCallback(() => {
-      if (selectedOptionId && post?.id) {
-        onApiPollSubmit?.(post.id, selectedOptionId);
+    const [isSubmittingPoll, setIsSubmittingPoll] = useState(false);
+    const handlePollSubmit = useCallback(async () => {
+      if (!selectedOptionId || !post?.id || isSubmittingPoll) return;
+      setIsSubmittingPoll(true);
+      try {
+        await onApiPollSubmit?.(post.id, selectedOptionId);
+      } finally {
+        setIsSubmittingPoll(false);
       }
-    }, [post?.id, onApiPollSubmit, selectedOptionId]);
+    }, [post?.id, onApiPollSubmit, selectedOptionId, isSubmittingPoll]);
 
     const handlePollCancel = useCallback(() => {
       setSelectedOptionId(null);
@@ -188,7 +254,6 @@ export const PostCard = memo<PostCardProps>(
     const renderContent = () => (
       <View style={styles.contentSection}>
         {!!post?.text && <ThemeText style={styles.title}>{post.text}</ThemeText>}
-        {!!post?.type && <ThemeText style={styles.description}>{post.type}</ThemeText>}
       </View>
     );
 
@@ -218,6 +283,7 @@ export const PostCard = memo<PostCardProps>(
               <TouchableOpacity
                 style={styles.pollButtonOutline}
                 onPress={handlePollCancel}
+                disabled={isSubmittingPoll}
                 accessibilityRole="button"
                 accessibilityLabel={t(LocalizedStrings.community.post.cancelPoll)}
               >
@@ -230,11 +296,16 @@ export const PostCard = memo<PostCardProps>(
                 onPress={handlePollSubmit}
                 accessibilityRole="button"
                 accessibilityLabel={t(LocalizedStrings.community.post.submitPoll)}
-                disabled={!selectedOptionId}
+                disabled={!selectedOptionId || isSubmittingPoll}
+                accessibilityState={{ busy: isSubmittingPoll }}
               >
-                <ThemeText style={styles.pollButtonFilledText}>
-                  {t(LocalizedStrings.common.submit)}
-                </ThemeText>
+                {isSubmittingPoll ? (
+                  <ActivityIndicator size="small" color={theme.colors.white} />
+                ) : (
+                  <ThemeText style={styles.pollButtonFilledText}>
+                    {t(LocalizedStrings.common.submit)}
+                  </ThemeText>
+                )}
               </TouchableOpacity>
             </View>
           )}
@@ -271,7 +342,6 @@ export const PostCard = memo<PostCardProps>(
               ))}
             </View>
           )}
-          {!!post.group && <GroupCard item={post.group} />}
           {/* Engagement section */}
           <UserEngagement
             likes={post?.likesCount}
@@ -297,36 +367,33 @@ export const PostCard = memo<PostCardProps>(
             renderItem={({ item }) => (
               <Button
                 title={item.label}
-                onPress={() => {
-                  setMenuVisible(false);
-                  setTimeout(() => {
-                    router.push({
-                      pathname: item.navigateTo,
-                      params: {
-                        reportType: item.key,
-                        postId: post.id,
-                        userId: post.userId,
-                      },
-                    });
-                  }, 300);
-                }}
+                onPress={() => handleMenuItemPress(item.key)}
                 disabled={item.disabled}
                 variant="text"
                 fullWidth={false}
                 size="small"
                 style={{ justifyContent: "flex-start", backgroundColor: "transparent" }}
                 textStyle={{
-                  color: item.disabled ? theme.colors.text.disabled : theme.colors.text.primary,
+                  color: item.disabled
+                    ? theme.colors.text.disabled
+                    : item.key === "delete"
+                      ? theme.colors.error.main
+                      : theme.colors.text.primary,
                 }}
               />
             )}
           />
         </BlurModal>
-        <CommentsBottomDrawer
-          isVisible={commentsDrawer.isVisible}
-          onClose={commentsDrawer.close}
-          postId={post?.id}
-        />
+        {/* Mounted only while open: a feed of N posts would otherwise keep N drawers (each
+            with store subscriptions) alive. BottomDrawer calls onClose after its slide-out. */}
+        {commentsDrawer.isVisible && (
+          <CommentsBottomDrawer
+            isVisible
+            onClose={commentsDrawer.close}
+            postId={post?.id}
+            postAuthorId={post?.userId}
+          />
+        )}
       </View>
     );
   },

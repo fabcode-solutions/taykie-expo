@@ -39,6 +39,7 @@ const groupKeyExtractor = (item: GroupResponse) => String(item.id);
 
 interface RecommendedGroupRowProps {
   item: GroupResponse;
+  isJoining: boolean;
   styles: ReturnType<typeof createStyles>;
   onOpen: (id: string) => void;
   onJoin: (id: string) => void;
@@ -47,6 +48,7 @@ interface RecommendedGroupRowProps {
 // Memoized so joining one group doesn't re-render every recommended row.
 const RecommendedGroupRow = React.memo(function RecommendedGroupRow({
   item,
+  isJoining,
   styles,
   onOpen,
   onJoin,
@@ -80,11 +82,16 @@ const RecommendedGroupRow = React.memo(function RecommendedGroupRow({
       <View>
         <TouchableOpacity
           onPress={handleJoin}
+          disabled={isJoining || item.isMember}
           style={item.isMember ? styles.recGroupButtonActive : styles.recGroupButton}
         >
-          <Text style={styles.recGroupBtnText}>
-            {item.isMember ? t(LocalizedStrings.groups.joined) : t(LocalizedStrings.groups.join)}
-          </Text>
+          {isJoining ? (
+            <ActivityIndicator size="small" />
+          ) : (
+            <Text style={styles.recGroupBtnText}>
+              {item.isMember ? t(LocalizedStrings.groups.joined) : t(LocalizedStrings.groups.join)}
+            </Text>
+          )}
         </TouchableOpacity>
       </View>
     </Pressable>
@@ -125,15 +132,27 @@ export default function ChangePasswordScreen() {
     setSearchQuery("");
   }, []);
 
-  const handleGroupJoin = React.useCallback(async (id: string) => {
-    try {
-      const message = await joinGroup(id);
-      await fetchRecommendedGroups();
-      alert.show(AlertPresets.success(t(LocalizedStrings.common.success), message));
-    } catch (error) {
-      alert.show(AlertPresets.error(t(LocalizedStrings.common.error), error.message));
-    }
-  }, []);
+  const [joiningId, setJoiningId] = useState<string | null>(null);
+  const handleGroupJoin = React.useCallback(
+    async (id: string) => {
+      setJoiningId(id);
+      try {
+        const message = await joinGroup(id);
+        await fetchRecommendedGroups();
+        alert.show(AlertPresets.success(t(LocalizedStrings.common.success), message));
+      } catch (error) {
+        alert.show(
+          AlertPresets.error(
+            t(LocalizedStrings.common.error),
+            error instanceof Error ? error.message : String(error),
+          ),
+        );
+      } finally {
+        setJoiningId(null);
+      }
+    },
+    [joinGroup, fetchRecommendedGroups, alert],
+  );
 
   const filteredGroups = useMemo(() => {
     // 1. Clean the query (remove extra spaces)
@@ -174,12 +193,13 @@ export default function ChangePasswordScreen() {
     ({ item }: { item: GroupResponse }) => (
       <RecommendedGroupRow
         item={item}
+        isJoining={joiningId === item.id}
         styles={styles}
         onOpen={handleOpenGroup}
         onJoin={handleGroupJoin}
       />
     ),
-    [styles, handleOpenGroup, handleGroupJoin],
+    [styles, handleOpenGroup, handleGroupJoin, joiningId],
   );
 
   return (

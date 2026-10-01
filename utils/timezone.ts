@@ -10,10 +10,8 @@ export const getDeviceTimezone = (): string | undefined => {
   }
 };
 
-// The backend accepts any valid IANA timezone, not just these — this list
-// is just the override picker in Edit Profile for the app's target market
-// (Australia). A zone outside it (e.g. a non-AU phone) is still kept and
-// shown by its IANA name; see getTimezoneOptions.
+// Friendly names for the Australian zones, used to DISPLAY the phone's zone in Edit
+// Profile (the zone itself isn't editable). Any other IANA zone is shown by its name.
 export const TIMEZONES = [
   { code: "Australia/Sydney", name: "Sydney (NSW / ACT)" },
   { code: "Australia/Melbourne", name: "Melbourne (VIC)" },
@@ -30,17 +28,3 @@ export const TIMEZONES = [
 
 export const getTimezoneLabel = (code: string): string =>
   TIMEZONES.find((z) => z.code === code)?.name ?? code.replace(/_/g, " ");
-
-/**
- * Picker options: the AU list, plus the phone's own zone and the user's
- * saved zone when either falls outside it, so neither is ever unselectable.
- */
-export const getTimezoneOptions = (...extra: (string | null | undefined)[]) => {
-  const codes = new Set(TIMEZONES.map((z) => z.code));
-  const extraCodes = extra.filter(
-    (code): code is string => !!code && code !== "UTC" && !codes.has(code),
-  );
-  return [...new Set(extraCodes)]
-    .map((code) => ({ label: getTimezoneLabel(code), value: code, key: code }))
-    .concat(TIMEZONES.map((z) => ({ label: z.name, value: z.code, key: z.code })));
-};

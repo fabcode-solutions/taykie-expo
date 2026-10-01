@@ -373,5 +373,24 @@
     "loadFailed": "No se pudo cargar este consejo.",
     "seeAll": "Ver todos",
     "empty": "Aún no hay consejos."
+  },
+  "deviceRegistration": {
+    "title": "Registra tu Taykie",
+    "subtitle": "Activar tu dispositivo lo registra para recibir soporte de garantía y mantiene tu cuenta segura.",
+    "serialLabel": "Número de serie",
+    "serialPlaceholder": "Introduce el número de serie de tu dispositivo",
+    "serialHelper": "Encontrarás el número de serie en la base de tu Taykie.",
+    "activate": "Activar Taykie",
+    "skip": "Omitir por ahora",
+    "invalidFormat": "Eso no parece correcto. Revisa el número de serie en la base de tu Taykie e inténtalo de nuevo.",
+    "success": "Taykie registrado. Tu garantía de un año ya está activa.",
+    "blocked": "No pudimos activar este número de serie. Escríbenos a hello@taykie.com y lo resolveremos.",
+    "nudge": "No olvides registrar tu Taykie para recibir soporte de garantía.",
+    "nudgeAction": "Registrar",
+    "nudgeDismiss": "Descartar",
+    "registeredTitle": "Tu Taykie está registrado",
+    "registeredSerial": "Número de serie",
+    "registeredOn": "Registrado el",
+    "warrantyUntil": "Garantía válida hasta"
   }
 }

@@ -1,4 +1,4 @@
-import React, { useCallback, memo } from "react";
+import React, { useCallback, memo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { StyleSheet, TouchableOpacity, View } from "react-native";
 import { fontFamily, useTheme, type Theme } from "@/theme";
@@ -27,7 +27,8 @@ interface AddProductProps {
   productName?: string | null;
   initialDosage?: number;
   initialStrength?: number;
-  onAddProduct?: (product: ProductDetails) => void;
+  /** May return a promise (create/update) — the button shows a loader until it settles. */
+  onAddProduct?: (product: ProductDetails) => void | Promise<unknown>;
 }
 
 interface CounterFieldProps {
@@ -98,6 +99,7 @@ const AddProduct: React.FC<AddProductProps> = ({
   const theme = useTheme();
   const { t } = useTranslation();
   const themedStyles = React.useMemo(() => createStyles(theme), [theme]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const { control, watch, setValue, handleSubmit } = useForm<ProductDetails>({
     mode: "onChange",
     reValidateMode: "onSubmit",
@@ -132,10 +134,16 @@ const AddProduct: React.FC<AddProductProps> = ({
 
   // Add product handler
   const handleAddProduct = useCallback(
-    (data: ProductDetails) => {
-      onAddProduct?.(data);
+    async (data: ProductDetails) => {
+      if (isSubmitting) return;
+      setIsSubmitting(true);
+      try {
+        await onAddProduct?.(data);
+      } finally {
+        setIsSubmitting(false);
+      }
     },
-    [dosageCount, strength, onAddProduct, item],
+    [dosageCount, strength, onAddProduct, item, isSubmitting],
   );
 
   return (
@@ -211,6 +219,8 @@ const AddProduct: React.FC<AddProductProps> = ({
           item ? t(LocalizedStrings.schedule.addProduct.submit) : t(LocalizedStrings.common.create)
         }
         onPress={handleSubmit(handleAddProduct)}
+        loading={isSubmitting}
+        disabled={isSubmitting}
         style={themedStyles.modalPrimaryButton}
         fullWidth
       />

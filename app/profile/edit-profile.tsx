@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { useTranslation } from "react-i18next";
 import { fontFamily, Theme, useTheme } from "@/theme";
+import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useNavigation } from "@react-navigation/native";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
@@ -34,7 +35,6 @@ import { AlertPresets } from "@/utils/alert";
 import { useAlert } from "@/provider/AlertProvider";
 import { Input } from "@/components/ui/TextInput/input";
 import ChooseCountry from "@/components/profile/ChooseCountry";
-import ChooseTimezone from "@/components/profile/ChooseTimezone";
 import { SafeAreaView } from "react-native-safe-area-context";
 import BackButton from "@/components/BackButton";
 
@@ -48,7 +48,6 @@ type FormData = {
   bio: string | null;
   username: string | null;
   phone: string | null;
-  timezone: string | null;
 };
 
 export default function EditProfileScreen() {
@@ -79,12 +78,14 @@ export default function EditProfileScreen() {
   const [yearIsOpen, setYearIsOpen] = useState(false);
   const [genderIsOpen, setGenderIsOpen] = useState(false);
   const [countryIsOpen, setCountryIsOpen] = useState(false);
-  const [timezoneIsOpen, setTimezoneIsOpen] = useState(false);
 
-  // "UTC" is the DB column default, i.e. never actually set — treat it as
-  // unset and show the phone's zone instead. Any save then writes it.
-  const savedTimezone = user?.timezone && user.timezone !== "UTC" ? user.timezone : null;
-  const initialTimezone = savedTimezone ?? getDeviceTimezone() ?? null;
+  // The time zone is not editable: it always matches the phone (the Taykie's clock follows
+  // the phone too) and the profile updates itself when the phone's zone changes — see
+  // utils/timezoneSync.ts. Shown for information only; the phone's own zone is what counts.
+  const timezoneLabel = useMemo(() => {
+    const zone = getDeviceTimezone() ?? (user?.timezone !== "UTC" ? user?.timezone : null);
+    return zone ? getTimezoneLabel(zone) : null;
+  }, [user?.timezone]);
 
   const { control, handleSubmit, setValue, watch } = useForm<FormData>({
     mode: "onChange",
@@ -99,11 +100,10 @@ export default function EditProfileScreen() {
       bio: user?.bio ?? null,
       phone: user?.phoneNumber ?? null,
       username: user?.username ?? null,
-      timezone: initialTimezone,
     },
   });
 
-  const { name, birthYear, gender, country, avatarUrl, bio, phone, username, timezone } = watch();
+  const { name, birthYear, gender, country, avatarUrl, bio, phone, username } = watch();
 
   // Map country code → display name
   const countryLabel = useMemo(() => {
@@ -140,10 +140,9 @@ export default function EditProfileScreen() {
       (avatarUrl ?? "") !== (user.avatarUrl ?? "") ||
       (bio ?? "") !== (user.bio ?? "") ||
       (phone ?? "") !== (user.phoneNumber ?? "") ||
-      (username ?? "") !== (user.username ?? "") ||
-      timezone !== initialTimezone
+      (username ?? "") !== (user.username ?? "")
     );
-  }, [name, birthYear, gender, country, avatarUrl, user, bio, username, phone, timezone, initialTimezone]);
+  }, [name, birthYear, gender, country, avatarUrl, user, bio, username, phone]);
 
   const handleChooseClose = useCallback(() => {
     setChooseIsOpen((prev) => !prev);
@@ -175,8 +174,6 @@ export default function EditProfileScreen() {
     [setValue],
   );
   const handleSaveCountry = useCallback((code: string) => setValue("country", code), [setValue]);
-  const handleTimezoneClose = useCallback(() => setTimezoneIsOpen((prev) => !prev), []);
-  const handleSaveTimezone = useCallback((code: string) => setValue("timezone", code), [setValue]);
 
   const getChangedFields = useCallback(() => {
     if (!user) return {};
@@ -189,11 +186,8 @@ export default function EditProfileScreen() {
     if (bio !== user.bio) changed.bio = bio;
     if (username !== user.username) changed.username = username;
     if (phone !== user.phoneNumber) changed.phone = phone;
-    // Also true while the saved zone is still the "UTC" default, so any
-    // save backfills the auto-detected zone.
-    if (timezone && timezone !== user.timezone) changed.timezone = timezone;
     return changed;
-  }, [name, birthYear, gender, country, avatarUrl, user, bio, phone, username, timezone]);
+  }, [name, birthYear, gender, country, avatarUrl, user, bio, phone, username]);
 
   const handleProfileUpdate = useCallback(async () => {
     try {
@@ -223,7 +217,6 @@ export default function EditProfileScreen() {
         ...(changedFields.phone && { phoneNumber: changedFields.phone }),
         // Only sent when it differs from what's saved, so a manual override
         // is never silently replaced by the phone's zone on a later save.
-        ...(changedFields.timezone && { timezone: changedFields.timezone }),
       };
 
       const message = await updateProfile(requestBody, setSaveStage);
@@ -440,15 +433,18 @@ export default function EditProfileScreen() {
 
             <View style={styles.section}>
               <Text>{t(LocalizedStrings.onboarding.timezone)}</Text>
-              <Pressable onPress={handleTimezoneClose} style={styles.infoSection}>
-                <Text
-                  style={{
-                    color: timezone ? theme.colors.text.primary : theme.colors.text.disabled,
-                  }}
-                >
-                  {timezone ? getTimezoneLabel(timezone) : t(LocalizedStrings.onboarding.timezone)}
+              {/* Read-only: follows the phone automatically. */}
+              <View style={[styles.infoSection, styles.readOnlyRow]}>
+                <Text style={{ color: theme.colors.text.primary, flex: 1 }}>
+                  {timezoneLabel ?? t(LocalizedStrings.onboarding.timezone)}
                 </Text>
-              </Pressable>
+                <Ionicons
+                  name="lock-closed-outline"
+                  size={moderateScale(16)}
+                  color={theme.colors.text.secondary}
+                />
+              </View>
+              <Text style={styles.readOnlyHint}>{t(LocalizedStrings.profile.timezoneHint)}</Text>
             </View>
 
             <Button
@@ -483,12 +479,6 @@ export default function EditProfileScreen() {
             onClose={handleCountryClose}
             isVisible={countryIsOpen}
             onSave={handleSaveCountry}
-          />
-          <ChooseTimezone
-            selected={timezone}
-            onClose={handleTimezoneClose}
-            isVisible={timezoneIsOpen}
-            onSave={handleSaveTimezone}
           />
         </SafeAreaView>
       </KeyboardAvoidingView>
@@ -545,6 +535,15 @@ const createStyles = (theme: Theme) =>
       fontSize: moderateScale(24),
       fontWeight: "400" as const,
       fontFamily: fontFamily.gascogneSerial.regular,
+    },
+    readOnlyRow: {
+      justifyContent: "space-between",
+      opacity: 0.75,
+    },
+    readOnlyHint: {
+      fontSize: moderateScale(12),
+      fontFamily: fontFamily.manrope.regular,
+      color: theme.colors.text.secondary,
     },
     infoSection: {
       flexDirection: "row",

@@ -36,11 +36,14 @@ const AppHeader = ({ showGreeting = false }: { showGreeting?: boolean }) => {
   return (
     <View style={themedStyles.headerRow}>
       <View style={themedStyles.headerText}>
+        {/* Do NOT add a hidden sibling here (e.g. a `display: "none"` sub-greeting Text).
+            That node was never visible, but it stayed in the Yoga tree, and with the Home
+            screen's late-arriving content (tips) it reproducibly aborted the app ~1.5s after
+            launch: "YGNodeGetOwner(childYogaNode) == &yogaNode_" (RN 0.79 Fabric,
+            facebook/react-native#52349). Confirmed by on-device bisect: removing it stopped
+            the crash, 100% of runs. */}
         <ThemeText variant="gs.h2" style={themedStyles.greeting}>
           {headerDisplayText}
-        </ThemeText>
-        <ThemeText variant="manrope.subtitle" style={themedStyles.subGreeting}>
-          {t(LocalizedStrings.home.subGreeting)}
         </ThemeText>
       </View>
       <View style={themedStyles.iconsWrapper}>
@@ -88,11 +91,6 @@ const createStyles = (theme: Theme) =>
     greeting: {
       lineHeight: verticalScale(28),
       color: theme.colors.text.primary,
-    },
-    subGreeting: {
-      display: "none",
-      marginTop: theme.spacing.xs,
-      color: theme.colors.text.secondary,
     },
     avatarWrapper: {
       aspectRatio: 1,

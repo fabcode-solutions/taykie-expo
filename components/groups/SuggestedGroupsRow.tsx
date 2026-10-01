@@ -1,9 +1,9 @@
 import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  FlatList,
   Image,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -35,8 +35,6 @@ interface SuggestedGroupsRowProps {
    */
   autoFetch?: boolean;
 }
-
-const keyExtractor = (item: GroupResponse) => String(item.id);
 
 interface SuggestedGroupCardProps {
   item: GroupResponse;
@@ -98,8 +96,17 @@ const SuggestedGroupCard = memo(function SuggestedGroupCard({
 /**
  * "Suggested groups" strip at the top of the Community feed — the same
  * recommended list My Groups shows, surfaced where people actually browse.
- * Renders nothing while the first load is in flight or when there's nothing
+ * Shows nothing while the first load is in flight or when there's nothing
  * to suggest, so it never leaves an empty box above the feed.
+ *
+ * STRUCTURE IS DELIBERATELY STABLE. This used to `return null` until the groups
+ * loaded and then mount a header plus a horizontal FlatList in one go — a node added
+ * to the parent's Yoga tree at the moment the response lands, the pattern behind the
+ * Fabric/Yoga "ABA ownership" abort (YGNodeGetOwner(childYogaNode) == &yogaNode_,
+ * RN 0.79, facebook/react-native#52349). So the container, header and scroller are
+ * always mounted; "nothing to show" collapses the container to height 0 and only the
+ * scroller's *children* change. A plain horizontal ScrollView (≤ MAX_SUGGESTIONS
+ * cards) replaces the FlatList, so cards are never mounted/unmounted by windowing.
  */
 function SuggestedGroupsRow({
   slot = 0,
@@ -160,38 +167,39 @@ function SuggestedGroupsRow({
     [joinGroup, fetchRecommendedGroups, alert, t],
   );
 
-  const renderItem = useCallback(
-    ({ item }: { item: GroupResponse }) => (
-      <SuggestedGroupCard
-        item={item}
-        isJoining={joiningId === item.id}
-        styles={styles}
-        onOpen={handleOpen}
-        onJoin={handleJoin}
-      />
-    ),
-    [joiningId, styles, handleOpen, handleJoin],
-  );
-
-  if (!hasLoaded || suggestions.length === 0) return null;
+  // Nothing to show yet / nothing to suggest: collapse instead of unmounting — see above.
+  const isEmpty = !hasLoaded || suggestions.length === 0;
 
   return (
-    <View style={styles.container}>
+    <View
+      style={[styles.container, isEmpty && styles.collapsed]}
+      pointerEvents={isEmpty ? "none" : "auto"}
+      accessibilityElementsHidden={isEmpty}
+      importantForAccessibility={isEmpty ? "no-hide-descendants" : "auto"}
+    >
       <View style={styles.header}>
         <Text style={styles.title}>{t(LocalizedStrings.groups.suggestedGroups)}</Text>
         <TouchableOpacity onPress={handleSeeAll} accessibilityRole="button" hitSlop={8}>
           <Text style={styles.seeAll}>{t(LocalizedStrings.groups.seeAll)}</Text>
         </TouchableOpacity>
       </View>
-      <FlatList
+      <ScrollView
         horizontal
-        data={suggestions}
-        keyExtractor={keyExtractor}
-        renderItem={renderItem}
-        extraData={joiningId}
+        nestedScrollEnabled
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.listContent}
-      />
+      >
+        {suggestions.map((group) => (
+          <SuggestedGroupCard
+            key={String(group.id)}
+            item={group}
+            isJoining={joiningId === group.id}
+            styles={styles}
+            onOpen={handleOpen}
+            onJoin={handleJoin}
+          />
+        ))}
+      </ScrollView>
     </View>
   );
 }
@@ -203,6 +211,12 @@ const createStyles = (theme: Theme) =>
     container: {
       paddingTop: verticalScale(4),
       paddingBottom: verticalScale(16),
+    },
+    collapsed: {
+      height: 0,
+      paddingTop: 0,
+      paddingBottom: 0,
+      overflow: "hidden",
     },
     header: {
       flexDirection: "row",

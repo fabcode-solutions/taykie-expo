@@ -204,7 +204,7 @@ const createStyles = (theme: Theme) =>
     },
     container: {
       padding: verticalScale(16),
-      paddingBottom: verticalScale(64),
+      paddingBottom: verticalScale(100),
     },
     header: {
       fontSize: moderateScale(24),

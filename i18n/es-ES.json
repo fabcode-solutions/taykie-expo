@@ -56,7 +56,10 @@
     "seeAll": "Ver todo",
     "groupPosts": "Publicaciones",
     "noGroupPosts": "Todavía no hay publicaciones en este grupo.",
-    "postCreated": "Publicado en el grupo"
+    "postCreated": "Publicado en el grupo",
+    "groupMembers": "Miembros del grupo",
+    "noMembers": "Aún no hay miembros.",
+    "you": "Tú"
   },
   "navigation": {
     "tabs": {
@@ -630,6 +633,11 @@
     },
     "snoozeDuration": {
       "title": "Duración de la pausa"
+    },
+    "deviceRegistration": {
+      "title": "Dispositivo",
+      "itemTitle": "Registra tu Taykie",
+      "itemDescription": "Activa tu garantía con el número de serie de tu dispositivo."
     }
   },
   "profile": {
@@ -682,7 +690,8 @@
     "saving_changes": "Guardando…",
     "discard_changes_title": "¿Descartar cambios?",
     "discard_changes_message": "Tienes cambios sin guardar. ¿Seguro que quieres descartarlos?",
-    "discard": "Descartar"
+    "discard": "Descartar",
+    "timezoneHint": "Coincide con la zona horaria de tu teléfono y se actualiza sola cuando cambia."
   },
   "device": {
     "name": "Nombre del dispositivo",
@@ -1002,7 +1011,15 @@
       "submitPoll": "Enviar respuesta de la encuesta",
       "postImage": "Imagen de la publicación",
       "postCreated": "¡Creado correctamente!",
-      "write_comment": "Escribe un comentario..."
+      "write_comment": "Escribe un comentario...",
+      "deletePost": "Eliminar publicación",
+      "deletePostConfirm": "Esta publicación se eliminará de forma permanente. No se puede deshacer.",
+      "deleteComment": "Eliminar comentario",
+      "deleteCommentConfirm": "Este comentario se eliminará de forma permanente.",
+      "postDeleted": "Publicación eliminada",
+      "pollQuestionRequired": "Añade una pregunta para tu encuesta.",
+      "pollOptionsRequired": "Una encuesta necesita al menos 2 opciones.",
+      "imageRequired": "Elige una imagen primero."
     },
     "placeHolder": {
       "write": "Escribe algo...",
@@ -1526,5 +1543,24 @@
     "loadFailed": "No se pudo cargar este consejo.",
     "seeAll": "Ver todos",
     "empty": "Aún no hay consejos."
+  },
+  "deviceRegistration": {
+    "title": "Registra tu Taykie",
+    "subtitle": "Activar tu dispositivo lo registra para recibir soporte de garantía y mantiene tu cuenta segura.",
+    "serialLabel": "Número de serie",
+    "serialPlaceholder": "Introduce el número de serie de tu dispositivo",
+    "serialHelper": "Encontrarás el número de serie en la base de tu Taykie.",
+    "activate": "Activar Taykie",
+    "skip": "Omitir por ahora",
+    "invalidFormat": "Eso no parece correcto. Revisa el número de serie en la base de tu Taykie e inténtalo de nuevo.",
+    "success": "Taykie registrado. Tu garantía de un año ya está activa.",
+    "blocked": "No pudimos activar este número de serie. Escríbenos a hello@taykie.com y lo resolveremos.",
+    "nudge": "No olvides registrar tu Taykie para recibir soporte de garantía.",
+    "nudgeAction": "Registrar",
+    "nudgeDismiss": "Descartar",
+    "registeredTitle": "Tu Taykie está registrado",
+    "registeredSerial": "Número de serie",
+    "registeredOn": "Registrado el",
+    "warrantyUntil": "Garantía válida hasta"
   }
 }

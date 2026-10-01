@@ -33,6 +33,15 @@ export interface GroupMember {
   avatarUrl?: string | null;
   username?: string;
   isFriend?: boolean;
+  /** Set by GET /groups/:id/members for the signed-in viewer. */
+  isFollowing?: boolean;
+  isSelf?: boolean;
+}
+
+export interface GroupMembersPage {
+  members: GroupMember[];
+  total: number;
+  page: number;
 }
 
 export interface CreateGroupRequest {
@@ -70,6 +79,15 @@ export const groupsRepo = {
 
   async getGroupById(groupId: string): Promise<Group> {
     return apiClient.get<Group>(endpoints.groups.detail(groupId));
+  },
+
+  async getGroupMembers(groupId: string, page = 1, limit = 20): Promise<GroupMembersPage> {
+    const response = await apiClient.get<{
+      data?: GroupMember[];
+      meta?: { total?: number };
+    }>(`${endpoints.groups.members(groupId)}?page=${page}&limit=${limit}`);
+    const members = Array.isArray(response?.data) ? response.data : [];
+    return { members, total: response?.meta?.total ?? members.length, page };
   },
 
   async createGroup(data: CreateGroupRequest): Promise<{ success: boolean; group: Group }> {

@@ -5,9 +5,12 @@ import { CommentResponse } from "@/types/posts.types";
 import { useTheme } from "@/theme";
 import { LocalizedStrings } from "@/i18n/LocalizedStrings";
 import { usePostStore } from "@/stores/postStore";
+import { useAuthStore } from "@/stores/authStore";
 
 import { useTranslation } from "react-i18next"; // Fixed import
 import { moderateScale, scale, verticalScale } from "@/utils/scale";
+
+const EMPTY_REPLIES: CommentResponse[] = [];
 
 interface CommentItemProps {
   comment: CommentResponse;
@@ -32,10 +35,12 @@ const CommentItemComponent: React.FC<CommentItemProps> = ({
 }) => {
   const theme = useTheme();
   const { t } = useTranslation();
-  const { postReplies } = usePostStore();
-
-  // FIX: Check if THIS comment's ID is the currently active one
   const isActive = activeCommentId === comment.id;
+  // Only the expanded comment needs the replies; a selector (instead of the whole store)
+  // stops every comment in the list re-rendering on unrelated store changes.
+  const postReplies = usePostStore((s) => (isActive ? s.postReplies : EMPTY_REPLIES));
+  const currentUserId = useAuthStore((s) => s.user?.id);
+  const isOwn = !!currentUserId && (comment.userId ?? comment.user?.id) === currentUserId;
 
   const handleReplyPress = useCallback(() => {
     if (comment.id) onReply(comment.id);
@@ -43,10 +48,14 @@ const CommentItemComponent: React.FC<CommentItemProps> = ({
 
   const handleViewRepliesPress = useCallback(() => {
     if (comment?.id) onViewReplies?.(comment?.id);
-  }, [comment, onViewReplies]);
+  }, [comment?.id, onViewReplies]);
+
+  const handleDeletePress = useCallback(() => {
+    if (comment.id) onDelete?.(comment.id);
+  }, [comment.id, onDelete]);
 
   const relativeTime = getRelativeTime(comment?.createdAt ?? "");
-  const hasReplies = comment.repliesCount && comment.repliesCount > 0;
+  const hasReplies = !!comment.repliesCount && comment.repliesCount > 0;
 
   return (
     <View style={[styles.container, isNested && styles.nestedContainer]}>
@@ -73,19 +82,34 @@ const CommentItemComponent: React.FC<CommentItemProps> = ({
         </Text>
       </View>
 
-      {/* Reply Button or View Replies Button */}
-      {!isNested && (
+      {/* Reply / delete / view-replies row. Replies (nested) can only be deleted. */}
+      {(!isNested || isOwn) && (
         <View style={styles.replyContainer}>
           <View style={styles.avatarPlaceholder} />
 
-          <Pressable onPress={handleReplyPress}>
-            <Text style={[styles.replyText, { color: theme.colors.text.secondary }]}>
-              {t(LocalizedStrings.community.post.reply)}
-            </Text>
-          </Pressable>
+          {!isNested && (
+            <Pressable onPress={handleReplyPress}>
+              <Text style={[styles.replyText, { color: theme.colors.text.secondary }]}>
+                {t(LocalizedStrings.community.post.reply)}
+              </Text>
+            </Pressable>
+          )}
+
+          {isOwn && !!onDelete && (
+            <Pressable
+              onPress={handleDeletePress}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel={t(LocalizedStrings.community.post.deleteComment)}
+            >
+              <Text style={[styles.replyText, { color: theme.colors.error.main }]}>
+                {t(LocalizedStrings.common.delete)}
+              </Text>
+            </Pressable>
+          )}
 
           {/* View / Hide Replies Toggle */}
-          {hasReplies && showRepliesButton && (
+          {!isNested && hasReplies && showRepliesButton && (
             <Pressable onPress={handleViewRepliesPress}>
               <Text style={[styles.repliesText, { color: theme.colors.text.secondary }]}>
                 {isActive

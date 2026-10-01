@@ -69,8 +69,8 @@ export default function ProfileScreen() {
   const stats = useAuthStore((s) => s.stats);
   const fetchBookmarkedPosts = usePostStore((s) => s.fetchBookmarkedPosts);
   const bookmarkedPost = usePostStore((s) => s.bookmarkedPost);
-  const fetchUserPosts = usePostStore((s) => s.fetchUserPosts);
-  const userPosts = usePostStore((s) => s.userPosts);
+  const fetchMyPosts = usePostStore((s) => s.fetchMyPosts);
+  const userPosts = usePostStore((s) => s.myPosts);
   const unBookmarkPost = usePostStore((s) => s.unBookmarkPost);
   const bookmarkPost = usePostStore((s) => s.bookmarkPost);
   const likePost = usePostStore((s) => s.likePost);
@@ -182,13 +182,13 @@ export default function ProfileScreen() {
 
   const loadData = useCallback(async () => {
     try {
-      if (activeSegment === "posts") await fetchUserPosts("mine");
+      if (activeSegment === "posts") await fetchMyPosts();
       else if (activeSegment === "groups") await fetchUserGroups();
       else if (activeSegment === "saved") await fetchBookmarkedPosts();
     } catch (error) {
       alert.show(AlertPresets.error(t(LocalizedStrings.common.error), getErrorMessage(error)));
     }
-  }, [activeSegment, fetchUserPosts, fetchUserGroups, fetchBookmarkedPosts, t]);
+  }, [activeSegment, fetchMyPosts, fetchUserGroups, fetchBookmarkedPosts, t]);
 
   const currentData = useMemo(() => {
     if (activeSegment === "posts") return userPosts.slice(0, 5);

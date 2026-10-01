@@ -110,13 +110,17 @@ export default function PairDevice() {
 
   const handleContinue = () => {
     nextStep();
-    router.push("/(onboarding)/dosage-frequency");
+    // A Taykie was paired: next, register its serial number for warranty.
+    router.push("/(onboarding)/device-registration");
   };
 
   const handleSkip = async () => {
     try {
       await stopScan();
       setPairedDeviceName(null);
+      // No device was paired, so there is nothing to register: skip the registration step
+      // and advance the step counter past it to keep the progress numbering right.
+      nextStep();
       nextStep();
       router.push("/(onboarding)/dosage-frequency");
     } catch (error) {

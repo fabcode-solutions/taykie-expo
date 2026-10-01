@@ -2,7 +2,6 @@ import { fontFamily, Theme, useTheme } from "@/theme";
 import React, { useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import {
-  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -12,7 +11,7 @@ import {
 } from "react-native";
 import { ThemeText } from "@/components";
 import { Ionicons } from "@expo/vector-icons";
-import DateTimePicker from "@react-native-community/datetimepicker";
+import { TimePickerSheet } from "@/components/ui/TimePickerSheet";
 import { Medication } from "@/types/products.types";
 import Tabs from "../shared/tabs/Tabs";
 import { Button } from "@/components/ui/button";
@@ -175,6 +174,15 @@ const Schedule = ({ item, onAddRoutine }: ScheduleProps) => {
     [times, warnDuplicateTime],
   );
 
+  const closePicker = useCallback(() => setActivePickerIndex(null), []);
+  const confirmPicker = useCallback(
+    (date: Date) => {
+      if (activePickerIndex !== null) updateTime(activePickerIndex, date);
+      setActivePickerIndex(null);
+    },
+    [activePickerIndex, updateTime],
+  );
+
   const handleAddProduct = useCallback(() => {
     const timeKeys = times.map((time) => format(time, "HH:mm"));
     if (new Set(timeKeys).size !== timeKeys.length) {
@@ -229,15 +237,13 @@ const Schedule = ({ item, onAddRoutine }: ScheduleProps) => {
           </ThemeText>
 
           {times.map((time, index) => {
-            
             const { key, label } = getTimeOfDayInfo(time);
-            const isPickerOpen = activePickerIndex === index;
             return (
               <View key={index}>
                 <View style={themedStyles.timeRow}>
                   <TouchableOpacity
                     style={themedStyles.timeRowButton}
-                    onPress={() => setActivePickerIndex(isPickerOpen ? null : index)}
+                    onPress={() => setActivePickerIndex(index)}
                     activeOpacity={0.85}
                     accessibilityRole="button"
                     accessibilityLabel={t(LocalizedStrings.schedule.routine.selectTime)}
@@ -273,21 +279,22 @@ const Schedule = ({ item, onAddRoutine }: ScheduleProps) => {
                     </TouchableOpacity>
                   )}
                 </View>
-
-                {isPickerOpen && (
-                  <DateTimePicker
-                    value={time}
-                    mode="time"
-                    display={Platform.OS === "ios" ? "spinner" : "default"}
-                    onChange={(event, date) => {
-                      if (Platform.OS === "android") setActivePickerIndex(null);
-                      if (event.type !== "dismissed" && date) updateTime(index, date);
-                    }}
-                  />
-                )}
               </View>
             );
           })}
+
+          {/* One popup picker for whichever time row was tapped — shown as a bottom sheet
+              (iOS) / native dialog (Android), not inline under the row where it broke
+              the layout and was unreadable in dark mode. */}
+          <TimePickerSheet
+            visible={activePickerIndex !== null}
+            value={
+              activePickerIndex !== null ? (times[activePickerIndex] ?? new Date()) : new Date()
+            }
+            title={t(LocalizedStrings.schedule.routine.selectTime)}
+            onCancel={closePicker}
+            onConfirm={confirmPicker}
+          />
 
           <TouchableOpacity
             style={themedStyles.addTimeButton}

@@ -41,28 +41,69 @@ const BottomDrawerComponent: React.FC<BottomDrawerProps> = ({
   const translateY = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
   const backdropOpacity = useRef(new Animated.Value(0)).current;
 
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  // Keyboard top edge in screen coordinates (0 = keyboard hidden), and how far the drawer
+  // actually has to be lifted. They are NOT the same as the keyboard height: on Android
+  // the Modal's window often resizes for the keyboard already, so lifting by the full
+  // keyboard height pushed the drawer up to the top of the screen, far above the keyboard.
+  const keyboardTopRef = useRef(0);
+  const containerRef = useRef<View>(null);
+  const [lift, setLift] = useState(0);
+  const [availableHeight, setAvailableHeight] = useState(SCREEN_HEIGHT);
+  // Stays mounted while the close animation runs, so a parent-driven close (e.g. after
+  // "Save") slides down instead of vanishing on the spot.
+  const [isRendered, setIsRendered] = useState(isVisible);
+  // Live blur re-renders every frame on Android (expo-blur), which made the slide
+  // stutter — the dim rgba backdrop already does the job there.
+  const useBlur = Platform.OS === "ios";
 
-  // ✅ Keyboard listeners (works on iOS + Android)
-  useEffect(() => {
-    const showSub = Keyboard.addListener("keyboardDidShow", (e) => {
-      setKeyboardHeight(e.endCoordinates.height);
+  // Keyboard listeners. iOS "Will" events fire with the keyboard animation, so the drawer
+  // moves with it instead of jumping after it.
+  // Measures the drawer's window against the keyboard: lift = only the part of the window
+  // the keyboard really covers (0 when the window already resized).
+  const updateKeyboardLayout = useCallback(() => {
+    const keyboardTop = keyboardTopRef.current;
+    if (keyboardTop <= 0) {
+      setLift(0);
+      setAvailableHeight(SCREEN_HEIGHT);
+      return;
+    }
+    containerRef.current?.measureInWindow((_x, y, _w, h) => {
+      const overlap = Math.max(0, y + h - keyboardTop);
+      setLift(overlap);
+      // Room between the top of the window and the keyboard.
+      setAvailableHeight(Math.max(0, keyboardTop - y));
     });
+  }, []);
 
-    const hideSub = Keyboard.addListener("keyboardDidHide", () => {
-      setKeyboardHeight(0);
+  useEffect(() => {
+    const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+    const showSub = Keyboard.addListener(showEvent, (e) => {
+      const { screenY, height: kbHeight } = e.endCoordinates;
+      keyboardTopRef.current = screenY > 0 ? screenY : Dimensions.get("screen").height - kbHeight;
+      updateKeyboardLayout();
+    });
+    const hideSub = Keyboard.addListener(hideEvent, () => {
+      keyboardTopRef.current = 0;
+      updateKeyboardLayout();
     });
 
     return () => {
       showSub.remove();
       hideSub.remove();
     };
-  }, []);
+  }, [updateKeyboardLayout]);
 
-  const drawerHeight =
+  const requestedHeight =
     typeof height === "number" ? height : (SCREEN_HEIGHT * parseInt(height.replace("%", ""))) / 100;
+  // Shrink to what's left above the keyboard, so a tall drawer never runs off the top
+  // and the content/input stay visible.
+  const drawerHeight = Math.min(requestedHeight, availableHeight - verticalScale(24));
 
-  // Pan responder
+  // Pan responder. It's created once, so it calls the LATEST open/close through refs —
+  // it used to keep the first render's closures (stale onClose).
+  const closeDrawerRef = useRef<() => void>(() => {});
+  const openDrawerRef = useRef<() => void>(() => {});
   const handlePanResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => closeOnSwipeDown,
@@ -71,8 +112,8 @@ const BottomDrawerComponent: React.FC<BottomDrawerProps> = ({
         if (g.dy > 0) translateY.setValue(g.dy);
       },
       onPanResponderRelease: (_, g) => {
-        if (g.dy > 100 || g.vy > 0.5) closeDrawer();
-        else openDrawer();
+        if (g.dy > 100 || g.vy > 0.5) closeDrawerRef.current();
+        else openDrawerRef.current();
       },
     }),
   ).current;
@@ -113,23 +154,44 @@ const BottomDrawerComponent: React.FC<BottomDrawerProps> = ({
       }),
     ]).start(() => {
       onAnimationComplete?.();
+      setIsRendered(false);
       onClose();
     });
   }, [translateY, backdropOpacity, onClose, onAnimationStart, onAnimationComplete]);
 
+  closeDrawerRef.current = closeDrawer;
+  openDrawerRef.current = openDrawer;
+
   useEffect(() => {
     if (isVisible) {
+      setIsRendered(true);
       translateY.setValue(SCREEN_HEIGHT);
       backdropOpacity.setValue(0);
       openDrawer();
+    } else if (isRendered) {
+      // Closed by the parent (not by swipe/backdrop, which already animated out):
+      // slide down, then unmount.
+      Animated.parallel([
+        Animated.timing(translateY, {
+          toValue: SCREEN_HEIGHT,
+          duration: 250,
+          useNativeDriver: true,
+        }),
+        Animated.timing(backdropOpacity, {
+          toValue: 0,
+          duration: 250,
+          useNativeDriver: true,
+        }),
+      ]).start(() => setIsRendered(false));
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isVisible]);
 
   const handleBackdropPress = () => {
     if (closeOnBackdropPress) closeDrawer();
   };
 
-  if (!isVisible) return null;
+  if (!isVisible && !isRendered) return null;
 
   const DrawerContent = (
     <View style={styles.drawerContent}>
@@ -150,12 +212,25 @@ const BottomDrawerComponent: React.FC<BottomDrawerProps> = ({
   );
 
   return (
-    <Modal transparent visible={isVisible} statusBarTranslucent animationType="none">
-      <View style={styles.modalContainer}>
+    <Modal
+      transparent
+      visible={isVisible || isRendered}
+      statusBarTranslucent
+      animationType="none"
+      onRequestClose={handleBackdropPress}
+    >
+      <View
+        ref={containerRef}
+        style={styles.modalContainer}
+        // The window may resize a moment AFTER the keyboard event (Android): re-measure.
+        onLayout={updateKeyboardLayout}
+      >
         {/* Backdrop */}
         <Animated.View style={[styles.backdrop, { opacity: backdropOpacity }]}>
           <Pressable style={styles.backdropPressable} onPress={handleBackdropPress}>
-            <BlurView intensity={backdropBlurIntensity} tint="dark" style={styles.blurView} />
+            {useBlur && (
+              <BlurView intensity={backdropBlurIntensity} tint="dark" style={styles.blurView} />
+            )}
           </Pressable>
         </Animated.View>
 
@@ -166,13 +241,13 @@ const BottomDrawerComponent: React.FC<BottomDrawerProps> = ({
             {
               height: drawerHeight,
               transform: [{ translateY }],
-              marginBottom: keyboardHeight,
+              marginBottom: lift,
               backgroundColor: theme.colors.background.default,
             },
             containerStyle,
           ]}
         >
-          {enableDrawerBlur ? (
+          {enableDrawerBlur && useBlur ? (
             <BlurView intensity={drawerBlurIntensity} tint="light" style={styles.drawerBlurView}>
               {DrawerContent}
             </BlurView>

@@ -31,9 +31,17 @@ const DeleteSchedule = ({
     }
   }, [onClose]);
   const deleteSchedule = useCallback(async () => {
+    if (loading) return;
     setLoading(true);
-    if (onYes) {
-      await onYes();
+    try {
+      if (onYes) {
+        await onYes();
+      }
+    } catch {
+      // The caller shows its own error alert; just let the user try again / cancel
+      // instead of leaving the button stuck in its loading state forever.
+      setLoading(false);
+      return;
     }
     setTimeout(() => {
       setSearchVisible(false);
@@ -42,14 +50,14 @@ const DeleteSchedule = ({
       }
       setLoading(false);
     }, 2500);
-  }, [onClose, onYes]);
+  }, [loading, onClose, onYes]);
 
   return (
     <BlurModal
       variant="alert"
       heading={t(LocalizedStrings.schedule.placeHolders.search)}
       visible={searchVisible}
-      onRequestClose={() => setSearchVisible(false)}
+      onRequestClose={() => !loading && setSearchVisible(false)}
     >
       <View>
         <Text className="text-2xl mb-2.5 text-center font-normal font-Manrope text-triatry-10 max-w-[230px">
@@ -59,11 +67,16 @@ const DeleteSchedule = ({
           {content ?? t(LocalizedStrings.settings.wantToDeleteAccount)}
         </Text>
         <View className="flex-row mt-7 flex justify-center gap-2.5 ]">
-          <Button btnText={nobtnText ?? t(LocalizedStrings.common.no)} onPress={closeModal} />
+          <Button
+            btnText={nobtnText ?? t(LocalizedStrings.common.no)}
+            onPress={closeModal}
+            disabled={loading}
+          />
           <Button
             btnText={yesbtnText ?? t(LocalizedStrings.common.yes)}
-            className={`!bg-primary !border-primary ${loading ? "opacity-50" : ""}`}
+            className="!bg-primary !border-primary"
             onPress={deleteSchedule}
+            loading={loading}
           />
         </View>
       </View>

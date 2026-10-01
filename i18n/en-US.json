@@ -56,7 +56,10 @@
     "seeAll": "See all",
     "groupPosts": "Posts",
     "noGroupPosts": "No posts in this group yet.",
-    "postCreated": "Posted to the group"
+    "postCreated": "Posted to the group",
+    "groupMembers": "Group members",
+    "noMembers": "No members yet.",
+    "you": "You"
   },
   "navigation": {
     "tabs": {
@@ -630,6 +633,11 @@
     },
     "snoozeDuration": {
       "title": "Snooze Duration"
+    },
+    "deviceRegistration": {
+      "title": "Device",
+      "itemTitle": "Register your Taykie",
+      "itemDescription": "Activate your warranty with your device's serial number."
     }
   },
   "profile": {
@@ -667,7 +675,7 @@
     "no_data_found": "No data found",
     "view_all": "View all",
     "action_menu": {
-      "add_new": "Add New",
+      "add_new": "Add New Schedule",
       "request_data": "Request my data",
       "my_schedule_logs": "My Schedule Logs"
     },
@@ -682,7 +690,8 @@
       "phone": "Add Phone Number",
       "username": "Add Username"
     },
-    "joined": "Joined {{date}}"
+    "joined": "Joined {{date}}",
+    "timezoneHint": "Matches your phone's time zone and updates automatically when it changes."
   },
   "device": {
     "name": "Device Name",
@@ -1002,7 +1011,15 @@
       "submitPoll": "Submit poll response",
       "postImage": "Post image",
       "postCreated": "Successfully Created!",
-      "write_comment": "Write a comment..."
+      "write_comment": "Write a comment...",
+      "deletePost": "Delete post",
+      "deletePostConfirm": "This post will be permanently deleted. This can't be undone.",
+      "deleteComment": "Delete comment",
+      "deleteCommentConfirm": "This comment will be permanently deleted.",
+      "postDeleted": "Post deleted",
+      "pollQuestionRequired": "Please add a question for your poll.",
+      "pollOptionsRequired": "A poll needs at least 2 options.",
+      "imageRequired": "Please choose an image first."
     },
     "placeHolder": {
       "write": "Wite something...",
@@ -1526,5 +1543,24 @@
     "loadFailed": "Couldn't load this tip.",
     "seeAll": "See all",
     "empty": "No tips yet."
+  },
+  "deviceRegistration": {
+    "title": "Register your Taykie",
+    "subtitle": "Activating your device registers it for warranty support and keeps your account secure.",
+    "serialLabel": "Serial number",
+    "serialPlaceholder": "Enter the serial number from your device",
+    "serialHelper": "You'll find your serial number on the base of your Taykie.",
+    "activate": "Activate Taykie",
+    "skip": "Skip for now",
+    "invalidFormat": "That doesn't look right. Check the serial number on the base of your Taykie and try again.",
+    "success": "Taykie registered. Your one-year warranty is now active.",
+    "blocked": "We weren't able to activate this serial number. Please contact us at hello@taykie.com and we'll sort it out.",
+    "nudge": "Don't forget to register your Taykie for warranty support.",
+    "nudgeAction": "Register",
+    "nudgeDismiss": "Dismiss",
+    "registeredTitle": "Your Taykie is registered",
+    "registeredSerial": "Serial number",
+    "registeredOn": "Registered on",
+    "warrantyUntil": "Warranty valid until"
   }
 }

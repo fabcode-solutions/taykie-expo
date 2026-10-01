@@ -4,26 +4,26 @@ import React, { useState, useCallback, memo, useRef, useEffect } from "react";
 import {
   View,
   StyleSheet,
-  KeyboardAvoidingView,
   Platform,
   FlatList,
   Text,
   TextInput,
   Alert,
 } from "react-native";
+import { CommentListSkeleton } from "./CommentSkeleton";
 import { BottomDrawer } from "../BottomDrawer";
 import { CommentInput } from "./CommentInput";
 import { useTheme } from "@/theme";
 import { CommentItem } from "./CommentItem";
-import { usePostStore } from "@/stores/postStore";
+import { getErrorMessage, usePostStore } from "@/stores/postStore";
 import { useAuthStore } from "@/stores/authStore";
 import { useNotificationStore } from "@/stores/notificationStore";
-import { Loader } from "../shared/loader";
 import { LocalizedStrings } from "@/i18n/LocalizedStrings";
 import { useTranslation } from "react-i18next";
 import { moderateScale, verticalScale } from "@/utils/scale";
 import { AlertPresets } from "@/utils/alert";
 import { useAlert } from "@/provider/AlertProvider";
+import type { CommentResponse } from "@/types/posts.types";
 
 interface CommentsBottomDrawerProps {
   isVisible: boolean;
@@ -31,6 +31,11 @@ interface CommentsBottomDrawerProps {
   postId: string;
   postAuthorId?: string;
 }
+
+const keyExtractor = (item: CommentResponse, index: number) =>
+  item?.id?.toString() || `comment-${index}`;
+
+const ItemSeparator = () => <View style={styles.separator} />;
 
 const CommentsBottomDrawerComponent: React.FC<CommentsBottomDrawerProps> = ({
   isVisible,
@@ -50,81 +55,175 @@ const CommentsBottomDrawerComponent: React.FC<CommentsBottomDrawerProps> = ({
   const postComments = usePostStore((s) => s.postComments);
   const fetchCommentReplies = usePostStore((s) => s.fetchCommentReplies);
   const addCommentToPost = usePostStore((s) => s.addCommentToPost);
+  const removeCommentFromPost = usePostStore((s) => s.removeCommentFromPost);
   const replyToCommmentWithId = usePostStore((s) => s.replyToCommmentWithId);
+  const fetchMoreComments = usePostStore((s) => s.fetchMoreComments);
   const loadingComments = usePostStore((s) => s.isLoadingComments);
+  const loadingMore = usePostStore((s) => s.isLoadingMoreComments);
 
-  const user = useAuthStore((s) => s.user);
+  const userId = useAuthStore((s) => s.user?.id);
+  const userFirstName = useAuthStore((s) => s.user?.firstName);
   const sendNotification = useNotificationStore((s) => s.sendNotification);
-  const isLoading = useNotificationStore((s) => s.isLoading);
 
-  // CLEANUP: Reset only when the drawer is fully closed to avoid
-  // Hermes TypeError during animation. Only on an actual open -> closed transition:
-  // running it on mount (isVisible starts false) made every card in the feed write
-  // to the post store ~400ms after the posts arrived — N store writes, each
-  // re-rendering the whole feed.
-  const wasVisibleRef = useRef(isVisible);
-  useEffect(() => {
-    const wasVisible = wasVisibleRef.current;
-    wasVisibleRef.current = isVisible;
-    if (wasVisible && !isVisible) {
-      const timeout = setTimeout(() => {
-        usePostStore.setState({ postComments: [] });
-        setReplyToCommentId(undefined);
-        setActiveCommentId(null);
-      }, 400);
-      return () => clearTimeout(timeout);
-    }
-  }, [isVisible]);
+  // The drawer unmounts when closed (see PostCard), so clear the shared comment list then
+  // — otherwise the next post's drawer briefly shows this post's comments.
+  useEffect(
+    () => () => {
+      usePostStore.setState({
+        postComments: [],
+        postReplies: [],
+        commentsPage: 1,
+        hasMoreComments: false,
+      });
+    },
+    [],
+  );
+
+  const showError = useCallback(
+    (error: unknown) =>
+      alert.show(AlertPresets.error(t(LocalizedStrings.common.error), getErrorMessage(error))),
+    [alert, t],
+  );
+
+  const loadReplies = useCallback(
+    async (commentId: string) => {
+      try {
+        await fetchCommentReplies(commentId);
+      } catch (error) {
+        showError(error);
+      }
+    },
+    [fetchCommentReplies, showError],
+  );
 
   const handleCommentSubmit = useCallback(
     async (content: string) => {
       try {
-        const recipientId = postAuthorId || postComments?.[0]?.userId;
-
-        if (replyToCommentId) {
-          await replyToCommmentWithId(postId, { content, parentCommentId: replyToCommentId });
+        const parentId = replyToCommentId;
+        if (parentId) {
+          await replyToCommmentWithId(postId, { content, parentCommentId: parentId });
+          // Show the new reply: expand the parent thread it was added to.
+          setActiveCommentId(parentId);
+          await loadReplies(parentId);
         } else {
           await addCommentToPost(postId, content);
         }
+        setReplyToCommentId(undefined);
 
-        await fetchReplies(replyToCommentId);
-
-        if (recipientId && recipientId !== user?.id) {
+        const recipientId = postAuthorId || postComments?.[0]?.userId;
+        if (recipientId && userId && recipientId !== userId) {
           await sendNotification({
-            fromUserId: user?.id || "",
+            fromUserId: userId,
             toUserId: recipientId,
             type: "Comment",
             heading: t(LocalizedStrings.community.post.new_comment),
-            context: t("community.post.user_commented", { user: user?.firstName }),
+            context: t("community.post.user_commented", { user: userFirstName }),
           });
         }
-        setReplyToCommentId(undefined);
       } catch (error) {
-        alert.show(AlertPresets.error(t(LocalizedStrings.common.error), error.message));
+        showError(error);
       }
     },
     [
       replyToCommentId,
-      user,
+      userId,
+      userFirstName,
       postComments,
       postId,
       postAuthorId,
       addCommentToPost,
       replyToCommmentWithId,
       sendNotification,
+      loadReplies,
+      showError,
       t,
     ],
   );
 
-  const fetchReplies = useCallback(
+  const handleReply = useCallback((id: string) => {
+    setReplyToCommentId(id);
+    inputRef.current?.focus();
+  }, []);
+
+  const handleViewReplies = useCallback(
     async (id: string) => {
-      try {
-        await fetchCommentReplies(id);
-      } catch (error) {
-        alert.show(AlertPresets.error(t(LocalizedStrings.common.error), error.message));
+      if (activeCommentId === id) {
+        setActiveCommentId(null);
+        return;
       }
+      setActiveCommentId(id);
+      await loadReplies(id);
     },
-    [fetchCommentReplies, t],
+    [activeCommentId, loadReplies],
+  );
+
+  const handleDelete = useCallback(
+    (commentId: string) => {
+      Alert.alert(
+        t(LocalizedStrings.community.post.deleteComment),
+        t(LocalizedStrings.community.post.deleteCommentConfirm),
+        [
+          { text: t(LocalizedStrings.common.cancel), style: "cancel" },
+          {
+            text: t(LocalizedStrings.common.delete),
+            style: "destructive",
+            onPress: async () => {
+              try {
+                await removeCommentFromPost(postId, commentId);
+                if (replyToCommentId === commentId) setReplyToCommentId(undefined);
+                if (activeCommentId === commentId) {
+                  setActiveCommentId(null);
+                } else if (activeCommentId) {
+                  // Deleted a reply: refresh the open thread so its list stays right.
+                  await loadReplies(activeCommentId);
+                }
+              } catch (error) {
+                showError(error);
+              }
+            },
+          },
+        ],
+      );
+    },
+    [t, removeCommentFromPost, postId, activeCommentId, replyToCommentId, loadReplies, showError],
+  );
+
+  const renderItem = useCallback(
+    ({ item }: { item: CommentResponse }) => (
+      <CommentItem
+        comment={item}
+        onReply={handleReply}
+        onDelete={handleDelete}
+        onViewReplies={handleViewReplies}
+        activeCommentId={activeCommentId}
+      />
+    ),
+    [handleReply, handleDelete, handleViewReplies, activeCommentId],
+  );
+
+  const handleEndReached = useCallback(() => {
+    fetchMoreComments(postId).catch(showError);
+  }, [fetchMoreComments, postId, showError]);
+
+  // Skeleton rows instead of a spinner/backdrop: a full set on the first load (empty
+  // list), a short run as the footer while the next page loads. Comments already on
+  // screen stay put when replies load or a comment is posted.
+  const renderEmpty = useCallback(
+    () =>
+      loadingComments ? (
+        <CommentListSkeleton count={6} />
+      ) : (
+        <View style={styles.emptyContainer}>
+          <Text style={[styles.emptyText, { color: theme.colors.text.secondary }]}>
+            {t(LocalizedStrings.community.placeHolder.noComments)}
+          </Text>
+        </View>
+      ),
+    [loadingComments, theme.colors.text.secondary, t],
+  );
+  const renderFooter = useCallback(
+    () => (loadingMore ? <CommentListSkeleton count={2} /> : null),
+    [loadingMore],
   );
 
   return (
@@ -132,66 +231,44 @@ const CommentsBottomDrawerComponent: React.FC<CommentsBottomDrawerProps> = ({
       isVisible={isVisible}
       onClose={onClose}
       title={t(LocalizedStrings.community.post.comments)}
-      height="85%"
+      height="70%"
       showHandle
       closeOnBackdropPress
       contentStyle={styles.drawerContent}
     >
-      {/* FIX: Moving KeyboardAvoidingView INSIDE the drawer and 
-         using behavior="height" is more stable for Fabric/Yoga.
-      */}
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={{ flex: 1 }}
-        keyboardVerticalOffset={Platform.OS === "ios" ? verticalScale(60) : 0}
-      >
-        {(loadingComments || isLoading) && <Loader />}
-
+      {/* No KeyboardAvoidingView here: BottomDrawer already lifts itself above the keyboard
+          and shrinks to fit, so wrapping it again double-counted the keyboard. */}
+      <View style={styles.body}>
         <FlatList
-          data={postComments || []}
-          renderItem={({ item }) => (
-            <CommentItem
-              comment={item}
-              onReply={(id) => {
-                setReplyToCommentId(id);
-                inputRef.current?.focus();
-              }}
-              onLike={() => {}}
-              onViewReplies={async (id) => {
-                if (activeCommentId === id) setActiveCommentId(null);
-                else {
-                  setActiveCommentId(id);
-                  await fetchReplies(id);
-                }
-              }}
-              activeCommentId={activeCommentId}
-            />
-          )}
-          keyExtractor={(item, index) => item?.id?.toString() || `comment-${index}`}
+          data={postComments}
+          renderItem={renderItem}
+          keyExtractor={keyExtractor}
           contentContainerStyle={styles.listContainer}
-          ItemSeparatorComponent={() => <View style={styles.separator} />}
-          ListEmptyComponent={() => (
-            <View style={styles.emptyContainer}>
-              <Text style={[styles.emptyText, { color: theme.colors.text.secondary }]}>
-                {t(LocalizedStrings.community.placeHolder.noComments)}
-              </Text>
-            </View>
-          )}
-          removeClippedSubviews={Platform.OS === "android"} // Helps with Android list stability
+          ItemSeparatorComponent={ItemSeparator}
+          ListEmptyComponent={renderEmpty}
+          ListFooterComponent={renderFooter}
+          onEndReached={handleEndReached}
+          onEndReachedThreshold={0.5}
+          initialNumToRender={10}
+          maxToRenderPerBatch={10}
+          windowSize={7}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          style={styles.list}
+          removeClippedSubviews={Platform.OS === "android"}
         />
 
         <CommentInput
-          postId={postId}
           inputRef={inputRef}
-          parentCommentId={replyToCommentId}
           placeholder={
             replyToCommentId
               ? t(LocalizedStrings.community.post.write_reply)
               : t(LocalizedStrings.community.post.whatYouThink)
           }
+          parentCommentId={replyToCommentId}
           onCommentCreated={handleCommentSubmit}
         />
-      </KeyboardAvoidingView>
+      </View>
     </BottomDrawer>
   );
 };
@@ -199,6 +276,12 @@ const CommentsBottomDrawerComponent: React.FC<CommentsBottomDrawerProps> = ({
 const styles = StyleSheet.create({
   drawerContent: {
     paddingHorizontal: 0,
+  },
+  body: {
+    flex: 1,
+  },
+  list: {
+    flex: 1,
   },
   listContainer: {
     padding: verticalScale(16),

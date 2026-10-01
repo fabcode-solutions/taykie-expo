@@ -9,7 +9,9 @@ import {
   Platform,
   Keyboard,
   ScrollView,
+  Image,
 } from "react-native";
+import * as ImagePicker from "expo-image-picker";
 import { ParallaxScrollView, SafeAreaScreen, ThemeStatusBar } from "@/components";
 import { fontFamily, Theme, useTheme } from "@/theme";
 import { useRouter, useLocalSearchParams } from "expo-router";
@@ -30,7 +32,7 @@ import { useAlert } from "@/provider/AlertProvider";
 import { Button } from "@/components/ui/button";
 import { GroupDetailsSkeleton } from "@/components/groups/GroupSkeletons";
 import { GroupResponse } from "@/types/groups.types";
-import { CommunityPost, PostType } from "@/types/posts.types";
+import { CommunityPost, CreatePostRequest, PostType } from "@/types/posts.types";
 import { usePostStore } from "@/stores/postStore";
 import ProfilePostItem from "@/components/profile/ProfilePostItem";
 import { PostCardSkeleton } from "@/components/social/PostCardSkeleton";
@@ -92,14 +94,20 @@ const getJoinedBy = (group: GroupResponse | null) => {
 
 // ─── Post composer ────────────────────────────────────────────────────────────
 
+type ComposerRequest = Pick<CreatePostRequest, "type" | "text" | "image" | "pollOptions">;
+
 interface PostComposerProps {
   styles: GroupStyles;
   placeholderColor: string;
   onFocus: () => void;
   /** Resolves true when the post was created (the box is then cleared). */
-  onSubmit: (text: string) => Promise<boolean>;
+  onSubmit: (request: ComposerRequest) => Promise<boolean>;
   onLayout: (y: number, height: number) => void;
 }
+
+const POLL_MIN_OPTIONS = 2;
+const POLL_MAX_OPTIONS = 4;
+const EMPTY_POLL = ["", ""];
 
 // Owns its own text state: typing used to re-render the WHOLE screen (parallax header,
 // hero image, group details) on every keystroke.
@@ -110,20 +118,99 @@ const PostComposer = memo(function PostComposer({
   onSubmit,
   onLayout,
 }: PostComposerProps) {
+  const [mode, setMode] = useState<PostType>(PostType.TEXT);
   const [textPost, setTextPost] = useState("");
+  const [image, setImage] = useState("");
+  const [pollOptions, setPollOptions] = useState<string[]>(EMPTY_POLL);
   const [isPosting, setIsPosting] = useState(false);
-  const canPost = textPost.trim().length > 0 && !isPosting;
+
+  const filledPollOptions = useMemo(
+    () => pollOptions.map((o) => o.trim()).filter(Boolean),
+    [pollOptions],
+  );
+  const hasText = textPost.trim().length > 0;
+  const isReady =
+    mode === PostType.IMAGE
+      ? !!image
+      : mode === PostType.POLL
+        ? hasText && filledPollOptions.length >= POLL_MIN_OPTIONS
+        : hasText;
+  const canPost = isReady && !isPosting;
+
+  const pickImage = useCallback(async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      allowsEditing: true,
+      quality: 0.5,
+      aspect: [1, 1],
+    });
+    if (!result.canceled) setImage(result.assets[0].uri);
+    return !result.canceled;
+  }, []);
+
+  // Tapping an active mode's icon goes back to a plain text post.
+  const handleImagePress = useCallback(async () => {
+    if (mode === PostType.IMAGE) {
+      setMode(PostType.TEXT);
+      return;
+    }
+    setMode(PostType.IMAGE);
+    if (!image) {
+      const picked = await pickImage();
+      if (!picked) setMode(PostType.TEXT);
+    }
+  }, [mode, image, pickImage]);
+
+  const handlePollPress = useCallback(() => {
+    setMode((prev) => (prev === PostType.POLL ? PostType.TEXT : PostType.POLL));
+  }, []);
+
+  const updatePollOption = useCallback((text: string, index: number) => {
+    setPollOptions((prev) => prev.map((item, i) => (i === index ? text : item)));
+  }, []);
+  const addPollOption = useCallback(() => {
+    setPollOptions((prev) => (prev.length < POLL_MAX_OPTIONS ? [...prev, ""] : prev));
+  }, []);
+  const removePollOption = useCallback((index: number) => {
+    setPollOptions((prev) =>
+      prev.length > POLL_MIN_OPTIONS ? prev.filter((_, i) => i !== index) : prev,
+    );
+  }, []);
 
   const handlePost = useCallback(async () => {
     if (!canPost) return;
+
+    let request: ComposerRequest;
+    if (mode === PostType.IMAGE) {
+      request = { type: PostType.IMAGE, image, ...(hasText && { text: textPost.trim() }) };
+    } else if (mode === PostType.POLL) {
+      request = {
+        type: PostType.POLL,
+        text: textPost.trim(),
+        pollOptions: filledPollOptions.map((label) => ({ label })),
+      };
+    } else {
+      request = { type: PostType.TEXT, text: textPost.trim() };
+    }
+
     setIsPosting(true);
-    const ok = await onSubmit(textPost.trim());
+    const ok = await onSubmit(request);
     setIsPosting(false);
     if (ok) {
+      setMode(PostType.TEXT);
       setTextPost("");
+      setImage("");
+      setPollOptions(EMPTY_POLL);
       Keyboard.dismiss();
     }
-  }, [canPost, onSubmit, textPost]);
+  }, [canPost, mode, image, hasText, textPost, filledPollOptions, onSubmit]);
+
+  const textPlaceholder =
+    mode === PostType.POLL
+      ? t(LocalizedStrings.community.placeHolder.askQuestion)
+      : mode === PostType.IMAGE
+        ? t(LocalizedStrings.community.placeHolder.addCaption)
+        : t(LocalizedStrings.groups.writeSomething);
 
   return (
     <View
@@ -140,20 +227,90 @@ const PostComposer = memo(function PostComposer({
           value={textPost}
           maxLength={POST_MAX_LENGTH}
           placeholderTextColor={placeholderColor}
-          placeholder={t(LocalizedStrings.groups.writeSomething)}
+          placeholder={textPlaceholder}
         />
         <Text style={styles.letterCount}>
           {textPost.length}/{POST_MAX_LENGTH}
         </Text>
         <View style={styles.postIcons}>
-          <TouchableOpacity>
+          <TouchableOpacity
+            onPress={handleImagePress}
+            style={mode !== PostType.IMAGE && styles.iconInactive}
+            accessibilityRole="button"
+            accessibilityState={{ selected: mode === PostType.IMAGE }}
+            accessibilityLabel={t(LocalizedStrings.community.post.imagePost)}
+          >
             <IconImage />
           </TouchableOpacity>
-          <TouchableOpacity>
+          <TouchableOpacity
+            onPress={handlePollPress}
+            style={mode !== PostType.POLL && styles.iconInactive}
+            accessibilityRole="button"
+            accessibilityState={{ selected: mode === PostType.POLL }}
+            accessibilityLabel={t(LocalizedStrings.community.post.pollPost)}
+          >
             <IconPoll />
           </TouchableOpacity>
         </View>
       </View>
+
+      {mode === PostType.IMAGE && !!image && (
+        <View style={styles.imagePreviewWrapper}>
+          <Image source={{ uri: image }} style={styles.imagePreview} resizeMode="cover" />
+          <View style={styles.imageActions}>
+            <TouchableOpacity style={styles.imageActionBtn} onPress={pickImage}>
+              <Text style={styles.imageActionText}>
+                {t(LocalizedStrings.community.placeHolder.selectImage)}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.imageActionBtn}
+              onPress={() => {
+                setImage("");
+                setMode(PostType.TEXT);
+              }}
+              accessibilityLabel={t(LocalizedStrings.common.delete)}
+            >
+              <Text style={styles.imageActionText}>✕</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {mode === PostType.POLL && (
+        <View style={styles.pollOptions}>
+          {pollOptions.map((option, index) => (
+            <View style={styles.pollOptionRow} key={`poll-option-${index}`}>
+              <TextInput
+                style={styles.pollOptionInput}
+                value={option}
+                maxLength={50}
+                onChangeText={(text) => updatePollOption(text, index)}
+                onFocus={onFocus}
+                placeholderTextColor={placeholderColor}
+                placeholder={`${t(LocalizedStrings.community.post.option)} ${index + 1}`}
+              />
+              {pollOptions.length > POLL_MIN_OPTIONS && (
+                <TouchableOpacity
+                  onPress={() => removePollOption(index)}
+                  hitSlop={8}
+                  accessibilityLabel={t(LocalizedStrings.common.delete)}
+                >
+                  <Text style={styles.imageActionText}>✕</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          ))}
+          {pollOptions.length < POLL_MAX_OPTIONS && (
+            <TouchableOpacity style={styles.addOptionBtn} onPress={addPollOption}>
+              <Text style={styles.addOptionText}>
+                {t(LocalizedStrings.community.post.add_option)}
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
+
       <View style={styles.postButtonRow}>
         <Button
           fullWidth={false}
@@ -255,6 +412,7 @@ const GroupPosts = memo(function GroupPosts({ groupId, styles }: GroupPostsProps
               onShare={handleShare}
               onComment={handleComment}
               onPollSubmit={handlePoll}
+              onDeleted={refresh}
               onAuthorPress={handleAuthorPress}
             />
           ))}
@@ -270,19 +428,35 @@ interface GroupDetailsProps {
   group: GroupResponse | null;
   styles: GroupStyles;
   onJoinLeave: () => void;
+  onMembersPress: () => void;
+  isJoinLeaveBusy: boolean;
 }
 
-const GroupDetails = memo(function GroupDetails({ group, styles, onJoinLeave }: GroupDetailsProps) {
+const GroupDetails = memo(function GroupDetails({
+  group,
+  styles,
+  onJoinLeave,
+  onMembersPress,
+  isJoinLeaveBusy,
+}: GroupDetailsProps) {
   const joinedBy = useMemo(() => getJoinedBy(group), [group]);
 
   return (
     <>
       <View style={styles.groupWrapper}>
         <Text style={styles.groupTitle}>{group?.groupName}</Text>
-        <View style={styles.groupMembers}>
+        {/* Only members can open the member list. */}
+        <TouchableOpacity
+          style={styles.groupMembers}
+          onPress={onMembersPress}
+          disabled={!group?.isMember}
+          hitSlop={10}
+          accessibilityRole="button"
+          accessibilityLabel={t(LocalizedStrings.groups.groupMembers)}
+        >
           <IconMembers />
           <Text style={styles.memberCount}>{group?.membersCount}</Text>
-        </View>
+        </TouchableOpacity>
       </View>
 
       <Text style={styles.groupDescription}>{group?.groupDescription}</Text>
@@ -310,7 +484,8 @@ const GroupDetails = memo(function GroupDetails({ group, styles, onJoinLeave }: 
               : t(LocalizedStrings.groups.joinGroup)
           }
           onPress={onJoinLeave}
-          disabled={group?.userRole === "SuperAdmin"}
+          loading={isJoinLeaveBusy}
+          disabled={group?.userRole === "SuperAdmin" || isJoinLeaveBusy}
         />
       </View>
     </>
@@ -412,7 +587,9 @@ export default function SingleGroupScreen() {
     fetchGroupDetails();
   }, [fetchGroupDetails]);
 
+  const [isJoinLeaveBusy, setIsJoinLeaveBusy] = useState(false);
   const handleJoinLeaveGroup = useCallback(async () => {
+    setIsJoinLeaveBusy(true);
     try {
       let message = "";
       if (group?.isMember) {
@@ -425,15 +602,21 @@ export default function SingleGroupScreen() {
       alert.show(AlertPresets.success(t(LocalizedStrings.common.success), message));
     } catch (error) {
       alert.show(AlertPresets.error(t(LocalizedStrings.common.error), getErrorMessage(error)));
+    } finally {
+      setIsJoinLeaveBusy(false);
     }
   }, [group?.isMember, groupId, joinGroup, leaveGroup, fetchRecommendedGroups, alert]);
+
+  const handleMembersPress = useCallback(() => {
+    router.push({ pathname: "/groups/members", params: { groupId } });
+  }, [router, groupId]);
 
   const createPost = usePostStore((s) => s.createPost);
   const queryClient = useQueryClient();
   const handleCreatePost = useCallback(
-    async (text: string) => {
+    async (request: ComposerRequest) => {
       try {
-        await createPost({ type: PostType.TEXT, text, groupId });
+        await createPost({ ...request, groupId });
         await queryClient.invalidateQueries({ queryKey: groupPostKeys.list(groupId) });
         alert.show(AlertPresets.success(t(LocalizedStrings.groups.postCreated)));
         return true;
@@ -557,7 +740,13 @@ export default function SingleGroupScreen() {
               {showSkeleton ? (
                 <GroupDetailsSkeleton />
               ) : (
-                <GroupDetails group={group} styles={styles} onJoinLeave={handleJoinLeaveGroup} />
+                <GroupDetails
+                  group={group}
+                  styles={styles}
+                  onJoinLeave={handleJoinLeaveGroup}
+                  onMembersPress={handleMembersPress}
+                  isJoinLeaveBusy={isJoinLeaveBusy}
+                />
               )}
             </View>
             {/* Posting is for members only. Stable wrapper: joining/leaving only swaps
@@ -611,6 +800,70 @@ const createStyles = (theme: Theme) =>
       flexDirection: "row",
       justifyContent: "flex-end",
       marginTop: verticalScale(8),
+    },
+    iconInactive: {
+      opacity: 0.55,
+    },
+    imagePreviewWrapper: {
+      marginTop: verticalScale(10),
+      borderRadius: moderateScale(10),
+      overflow: "hidden",
+    },
+    imagePreview: {
+      width: "100%",
+      aspectRatio: 1,
+    },
+    imageActions: {
+      position: "absolute",
+      top: verticalScale(8),
+      right: scale(8),
+      flexDirection: "row",
+      gap: scale(8),
+    },
+    imageActionBtn: {
+      backgroundColor: theme.colors.white,
+      borderRadius: 999,
+      paddingHorizontal: scale(12),
+      paddingVertical: verticalScale(6),
+    },
+    imageActionText: {
+      color: theme.colors.text.primary,
+      fontFamily: fontFamily.manrope.medium,
+      fontSize: moderateScale(12),
+    },
+    pollOptions: {
+      marginTop: verticalScale(10),
+      gap: verticalScale(8),
+    },
+    pollOptionRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: scale(8),
+    },
+    pollOptionInput: {
+      flex: 1,
+      backgroundColor: theme.colors.white,
+      borderColor: theme.colors.border,
+      borderWidth: scale(1),
+      borderRadius: moderateScale(10),
+      minHeight: verticalScale(40),
+      paddingHorizontal: scale(12),
+      color: theme.colors.text.primary,
+      fontFamily: fontFamily.manrope.regular,
+      fontSize: moderateScale(14),
+    },
+    addOptionBtn: {
+      borderWidth: scale(1),
+      borderStyle: "dashed",
+      borderColor: theme.colors.border,
+      borderRadius: moderateScale(10),
+      paddingVertical: verticalScale(10),
+      paddingHorizontal: scale(12),
+    },
+    addOptionText: {
+      color: theme.colors.text.secondary,
+      fontFamily: fontFamily.manrope.medium,
+      fontSize: moderateScale(14),
     },
     postsSection: {
       marginTop: verticalScale(10),

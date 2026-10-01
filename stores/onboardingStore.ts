@@ -186,7 +186,7 @@ const buildDefaultSupplements = (freq: 1 | 2 | 3): SupplementSlot[] => {
 };
 const initialState: State = {
   currentStep: 1,
-  totalSteps: 10,
+  totalSteps: 11,
   isOnboardingComplete: false,
   user_country: "AU",
   user_language: "en-AU",
@@ -340,7 +340,7 @@ export const useOnboardingStore = create<State & Actions>()(
           await completeOnboarding();
 
           await get().fetchOnboardingStatus();
-          set({ isLoading: false, currentStep: 10 });
+          set({ isLoading: false, currentStep: 11 });
         } catch (error) {
           const message = getErrorMessage(error, t(LocalizedStrings.errors.api.completeOnboarding));
           set({
